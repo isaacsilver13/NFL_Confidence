@@ -1,5 +1,0 @@
-0000000000000000000000000000000000000000 ce59671b3dd57b608f8425ff6371189b24a47221 justj <isaacsilver13@gmail.com> 1785461622 -0500	commit (initial): Phase 0: scaffold backend (FastAPI) and frontend (React+Vite) foundations
-ce59671b3dd57b608f8425ff6371189b24a47221 8659917a2656d9277e49e9474f479d4fd78f5caf justj <isaacsilver13@gmail.com> 1785462811 -0500	commit: Phase 1: database models and initial Alembic migration
-8659917a2656d9277e49e9474f479d4fd78f5caf a18b61e60c2522578f63c7fa6ae5ecd273ac4a8d justj <isaacsilver13@gmail.com> 1785463857 -0500	commit: Phase 2: Google OAuth + JWT authentication (backend + frontend)
-a18b61e60c2522578f63c7fa6ae5ecd273ac4a8d 54b7bedabd61059f948e98d7cbdab8c18c7c0b54 justj <isaacsilver13@gmail.com> 1785464212 -0500	commit: Fix mypy: narrow Optional cookie values in auth tests
-54b7bedabd61059f948e98d7cbdab8c18c7c0b54 e45ed6d16f234f84662f8c9dd115a4dcb80dd1ac justj <isaacsilver13@gmail.com> 1785464959 -0500	commit: Phase 3: League management (backend + frontend)

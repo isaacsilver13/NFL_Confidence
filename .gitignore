@@ -24,3 +24,6 @@ frontend/coverage/
 Thumbs.db
 .vscode/*
 !.vscode/extensions.json
+
+# Local Git metadata backups
+.git-legacy-backup/
