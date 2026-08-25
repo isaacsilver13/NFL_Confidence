@@ -1,0 +1,5 @@
+Phase 3: League management (backend + frontend)
+
+Backend: league/member/invite repositories, league_service (single-league invariant, commissioner permission checks, invite lifecycle), API routes (POST/GET /league, GET /league/members, POST /league/invite, POST /league/join), email_service with Resend + dev-logging fallback, email-validator dependency, full test coverage (23/23 passing, 95% coverage).
+
+Frontend: league types/api client, Dashboard create-league flow (shown when no league exists), League Settings page with commissioner-only invite form and member list, JoinLeaguePage for invite links, LoginPage redirect-back-to-origin support for the invite flow. Lint/tests/build all green.

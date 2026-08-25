@@ -1,0 +1,52 @@
+@import 'tailwindcss';
+
+/*
+  Design tokens per docs/ui-design-system.md and docs/frontend-specification.md.
+  Docs specify color *names* only (NFL Blue, Green, Red, Light Gray) without hex
+  values, so concrete shades were chosen here and can be adjusted freely.
+*/
+@theme {
+  --color-primary: #013369; /* NFL Blue */
+  --color-primary-hover: #01254d;
+  --color-accent: #2e7d32; /* Green */
+  --color-danger: #d32f2f; /* Red */
+  --color-background: #f5f7fa; /* Light Gray */
+
+  --animate-fade-in: fade-in 150ms ease-out;
+  --animate-slide-up: slide-up 200ms ease-out;
+}
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  html.dark {
+    color-scheme: dark;
+  }
+
+  body {
+    @apply bg-background text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100;
+    margin: 0;
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
