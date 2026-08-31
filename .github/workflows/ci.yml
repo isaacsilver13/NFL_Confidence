@@ -55,7 +55,7 @@ jobs:
         env:
           DATABASE_URL: postgresql+psycopg://nfl_confidence:nfl_confidence@localhost:5432/nfl_confidence
           JWT_SECRET: ci-test-secret
-          ENVIRONMENT: test
+          ENVIRONMENT: local
         run: pytest --cov=app
 
   frontend:
