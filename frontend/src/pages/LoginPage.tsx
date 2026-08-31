@@ -1,6 +1,9 @@
 import { useState } from 'react'
+import { ArrowRight, LogIn } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { devLogin, googleLoginUrl } from '@/api/auth'
+import { NflMark } from '@/components/nfl/NflMark'
+import { Button } from '@/components/ui/Button'
 import { useAuth } from '@/features/auth/AuthContext'
 
 export function LoginPage() {
@@ -32,32 +35,38 @@ export function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4 dark:bg-slate-950">
-      <div className="w-full max-w-sm animate-slide-up rounded-lg bg-white p-8 text-center shadow-sm dark:bg-slate-900">
-        <h1 className="mb-2 text-2xl font-bold text-primary">NFL Confidence Pool</h1>
-        <p className="mb-6 text-slate-600 dark:text-slate-300">
+    <div className="flex min-h-screen items-center justify-center bg-background px-4 py-8 dark:bg-slate-950">
+      <div className="w-full max-w-md animate-slide-up rounded-3xl border border-slate-200 bg-surface p-8 shadow-xl shadow-primary/10 dark:border-slate-800 dark:bg-slate-900 sm:p-10">
+        <NflMark />
+        <div className="mt-10">
+          <p className="mb-2 text-xs font-bold uppercase tracking-[0.2em] text-accent">
+            Game day starts here
+          </p>
+          <h1 className="mb-3 text-3xl font-black tracking-tight text-primary dark:text-white">
+            Make every pick count.
+          </h1>
+        </div>
+        <p className="mb-8 max-w-sm text-slate-600 dark:text-slate-300">
           Sign in to view your league and submit picks.
         </p>
-        <button
-          type="button"
-          onClick={handleGoogleLogin}
-          className="min-h-11 w-full rounded-md bg-primary px-4 py-2 font-medium text-white transition-colors duration-150 hover:bg-primary-hover"
-        >
+        <Button fullWidth onClick={handleGoogleLogin}>
+          <LogIn size={18} aria-hidden="true" />
           Continue with Google
-        </button>
+          <ArrowRight size={16} aria-hidden="true" />
+        </Button>
         {import.meta.env.DEV && (
-          <button
-            type="button"
+          <Button
+            variant="secondary"
             onClick={() => void handleDevLogin()}
             disabled={isDevLoggingIn}
-            className="mt-3 min-h-11 w-full rounded-md border border-slate-300 px-4 py-2 font-medium text-slate-700 transition-colors duration-150 hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+            fullWidth
+            className="mt-3"
           >
             {isDevLoggingIn ? 'Signing in…' : 'Continue as Dev User'}
-          </button>
+          </Button>
         )}
         {error && <p className="mt-4 text-sm text-red-600 dark:text-red-400">{error}</p>}
       </div>
     </div>
   )
 }
-

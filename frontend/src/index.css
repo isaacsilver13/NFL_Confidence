@@ -6,11 +6,18 @@
   values, so concrete shades were chosen here and can be adjusted freely.
 */
 @theme {
-  --color-primary: #013369; /* NFL Blue */
-  --color-primary-hover: #01254d;
-  --color-accent: #2e7d32; /* Green */
-  --color-danger: #d32f2f; /* Red */
-  --color-background: #f5f7fa; /* Light Gray */
+  --color-primary: #0b1f3a;
+  --color-primary-hover: #16345c;
+  --color-accent: #1f8f63;
+  --color-accent-hover: #16734f;
+  --color-sky: #2f9fd0;
+  --color-gold: #d99a2b;
+  --color-danger: #c83c4a;
+  --color-background: #eef2f3;
+  --color-surface: #ffffff;
+  --color-surface-muted: #e3eaec;
+  --color-ink: #132238;
+  --color-ink-muted: #5b6b78;
 
   --animate-fade-in: fade-in 150ms ease-out;
   --animate-slide-up: slide-up 200ms ease-out;
@@ -26,8 +33,36 @@
   }
 
   body {
-    @apply bg-background text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100;
+    @apply bg-background text-ink antialiased dark:bg-slate-950 dark:text-slate-100;
     margin: 0;
+    background-image:
+      linear-gradient(135deg, rgb(255 255 255 / 0.62), transparent 42%),
+      linear-gradient(315deg, rgb(47 159 208 / 0.06), transparent 35%);
+  }
+
+  button,
+  input,
+  select {
+    font: inherit;
+  }
+
+  button:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  a:focus-visible {
+    outline: 3px solid color-mix(in srgb, var(--color-sky) 70%, white);
+    outline-offset: 2px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
   }
 }
 

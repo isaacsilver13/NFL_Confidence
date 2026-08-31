@@ -7,6 +7,7 @@ permissions, and invite lifecycle, then delegates persistence to the repositorie
 import secrets
 from datetime import datetime, timedelta, timezone
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -30,13 +31,19 @@ def create_league(db: Session, *, owner: User, name: str, season: int) -> League
         raise ConflictError("A league already exists. This application supports only one league.")
 
     invite_code = secrets.token_urlsafe(8)
-    league = league_repository.create(
-        db, name=name, season=season, owner_id=owner.id, invite_code=invite_code
-    )
-    league_member_repository.create(
-        db, league_id=league.id, user_id=owner.id, role=LeagueRole.OWNER
-    )
-    db.commit()
+    try:
+        league = league_repository.create(
+            db, name=name, season=season, owner_id=owner.id, invite_code=invite_code
+        )
+        league_member_repository.create(
+            db, league_id=league.id, user_id=owner.id, role=LeagueRole.OWNER
+        )
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise ConflictError(
+            "A league already exists. This application supports only one league."
+        ) from exc
     db.refresh(league)
     return league
 
@@ -84,7 +91,7 @@ def create_invite(db: Session, *, league: League, inviter: User, email: str) -> 
 
 
 def join_league(db: Session, *, user: User, token: str) -> LeagueMember:
-    invite = invite_repository.get_by_token(db, token)
+    invite = invite_repository.get_by_token_for_update(db, token)
     if invite is None:
         raise NotFoundError("Invite not found.")
     if invite.accepted_at is not None:
@@ -102,10 +109,14 @@ def join_league(db: Session, *, user: User, token: str) -> LeagueMember:
     if existing_membership is not None:
         raise ConflictError("You are already a member of this league.")
 
-    membership = league_member_repository.create(
-        db, league_id=invite.league_id, user_id=user.id, role=LeagueRole.MEMBER
-    )
-    invite_repository.mark_accepted(db, invite)
-    db.commit()
+    try:
+        membership = league_member_repository.create(
+            db, league_id=invite.league_id, user_id=user.id, role=LeagueRole.MEMBER
+        )
+        invite_repository.mark_accepted(db, invite)
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise ConflictError("You are already a member of this league.") from exc
     db.refresh(membership)
     return membership

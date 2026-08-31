@@ -8,7 +8,7 @@
  * client transparently calls POST /auth/refresh once and retries the original request.
  */
 
-const API_BASE_URL = import.meta.env.VITE_API_URL
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1'
 
 interface ApiSuccessBody<T> {
   data: T
@@ -101,7 +101,8 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
     ...rest,
     credentials: 'include',
     headers: {
-      'Content-Type': 'application/json',
+      // Only set on requests with a body; avoids an unnecessary CORS preflight on bodiless GETs.
+      ...(rest.body ? { 'Content-Type': 'application/json' } : {}),
       ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
       ...headers,
     },

@@ -2,7 +2,10 @@
 
 from functools import lru_cache
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_INSECURE_DEFAULT_JWT_SECRET = "dev-only-secret-change-me"
 
 
 class Settings(BaseSettings):
@@ -17,7 +20,7 @@ class Settings(BaseSettings):
     google_client_id: str = ""
     google_client_secret: str = ""
 
-    jwt_secret: str = "dev-only-secret-change-me"
+    jwt_secret: str = _INSECURE_DEFAULT_JWT_SECRET
     jwt_algorithm: str = "HS256"
     jwt_access_token_expire_minutes: int = 15
     jwt_refresh_token_expire_days: int = 30
@@ -26,9 +29,17 @@ class Settings(BaseSettings):
     email_from: str = "noreply@nfl-confidence-pool.local"
 
     nfl_api_key: str = ""
+    nfl_api_base_url: str = "https://site.api.espn.com/apis/site/v2/sports/football/nfl"
+    nfl_api_timeout_seconds: float = 10.0
 
-    app_url: str = "http://localhost:5173"
-    cors_origins: str = "http://localhost:5173"
+    app_url: str = "http://127.0.0.1:5173"
+    cors_origins: str = "http://127.0.0.1:5173"
+
+    @model_validator(mode="after")
+    def _reject_insecure_secret_outside_local(self) -> "Settings":
+        if self.environment != "local" and self.jwt_secret == _INSECURE_DEFAULT_JWT_SECRET:
+            raise ValueError("JWT_SECRET must be set to a real secret outside local")
+        return self
 
     @property
     def cors_origin_list(self) -> list[str]:

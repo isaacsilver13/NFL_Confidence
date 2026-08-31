@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, String, Uuid
+from sqlalchemy import Boolean, DateTime, Enum, Float, ForeignKey, Integer, String, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.session import Base
@@ -27,6 +27,10 @@ class NflGame(TimestampMixin, Base):
     kickoff_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     home_team: Mapped[str] = mapped_column(String(64))
     away_team: Mapped[str] = mapped_column(String(64))
+    venue_name: Mapped[str | None] = mapped_column(String(255))
+    venue_location: Mapped[str | None] = mapped_column(String(255))
+    spread_team: Mapped[str | None] = mapped_column(String(64))
+    spread: Mapped[float | None] = mapped_column(Float)
     home_score: Mapped[int | None] = mapped_column(Integer)
     away_score: Mapped[int | None] = mapped_column(Integer)
     winning_team: Mapped[str | None] = mapped_column(String(64), index=True)

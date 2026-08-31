@@ -1,7 +1,7 @@
 import type { TokenResponse, User } from '@/types/auth'
 import { apiFetch, setAccessToken } from './client'
 
-const API_BASE_URL = import.meta.env.VITE_API_URL
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1'
 
 /** Full-page navigation target for "Continue with Google" (not a fetch call). */
 export function googleLoginUrl(): string {

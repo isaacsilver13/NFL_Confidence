@@ -12,8 +12,12 @@ from slowapi.errors import RateLimitExceeded
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.api.auth import router as auth_router
+from app.api.games import router as games_router
 from app.api.health import router as health_router
+from app.api.leaderboard import router as leaderboard_router
 from app.api.league import router as league_router
+from app.api.picks import router as picks_router
+from app.api.weeks import router as weeks_router
 from app.core.config import get_settings
 from app.core.exceptions import AppError
 from app.core.limiter import limiter
@@ -48,3 +52,7 @@ async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
 app.include_router(health_router, prefix="/api/v1")
 app.include_router(auth_router, prefix="/api/v1")
 app.include_router(league_router, prefix="/api/v1")
+app.include_router(games_router, prefix="/api/v1")
+app.include_router(weeks_router, prefix="/api/v1")
+app.include_router(picks_router, prefix="/api/v1")
+app.include_router(leaderboard_router, prefix="/api/v1")
