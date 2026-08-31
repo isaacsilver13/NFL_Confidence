@@ -231,7 +231,11 @@ Example
       "awayTeam": "CHI",
       "homeTeam": "GB",
       "kickoff": "...",
-      "status": "SCHEDULED"
+      "status": "SCHEDULED",
+      "venueName": "Lambeau Field",
+      "venueLocation": "Green Bay, WI",
+      "spreadTeam": "GB",
+      "spread": -3.5
     }
   ]
 }
@@ -240,7 +244,9 @@ Example
 
 ## GET /games/{id}
 
-Returns game details.
+Returns game details, including venue and favorite-side spread when supplied by the schedule/odds
+feed. `venueName`, `venueLocation`, `spreadTeam`, and `spread` may be null when the source does not
+provide those values.
 
 Including
 
@@ -301,17 +307,38 @@ Response
 
 ## GET /picks/history
 
-Returns historical picks.
+Returns the authenticated user's historical picks for completed weeks in the active league season.
 
-Filter
+Each pick includes matchup, selected team, confidence value, game status, winning team or tie,
+points earned, and an outcome of `correct`, `incorrect`, or `unscored`.
 
-Season
-
-Week
+No user or member filter is accepted. The authenticated user is always the data scope.
 
 ---
 
 # Leaderboard
+
+## GET /leaderboard/pick-breakdown
+
+Returns the completed-week pick breakdown for the active league.
+
+Each week contains one row per game. A game row includes both matchup teams, the median confidence
+points across distinct league-member picks, and each team's distinct user pick count. Games with no
+submitted picks are still returned with a null median and zero counts. The frontend derives each
+team's percentage from those counts and colors the bar with the team's established palette.
+
+Example game row:
+
+{
+  "gameId": "...",
+  "awayTeam": "CHI",
+  "homeTeam": "GB",
+  "medianConfidence": 4.5,
+  "teamCounts": [
+    {"team": "CHI", "userCount": 6},
+    {"team": "GB", "userCount": 2}
+  ]
+}
 
 ## GET /leaderboard/week
 
@@ -349,17 +376,9 @@ Average Points
 
 ## GET /profile
 
-Returns profile.
+Returns the authenticated user's profile view and completed-week pick history.
 
-Includes
-
-Season stats
-
-Weekly finishes
-
-Overall accuracy
-
-Confidence accuracy
+It does not expose another member's picks or per-member trend statistics.
 
 ---
 

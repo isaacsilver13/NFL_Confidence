@@ -3,7 +3,7 @@
 import uuid
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, ForeignKey, Integer, String, Uuid
+from sqlalchemy import Boolean, ForeignKey, Index, Integer, String, Uuid, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.session import Base
@@ -19,6 +19,14 @@ if TYPE_CHECKING:
 
 class League(TimestampMixin, Base):
     __tablename__ = "leagues"
+    __table_args__ = (
+        Index(
+            "uq_leagues_one_active",
+            "is_active",
+            unique=True,
+            postgresql_where=text("is_active IS TRUE"),
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(255))

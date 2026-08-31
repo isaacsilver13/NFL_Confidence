@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react'
+import { ArrowRight, CheckCircle2 } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ApiError } from '@/api/client'
 import { joinLeague } from '@/api/league'
+import { NflMark } from '@/components/nfl/NflMark'
+import { Button } from '@/components/ui/Button'
 
 type JoinStatus = 'joining' | 'success' | 'error'
 
@@ -30,7 +33,9 @@ export function JoinLeaguePage() {
         if (cancelled) return
         setStatus('error')
         setErrorMessage(
-          error instanceof ApiError ? error.message : 'Could not join the league. Please try again.',
+          error instanceof ApiError
+            ? error.message
+            : 'Could not join the league. Please try again.',
         )
       })
     return () => {
@@ -49,17 +54,13 @@ export function JoinLeaguePage() {
   if (status === 'success') {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 px-4 text-center">
-        <h1 className="text-2xl font-bold">You're in!</h1>
-        <p className="text-slate-600 dark:text-slate-300">
-          You've successfully joined the league.
-        </p>
-        <button
-          type="button"
-          onClick={() => void navigate('/', { replace: true })}
-          className="min-h-11 rounded-md bg-primary px-4 py-2 font-medium text-white transition-colors duration-150 hover:bg-primary-hover"
-        >
-          Go to dashboard
-        </button>
+        <NflMark />
+        <CheckCircle2 className="mt-8 text-accent" size={48} aria-hidden="true" />
+        <h1 className="text-3xl font-black text-primary dark:text-white">You're in!</h1>
+        <p className="text-slate-600 dark:text-slate-300">You've successfully joined the league.</p>
+        <Button onClick={() => void navigate('/', { replace: true })}>
+          Go to dashboard <ArrowRight size={16} aria-hidden="true" />
+        </Button>
       </div>
     )
   }

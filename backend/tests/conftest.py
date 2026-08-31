@@ -1,10 +1,11 @@
 """Shared pytest fixtures for database-backed tests."""
 
 from collections.abc import Generator
+from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
@@ -19,11 +20,25 @@ from app.models import *  # noqa: F401,F403
 @pytest.fixture(scope="session")
 def db_engine() -> Generator[Engine, None, None]:
     settings = get_settings()
-    engine = create_engine(settings.database_url)
+    schema = f"test_{uuid4().hex}"
+    admin_engine = create_engine(settings.database_url)
+    with admin_engine.begin() as connection:
+        connection.execute(text(f'CREATE SCHEMA "{schema}"'))
+    admin_engine.dispose()
+
+    engine = create_engine(
+        settings.database_url,
+        connect_args={"options": f"-csearch_path={schema}"},
+    )
     Base.metadata.create_all(engine)
-    yield engine
-    Base.metadata.drop_all(engine)
-    engine.dispose()
+    try:
+        yield engine
+    finally:
+        engine.dispose()
+        admin_engine = create_engine(settings.database_url)
+        with admin_engine.begin() as connection:
+            connection.execute(text(f'DROP SCHEMA "{schema}" CASCADE'))
+        admin_engine.dispose()
 
 
 @pytest.fixture()

@@ -22,6 +22,12 @@ def get_by_token(db: Session, token: str) -> Invite | None:
     return db.execute(select(Invite).where(Invite.token == token)).scalar_one_or_none()
 
 
+def get_by_token_for_update(db: Session, token: str) -> Invite | None:
+    return db.execute(
+        select(Invite).where(Invite.token == token).with_for_update()
+    ).scalar_one_or_none()
+
+
 def mark_accepted(db: Session, invite: Invite) -> None:
     invite.accepted_at = datetime.now(timezone.utc)
     db.flush()

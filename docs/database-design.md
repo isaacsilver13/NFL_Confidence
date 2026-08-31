@@ -207,6 +207,14 @@ home_team
 
 away_team
 
+venue_name
+
+venue_location
+
+spread_team
+
+spread
+
 home_score
 
 away_score
@@ -224,6 +232,11 @@ created_at
 updated_at
 
 ---
+
+`venue_name` and `venue_location` are nullable values imported from the external schedule feed.
+`spread_team` identifies the favorite and `spread` stores the point line from the favorite's
+perspective, independent of home or away status. Both spread fields are nullable when odds are
+not available.
 
 Game Status Enum
 

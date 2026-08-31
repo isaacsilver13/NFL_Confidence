@@ -1,6 +1,8 @@
 import { useState } from 'react'
+import { Mail, ShieldCheck, Users } from 'lucide-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { createInvite, fetchLeague, fetchLeagueMembers } from '@/api/league'
+import { Button } from '@/components/ui/Button'
 import { useAuth } from '@/features/auth/AuthContext'
 
 function InviteForm({ onInvited }: { onInvited: () => void }) {
@@ -41,14 +43,13 @@ function InviteForm({ onInvited }: { onInvited: () => void }) {
           className="min-h-11 w-full rounded-md border border-slate-300 px-3 py-2 dark:border-slate-700 dark:bg-slate-900"
         />
       </div>
-      <button
-        type="submit"
-        disabled={isSubmitting}
-        className="min-h-11 rounded-md bg-primary px-4 py-2 font-medium text-white transition-colors duration-150 hover:bg-primary-hover disabled:opacity-50"
-      >
+      <Button type="submit" disabled={isSubmitting}>
+        <Mail size={16} aria-hidden="true" />
         {isSubmitting ? 'Sending…' : 'Send invite'}
-      </button>
-      {successMessage && <p className="text-sm text-green-600 dark:text-green-400">{successMessage}</p>}
+      </Button>
+      {successMessage && (
+        <p className="text-sm text-green-600 dark:text-green-400">{successMessage}</p>
+      )}
       {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
     </form>
   )
@@ -88,26 +89,46 @@ export function LeagueSettingsPage() {
 
   return (
     <div className="animate-fade-in space-y-6">
-      <h1 className="text-2xl font-bold">League Settings</h1>
-      <div className="rounded-lg bg-white p-4 shadow-sm dark:bg-slate-900">
-        <p className="text-lg font-semibold">{league.name}</p>
-        <p className="text-sm text-slate-600 dark:text-slate-300">
-          Season {league.season} · Commissioner {league.commissionerName}
+      <div>
+        <p className="text-xs font-bold uppercase tracking-[0.2em] text-accent">
+          League administration
         </p>
+        <h1 className="mt-2 text-3xl font-black tracking-tight text-primary dark:text-white">
+          League settings
+        </h1>
+      </div>
+      <div className="rounded-2xl border border-slate-200 bg-surface p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="flex items-start gap-3">
+          <span className="rounded-xl bg-sky/15 p-3 text-sky">
+            <ShieldCheck size={22} aria-hidden="true" />
+          </span>
+          <div>
+            <p className="text-lg font-bold">{league.name}</p>
+            <p className="text-sm text-slate-600 dark:text-slate-300">
+              Season {league.season} · Commissioner {league.commissionerName}
+            </p>
+          </div>
+        </div>
       </div>
 
       {isCommissioner && (
         <div className="space-y-3">
-          <h2 className="text-lg font-semibold">Invite members</h2>
+          <h2 className="flex items-center gap-2 text-lg font-bold">
+            <Mail size={18} aria-hidden="true" /> Invite members
+          </h2>
           <InviteForm
-            onInvited={() => void queryClient.invalidateQueries({ queryKey: ['league', 'members'] })}
+            onInvited={() =>
+              void queryClient.invalidateQueries({ queryKey: ['league', 'members'] })
+            }
           />
         </div>
       )}
 
       <div className="space-y-3">
-        <h2 className="text-lg font-semibold">Members</h2>
-        <ul className="divide-y divide-slate-200 rounded-lg bg-white shadow-sm dark:divide-slate-800 dark:bg-slate-900">
+        <h2 className="flex items-center gap-2 text-lg font-bold">
+          <Users size={18} aria-hidden="true" /> Members
+        </h2>
+        <ul className="divide-y divide-slate-200 overflow-hidden rounded-2xl border border-slate-200 bg-surface shadow-sm dark:divide-slate-800 dark:border-slate-800 dark:bg-slate-900">
           {members?.map((member) => (
             <li key={member.id} className="flex items-center justify-between px-4 py-3">
               <span>{member.displayName}</span>

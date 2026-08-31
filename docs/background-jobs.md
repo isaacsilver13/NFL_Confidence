@@ -24,6 +24,13 @@ Games
 
 Kickoff Times
 
+Venue and location
+
+Favorite-side spread when available
+
+The callable local entry point is `python -m scripts.import_nfl_schedule --season YEAR --week WEEK`.
+ESPN odds and venue fields are optional; missing values are stored as null and do not reject an event.
+
 ---
 
 ## Lock Games

@@ -1,6 +1,6 @@
 # UI Design System
 
-Version 1.0
+Version 1.1
 
 ---
 
@@ -141,3 +141,25 @@ Minimum 44px
 Sticky Bottom Save Button
 
 Single Column Layout
+
+The picks save action is sticky on mobile and returns to the normal action row at the tablet breakpoint. Game cards must not overflow at a 390px viewport width.
+
+---
+
+# Implemented Visual Tokens
+
+Primary: deep navy `#0b1f3a`
+
+Accent: field green `#1f8f63`
+
+Sky: interactive blue `#2f9fd0`
+
+Gold: confidence highlight `#d99a2b`
+
+Danger: red `#c83c4a`
+
+Background: light gray `#eef2f3`
+
+Team abbreviations render as deterministic team-colored badges through the shared `TeamLogo` component. The component accepts an optional image source for approved final artwork; image URLs must not be scattered through page components.
+
+All interactive controls use a minimum 44px height. Selected choices use both color and state styling (`aria-pressed` or `aria-selected`) so color is never the only signal. Reduced-motion users receive minimal transitions.
