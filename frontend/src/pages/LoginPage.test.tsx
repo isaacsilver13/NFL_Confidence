@@ -29,5 +29,3 @@ describe('LoginPage', () => {
     expect(screen.getByRole('button', { name: /continue with google/i })).toBeInTheDocument()
   })
 })
-
-
