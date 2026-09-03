@@ -2,20 +2,20 @@ import { describe, expect, it, beforeEach, vi } from 'vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { fetchCurrentGames, fetchCurrentPicks, fetchCurrentWeek, savePicks } from '@/api/nfl'
+import { savePicks } from '@/api/nfl'
+import { fetchCurrentPicksCard } from '@/api/session'
 import type { NflGame, NflPick, NflWeek } from '@/types/nfl'
 import { PicksPage } from './PicksPage'
 
 vi.mock('@/api/nfl', () => ({
-  fetchCurrentGames: vi.fn(),
-  fetchCurrentPicks: vi.fn(),
-  fetchCurrentWeek: vi.fn(),
   savePicks: vi.fn(),
 }))
 
-const mockedFetchCurrentGames = vi.mocked(fetchCurrentGames)
-const mockedFetchCurrentPicks = vi.mocked(fetchCurrentPicks)
-const mockedFetchCurrentWeek = vi.mocked(fetchCurrentWeek)
+vi.mock('@/api/session', () => ({
+  fetchCurrentPicksCard: vi.fn(),
+}))
+
+const mockedFetchCurrentPicksCard = vi.mocked(fetchCurrentPicksCard)
 const mockedSavePicks = vi.mocked(savePicks)
 
 const week: NflWeek = {
@@ -74,9 +74,12 @@ function renderPage() {
 describe('PicksPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockedFetchCurrentWeek.mockResolvedValue(week)
-    mockedFetchCurrentGames.mockResolvedValue(games)
-    mockedFetchCurrentPicks.mockResolvedValue([])
+    const picksCard = {
+      week,
+      games,
+      picks: [],
+    }
+    mockedFetchCurrentPicksCard.mockResolvedValue(picksCard)
     mockedSavePicks.mockResolvedValue([] as NflPick[])
   })
 
@@ -106,15 +109,20 @@ describe('PicksPage', () => {
   })
 
   it('hydrates an existing pick', async () => {
-    mockedFetchCurrentPicks.mockResolvedValueOnce([
-      {
-        id: 'pick-1',
-        gameId: 'game-1',
-        team: 'BUF',
-        confidence: 2,
-        submittedAt: '2026-08-24T12:00:00Z',
-      },
-    ])
+    const picksCard = {
+      week,
+      games,
+      picks: [
+        {
+          id: 'pick-1',
+          gameId: 'game-1',
+          team: 'BUF',
+          confidence: 2,
+          submittedAt: '2026-08-24T12:00:00Z',
+        },
+      ],
+    }
+    mockedFetchCurrentPicksCard.mockResolvedValueOnce(picksCard)
     renderPage()
 
     expect(await screen.findByRole('button', { name: 'BUF' })).toHaveAttribute(
@@ -122,5 +130,32 @@ describe('PicksPage', () => {
       'true',
     )
     expect(screen.getAllByRole('button', { name: '2' })[0]).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('displays team logos for both teams in each game', async () => {
+    renderPage()
+
+    // Wait for the page to load
+    await screen.findByRole('heading', { name: /Week 1 picks/i })
+
+    // Verify that logo images are rendered for all teams
+    // We look for img elements by their src attribute (images with logos)
+    const allImages = document.querySelectorAll('img')
+
+    // Filter for team logo images (they have .png filenames in /logos/)
+    const teamLogoImages = Array.from(allImages).filter(
+      (img) => img.src && img.src.includes('/logos/') && img.src.includes('.png'),
+    )
+
+    // We expect at least 4 logo images: 2 teams per game, and we have 2 games = 4 minimum
+    // (displayed in the matchup header for each game)
+    expect(teamLogoImages.length).toBeGreaterThanOrEqual(4)
+
+    // Verify specific team logos are present
+    const bufImages = teamLogoImages.filter((img) => img.src.includes('/BUF.png'))
+    const kcImages = teamLogoImages.filter((img) => img.src.includes('/KC.png'))
+
+    expect(bufImages.length).toBeGreaterThan(0)
+    expect(kcImages.length).toBeGreaterThan(0)
   })
 })

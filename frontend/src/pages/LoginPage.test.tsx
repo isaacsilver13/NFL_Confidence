@@ -6,7 +6,7 @@ import { LoginPage } from './LoginPage'
 
 describe('LoginPage', () => {
   beforeEach(() => {
-    // AuthProvider calls GET /auth/me on mount to silently restore a session; stub
+    // AuthProvider calls POST /auth/refresh on mount to silently restore a session; stub
     // fetch so that resolves deterministically instead of hitting the real network.
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network disabled in tests')))
   })

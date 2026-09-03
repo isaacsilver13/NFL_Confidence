@@ -1,7 +1,8 @@
-import { useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError } from '@/api/client'
-import { fetchCurrentGames, fetchCurrentPicks, fetchCurrentWeek, savePicks } from '@/api/nfl'
+import { savePicks } from '@/api/nfl'
+import { fetchCurrentPicksCard } from '@/api/session'
 import { TeamLogo } from '@/components/nfl/TeamLogo'
 import { Button } from '@/components/ui/Button'
 import type { NflGame, NflPick, NflWeek, PickInput } from '@/types/nfl'
@@ -27,6 +28,16 @@ function formatSpread(spread: number): string {
   return spread > 0 ? `+${spread}` : String(spread)
 }
 
+function formatDeadline(deadline: string): string {
+  return new Intl.DateTimeFormat(undefined, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(new Date(deadline))
+}
+
 function initialDrafts(games: NflGame[], picks: NflPick[]): PickDrafts {
   const picksByGame = new Map(picks.map((pick) => [pick.gameId, pick]))
   return Object.fromEntries(
@@ -42,6 +53,16 @@ function GamesForm({ week, games, picks }: { week: NflWeek; games: NflGame[]; pi
   const [drafts, setDrafts] = useState<PickDrafts>(() => initialDrafts(games, picks))
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
+  const [now, setNow] = useState(() => Date.now())
+  const locksAt = week.locksAt ? Date.parse(week.locksAt) : null
+  const isLocked = Boolean(week.isLocked || (locksAt !== null && locksAt <= now))
+
+  useEffect(() => {
+    if (locksAt === null || isLocked) return
+    const timer = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(timer)
+  }, [isLocked, locksAt])
+
   const confidenceValues = Array.from({ length: games.length }, (_, index) => index + 1)
   // Maps a confidence value to the game it's currently assigned to, so each game card can check "used elsewhere" in O(1).
   const confidenceUsageByGame = useMemo(() => {
@@ -56,7 +77,7 @@ function GamesForm({ week, games, picks }: { week: NflWeek; games: NflGame[]; pi
     mutationFn: savePicks,
     onSuccess: async () => {
       setSaved(true)
-      await queryClient.invalidateQueries({ queryKey: ['nfl-picks', 'current'] })
+      await queryClient.invalidateQueries({ queryKey: ['picks', 'card', 'current'] })
     },
   })
 
@@ -69,6 +90,10 @@ function GamesForm({ week, games, picks }: { week: NflWeek; games: NflGame[]; pi
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setSubmitError(null)
+    if (isLocked) {
+      setSubmitError('Picks are locked after the first game kickoff.')
+      return
+    }
     const submissions: PickInput[] = games.map((game) => ({
       gameId: game.id,
       team: drafts[game.id]?.team ?? '',
@@ -94,10 +119,21 @@ function GamesForm({ week, games, picks }: { week: NflWeek; games: NflGame[]; pi
             Week {week.weekNumber} picks
           </h1>
         </div>
-        <p className="text-sm text-slate-600 dark:text-slate-300">
-          Use each confidence value from 1 to {games.length} once.
-        </p>
+        <div className="text-right text-sm text-slate-600 dark:text-slate-300">
+          <p>Use each confidence value from 1 to {games.length} once.</p>
+          {week.locksAt && (
+            <p className={isLocked ? 'font-bold text-danger' : 'font-semibold text-accent'}>
+              {isLocked ? 'Picks locked' : `Locks ${formatDeadline(week.locksAt)}`}
+            </p>
+          )}
+        </div>
       </div>
+
+      {isLocked && (
+        <p className="rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm font-semibold text-danger">
+          The first game has started. This week&apos;s picks are read-only.
+        </p>
+      )}
 
       {games.map((game) => {
         const draft = drafts[game.id] ?? { team: '', confidence: '' }
@@ -135,14 +171,14 @@ function GamesForm({ week, games, picks }: { week: NflWeek; games: NflGame[]; pi
                 </p>
                 <div className="mt-3 flex items-center gap-3">
                   <div className="flex min-w-0 items-center gap-2">
-                    <TeamLogo code={game.awayTeam} />
+                    <TeamLogo code={game.awayTeam} decorative />
                     <span className="truncate text-base font-bold">{game.awayTeam}</span>
                   </div>
                   <span className="text-sm font-semibold text-ink-muted dark:text-slate-400">
                     at
                   </span>
                   <div className="flex min-w-0 items-center gap-2">
-                    <TeamLogo code={game.homeTeam} />
+                    <TeamLogo code={game.homeTeam} decorative />
                     <span className="truncate text-base font-bold">{game.homeTeam}</span>
                   </div>
                 </div>
@@ -164,10 +200,11 @@ function GamesForm({ week, games, picks }: { week: NflWeek; games: NflGame[]; pi
                           key={team}
                           type="button"
                           aria-pressed={isSelected}
+                          disabled={isLocked}
                           onClick={() => updateDraft(game.id, { team })}
-                          className={`flex min-h-11 items-center gap-2 rounded-xl border px-3 py-2 text-sm font-bold transition-colors duration-150 ${isSelected ? 'border-primary bg-primary text-white shadow-sm' : 'border-slate-300 bg-white text-ink hover:border-sky hover:bg-sky/10 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:hover:border-sky'}`}
+                          className={`flex min-h-11 items-center gap-2 rounded-xl border px-3 py-2 text-sm font-bold transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-60 ${isSelected ? 'border-primary bg-primary text-white shadow-sm' : 'border-slate-300 bg-white text-ink hover:border-sky hover:bg-sky/10 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:hover:border-sky'}`}
                         >
-                          <TeamLogo code={team} size="sm" />
+                          <TeamLogo code={team} size="sm" decorative />
                           {team}
                         </button>
                       )
@@ -194,12 +231,13 @@ function GamesForm({ week, games, picks }: { week: NflWeek; games: NflGame[]; pi
                           key={value}
                           type="button"
                           aria-pressed={isSelected}
+                          disabled={isLocked}
                           aria-label={`${value}${isUsedElsewhere ? ' already used' : ''}`}
                           title={
                             isUsedElsewhere ? 'This confidence value is already used.' : undefined
                           }
                           onClick={() => updateDraft(game.id, { confidence: String(value) })}
-                          className={`flex h-11 w-11 items-center justify-center rounded-xl border text-sm font-bold transition-colors duration-150 ${isSelected ? 'border-gold bg-gold text-white shadow-sm' : isUsedElsewhere ? 'border-gold/60 bg-gold/10 text-gold hover:bg-gold/20' : 'border-slate-300 bg-white text-ink hover:border-gold hover:bg-gold/10 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100'}`}
+                          className={`flex h-11 w-11 items-center justify-center rounded-xl border text-sm font-bold transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-60 ${isSelected ? 'border-gold bg-gold text-white shadow-sm' : isUsedElsewhere ? 'border-gold/60 bg-gold/10 text-gold hover:bg-gold/20' : 'border-slate-300 bg-white text-ink hover:border-gold hover:bg-gold/10 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100'}`}
                         >
                           {value}
                         </button>
@@ -214,7 +252,7 @@ function GamesForm({ week, games, picks }: { week: NflWeek; games: NflGame[]; pi
       })}
 
       <div className="sticky bottom-3 z-10 -mx-1 flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-surface/95 p-3 shadow-lg shadow-primary/10 backdrop-blur sm:static sm:mx-0 sm:border-0 sm:bg-transparent sm:p-0 sm:shadow-none sm:backdrop-blur-none dark:border-slate-800 dark:bg-slate-900/95 sm:dark:bg-transparent">
-        <Button type="submit" disabled={saveMutation.isPending}>
+        <Button type="submit" disabled={saveMutation.isPending || isLocked}>
           {' '}
           {saveMutation.isPending ? 'Saving…' : 'Save picks'}{' '}
         </Button>
@@ -226,32 +264,40 @@ function GamesForm({ week, games, picks }: { week: NflWeek; games: NflGame[]; pi
 }
 
 export function PicksPage() {
-  const weekQuery = useQuery({ queryKey: ['nfl-week', 'current'], queryFn: fetchCurrentWeek })
-  const gamesQuery = useQuery({ queryKey: ['nfl-games', 'current'], queryFn: fetchCurrentGames })
-  const picksQuery = useQuery({ queryKey: ['nfl-picks', 'current'], queryFn: fetchCurrentPicks })
+  const {
+    data: picksCard,
+    isPending,
+    error,
+  } = useQuery({
+    queryKey: ['picks', 'card', 'current'],
+    queryFn: fetchCurrentPicksCard,
+  })
 
-  if (weekQuery.isPending || gamesQuery.isPending || picksQuery.isPending)
+  if (isPending)
     return (
       <p className="animate-fade-in text-slate-600 dark:text-slate-300">
         Loading this week&apos;s games…
       </p>
     )
-  const error = weekQuery.error ?? gamesQuery.error ?? picksQuery.error
+
   if (error)
     return (
       <p className="animate-fade-in text-danger">
         {error instanceof ApiError ? error.message : 'Could not load this week&apos;s games.'}
       </p>
     )
-  const week = weekQuery.data
-  const games = gamesQuery.data
-  const picks = picksQuery.data
+
+  const week = picksCard?.week
+  const games = picksCard?.games
+  const picks = picksCard?.picks
+
   if (!week || !games || !picks)
     return (
       <p className="animate-fade-in text-slate-600 dark:text-slate-300">
         No current week is available.
       </p>
     )
+
   if (games.length === 0)
     return (
       <div className="animate-fade-in space-y-2">
@@ -259,6 +305,7 @@ export function PicksPage() {
         <p className="text-slate-600 dark:text-slate-300">No games are scheduled for this week.</p>
       </div>
     )
+
   const picksKey = picks.map((pick) => `${pick.gameId}:${pick.team}:${pick.confidence}`).join('|')
   return <GamesForm key={`${week.id}:${picksKey}`} week={week} games={games} picks={picks} />
 }

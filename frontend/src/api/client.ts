@@ -70,7 +70,7 @@ async function parseResponse<T>(response: Response): Promise<T> {
 
 let refreshInFlight: Promise<boolean> | null = null
 
-async function refreshAccessToken(): Promise<boolean> {
+export async function refreshAccessToken(): Promise<boolean> {
   refreshInFlight ??= (async () => {
     try {
       const response = await fetch(`${API_BASE_URL}/auth/refresh`, {

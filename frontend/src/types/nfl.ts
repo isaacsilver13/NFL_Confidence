@@ -5,6 +5,8 @@ export interface NflWeek {
   startDate: string
   endDate: string
   status: string
+  locksAt?: string | null
+  isLocked?: boolean
 }
 
 export interface NflGame {

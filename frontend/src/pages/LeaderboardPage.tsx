@@ -3,9 +3,8 @@ import { useQuery } from '@tanstack/react-query'
 import { Trophy } from 'lucide-react'
 import { ApiError } from '@/api/client'
 import { fetchWeeklyLeaderboard } from '@/api/leaderboard'
+import { fetchCompletedWeeks } from '@/api/nfl'
 import type { LeaderboardMember } from '@/types/leaderboard'
-
-const DEMO_WEEKS = Array.from({ length: 10 }, (_, index) => index + 2)
 
 function LeaderboardTable({ standings }: { standings: LeaderboardMember[] }) {
   return (
@@ -20,6 +19,7 @@ function LeaderboardTable({ standings }: { standings: LeaderboardMember[] }) {
             <th className="px-5 py-4 text-right">Correct</th>
             <th className="px-5 py-4 text-right">Missed</th>
             <th className="px-5 py-4 text-right">Wins</th>
+            <th className="px-5 py-4 text-right">Payout</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
@@ -36,6 +36,9 @@ function LeaderboardTable({ standings }: { standings: LeaderboardMember[] }) {
               <td className="px-5 py-4 text-right">{member.correctPicks}</td>
               <td className="px-5 py-4 text-right">{member.incorrectPicks}</td>
               <td className="px-5 py-4 text-right">{member.weeklyWins}</td>
+              <td className="px-5 py-4 text-right font-semibold">
+                ${(member.payoutCents / 100).toFixed(2)}
+              </td>
             </tr>
           ))}
         </tbody>
@@ -45,10 +48,17 @@ function LeaderboardTable({ standings }: { standings: LeaderboardMember[] }) {
 }
 
 export function LeaderboardPage() {
-  const [week, setWeek] = useState(2)
+  const [week, setWeek] = useState<number>()
+  const weeksQuery = useQuery({
+    queryKey: ['leaderboard', 'weeks'],
+    queryFn: fetchCompletedWeeks,
+  })
+  const completedWeeks = weeksQuery.data ?? []
+  const selectedWeek = week ?? completedWeeks[completedWeeks.length - 1]?.weekNumber
   const query = useQuery({
-    queryKey: ['leaderboard', 'week', week],
-    queryFn: () => fetchWeeklyLeaderboard(week),
+    queryKey: ['leaderboard', 'week', selectedWeek],
+    queryFn: () => fetchWeeklyLeaderboard(selectedWeek as number),
+    enabled: selectedWeek !== undefined,
   })
 
   return (
@@ -63,11 +73,11 @@ export function LeaderboardPage() {
         <label className="flex items-center gap-3 text-sm font-bold text-ink-muted dark:text-slate-300">
           Week
           <select
-            value={week}
+            value={selectedWeek ?? ''}
             onChange={(event) => setWeek(Number(event.target.value))}
             className="min-h-11 rounded-xl border border-slate-300 bg-surface px-3 text-ink shadow-sm dark:border-slate-700 dark:bg-slate-900"
           >
-            {DEMO_WEEKS.map((weekNumber) => (
+            {completedWeeks.map(({ weekNumber }) => (
               <option key={weekNumber} value={weekNumber}>
                 Week {weekNumber}
               </option>
@@ -84,7 +94,7 @@ export function LeaderboardPage() {
       {query.error && (
         <p className="text-danger" role="alert">
           {query.error instanceof ApiError && query.error.status === 404
-            ? `Week ${week} has no completed results.`
+            ? `Week ${selectedWeek ?? ''} has no completed results.`
             : 'Could not load the weekly leaderboard.'}
         </p>
       )}

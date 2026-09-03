@@ -9,6 +9,12 @@ export interface LeaderboardMember {
   firstPlaceFinishes: number
   secondPlaceFinishes: number
   thirdPlaceFinishes: number
+  payoutCents: number
+}
+
+export interface CompletedWeek {
+  weekNumber: number
+  seasonNumber: number
 }
 
 export interface WeeklyLeaderboard {

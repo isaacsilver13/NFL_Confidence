@@ -27,10 +27,10 @@ function GameBreakdown({ game }: { game: GamePickBreakdown }) {
     <article className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-950">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2 font-bold">
-          <TeamLogo code={game.awayTeam} size="sm" />
+          <TeamLogo code={game.awayTeam} size="sm" decorative />
           <span>{game.awayTeam}</span>
           <span className="text-ink-muted dark:text-slate-400">at</span>
-          <TeamLogo code={game.homeTeam} size="sm" />
+          <TeamLogo code={game.homeTeam} size="sm" decorative />
           <span>{game.homeTeam}</span>
         </div>
         <p className="text-sm text-ink-muted dark:text-slate-400">

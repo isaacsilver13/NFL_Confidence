@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { fetchCurrentUser, logout as apiLogout } from '@/api/auth'
-import { setAccessToken } from '@/api/client'
+import { refreshAccessToken, setAccessToken } from '@/api/client'
 import type { User } from '@/types/auth'
 import { AuthContext } from './AuthContext'
 
@@ -13,8 +13,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     async function bootstrapSession() {
       try {
-        // No access token exists yet on a fresh page load; apiFetch's built-in 401
-        // handling transparently calls /auth/refresh using the httpOnly cookie.
+        const refreshed = await refreshAccessToken()
+        if (!refreshed) return
+
         const currentUser = await fetchCurrentUser()
         if (!cancelled) setUser(currentUser)
       } catch {
