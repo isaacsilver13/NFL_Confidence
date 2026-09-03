@@ -2,7 +2,7 @@
 
 from collections.abc import Generator
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from app.core.config import get_settings
@@ -16,12 +16,19 @@ settings = get_settings()
 # - pool_recycle: Refresh connections after this many seconds (prevents stale connections)
 engine = create_engine(
     settings.database_url,
-    connect_args={"options": "-c search_path=public"},
     pool_size=10,
     max_overflow=5,
     pool_pre_ping=True,
     pool_recycle=3600,
 )
+
+
+@event.listens_for(engine, "connect")
+def set_public_search_path(dbapi_connection, _connection_record) -> None:
+    with dbapi_connection.cursor() as cursor:
+        cursor.execute("SET search_path TO public")
+
+
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
 

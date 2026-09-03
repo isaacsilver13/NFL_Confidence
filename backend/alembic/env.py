@@ -2,7 +2,7 @@
 
 from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config, pool
+from sqlalchemy import engine_from_config, event, pool
 
 from alembic import context
 from app.core.config import get_settings
@@ -38,9 +38,13 @@ def run_migrations_online() -> None:
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
-        connect_args={"options": "-c search_path=public"},
         poolclass=pool.NullPool,
     )
+
+    @event.listens_for(connectable, "connect")
+    def set_public_search_path(dbapi_connection, _connection_record) -> None:
+        with dbapi_connection.cursor() as cursor:
+            cursor.execute("SET search_path TO public")
 
     with connectable.connect() as connection:
         context.configure(connection=connection, target_metadata=target_metadata)
