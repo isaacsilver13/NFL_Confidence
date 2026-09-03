@@ -1,6 +1,43 @@
-"""Tests for Google-OAuth-free dev login, JWT access tokens, refresh rotation, and logout."""
+"""Tests for Google OAuth, JWT access tokens, refresh rotation, and logout."""
 
+import asyncio
+from collections.abc import Awaitable, Callable
+
+import pytest
+from authlib.integrations.base_client.errors import OAuthError
 from fastapi.testclient import TestClient
+
+from app.api.auth import _run_google_request
+from app.core.exceptions import UnauthorizedError
+
+
+async def _slow_google_operation() -> None:
+    await asyncio.sleep(1)
+
+
+async def _provider_error_operation() -> None:
+    raise OAuthError("provider unavailable")
+
+
+async def _timeout_operation() -> None:
+    raise asyncio.TimeoutError
+
+
+async def test_google_request_timeout_is_mapped_to_unauthorized(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("app.api.auth.settings.google_oauth_timeout_seconds", 0.01)
+
+    with pytest.raises(UnauthorizedError, match="Google sign-in is temporarily unavailable"):
+        await _run_google_request(_slow_google_operation())
+
+
+@pytest.mark.parametrize("operation", [_timeout_operation, _provider_error_operation])
+async def test_google_request_provider_failures_are_mapped_to_unauthorized(
+    operation: Callable[[], Awaitable[None]],
+) -> None:
+    with pytest.raises(UnauthorizedError, match="Google sign-in is temporarily unavailable"):
+        await _run_google_request(operation())
 
 
 def test_dev_login_returns_access_token_and_user(client: TestClient) -> None:

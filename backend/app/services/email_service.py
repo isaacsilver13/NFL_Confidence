@@ -6,6 +6,7 @@ fallback pattern used for auth).
 """
 
 import logging
+from html import escape
 
 import resend
 
@@ -39,9 +40,23 @@ def send_league_invitation(
 ) -> None:
     subject = f"You're invited to join {league_name}"
     html = (
-        f"<p>{commissioner_name} invited you to join <strong>{league_name}</strong> "
+        f"<p>{escape(commissioner_name)} invited you to join "
+        f"<strong>{escape(league_name)}</strong> "
         "on NFL Confidence Pool.</p>"
-        f'<p><a href="{invite_link}">Accept your invitation</a></p>'
-        f"<p>This invite expires on {expires_at}.</p>"
+        f'<p><a href="{escape(invite_link, quote=True)}">Accept your invitation</a></p>'
+        f"<p>This invite expires on {escape(expires_at)}.</p>"
+    )
+    send_email(to=to, subject=subject, html=html)
+
+
+def send_weekly_reminder(
+    *, to: str, season: int, week_number: int, remaining_picks: int, deadline: str, picks_link: str
+) -> None:
+    subject = "Don't forget your NFL Confidence Picks"
+    html = (
+        f"<p>You have <strong>{remaining_picks}</strong> pick(s) remaining for "
+        f"NFL season {season}, week {week_number}.</p>"
+        f"<p>Picks lock at {escape(deadline)} when the first game kicks off.</p>"
+        f'<p><a href="{escape(picks_link, quote=True)}">Submit your picks</a></p>'
     )
     send_email(to=to, subject=subject, html=html)

@@ -71,17 +71,20 @@ def _require_owner(league: League, user: User) -> None:
 def create_invite(db: Session, *, league: League, inviter: User, email: str) -> Invite:
     _require_owner(league, inviter)
 
+    # Normalize email for consistency in database and matching.
+    email_normalized = email.lower().strip()
+
     token = secrets.token_urlsafe(32)
     expires_at = datetime.now(timezone.utc) + timedelta(days=INVITE_EXPIRY_DAYS)
     invite = invite_repository.create(
-        db, league_id=league.id, email=email, token=token, expires_at=expires_at
+        db, league_id=league.id, email=email_normalized, token=token, expires_at=expires_at
     )
     db.commit()
     db.refresh(invite)
 
     invite_link = f"{settings.app_url}/join?token={token}"
     send_league_invitation(
-        to=email,
+        to=email_normalized,
         league_name=league.name,
         commissioner_name=inviter.display_name,
         invite_link=invite_link,
@@ -94,6 +97,19 @@ def join_league(db: Session, *, user: User, token: str) -> LeagueMember:
     invite = invite_repository.get_by_token_for_update(db, token)
     if invite is None:
         raise NotFoundError("Invite not found.")
+
+    # Verify the authenticated user's email matches the invite recipient email.
+    # Normalize both emails to handle case and whitespace variations.
+    # This check must come before checking if the invite was already accepted,
+    # to avoid leaking information about other users' invites.
+    user_email_normalized = user.email.lower().strip()
+    invite_email_normalized = invite.email.lower().strip()
+    if user_email_normalized != invite_email_normalized:
+        raise ValidationError(
+            "This invite was sent to a different email address. "
+            "You must log in with the email the invite was sent to."
+        )
+
     if invite.accepted_at is not None:
         raise ConflictError("This invite has already been used.")
 
