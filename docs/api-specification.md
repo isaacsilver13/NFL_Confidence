@@ -69,13 +69,19 @@ None
 
 Response
 
-200
+303 Redirect
 
 Returns
 
-- Access Token
-- Refresh Token
-- User Profile
+- Redirects to the configured frontend `APP_URL`.
+- Sets an httpOnly refresh-token cookie on the API origin.
+
+Errors
+
+- `401 UNAUTHORIZED` if Google OAuth is unavailable, times out, or returns a provider error.
+
+The SPA exchanges the refresh cookie for an in-memory access token through
+`POST /auth/refresh`, then loads the current user through `GET /auth/me`.
 
 ---
 
