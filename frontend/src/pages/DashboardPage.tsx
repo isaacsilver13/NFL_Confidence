@@ -3,7 +3,9 @@ import { ArrowUpRight, CalendarDays, Users } from 'lucide-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { ApiError } from '@/api/client'
-import { createLeague, fetchLeague } from '@/api/league'
+import { createLeague } from '@/api/league'
+import { fetchSessionBootstrap } from '@/api/session'
+import { fetchWeeklyLeaderboard, fetchSeasonStandings } from '@/api/leaderboard'
 import { Button } from '@/components/ui/Button'
 
 const CURRENT_SEASON = new Date().getFullYear()
@@ -21,7 +23,7 @@ function CreateLeagueForm() {
     setIsSubmitting(true)
     try {
       await createLeague({ name: name.trim(), season })
-      await queryClient.invalidateQueries({ queryKey: ['league'] })
+      await queryClient.invalidateQueries({ queryKey: ['session', 'bootstrap'] })
     } catch {
       setError('Could not create the league. Please try again.')
     } finally {
@@ -68,14 +70,52 @@ function CreateLeagueForm() {
 export function DashboardPage() {
   const navigate = useNavigate()
   const {
-    data: league,
+    data: bootstrapData,
     isLoading,
     error,
   } = useQuery({
-    queryKey: ['league'],
-    queryFn: fetchLeague,
+    queryKey: ['session', 'bootstrap'],
+    queryFn: fetchSessionBootstrap,
     retry: false,
   })
+
+  const league = bootstrapData?.league ?? null
+  const currentWeek = bootstrapData?.currentWeek ?? null
+  const user = bootstrapData?.user
+
+  // Fetch leaderboard data for current week if we have a league and week
+  const { data: weeklyLeaderboard, isLoading: isWeeklyLoading } = useQuery({
+    queryKey: ['leaderboard', 'week', currentWeek?.weekNumber],
+    queryFn: () => fetchWeeklyLeaderboard(currentWeek?.weekNumber),
+    enabled: Boolean(league && currentWeek),
+    retry: false,
+  })
+
+  // Fetch season standings if we have a league
+  const { data: seasonStandings, isLoading: isSeasonLoading } = useQuery({
+    queryKey: ['leaderboard', 'season'],
+    queryFn: () => fetchSeasonStandings(),
+    enabled: Boolean(league),
+    retry: false,
+  })
+
+  // Find user's rank in weekly leaderboard
+  const weeklyRank =
+    weeklyLeaderboard && user
+      ? (weeklyLeaderboard.standings.findIndex(
+          (entry: { memberId: string }) => entry.memberId === user.id,
+        ) ?? -1) + 1
+      : null
+  const displayWeeklyRank = weeklyRank && weeklyRank > 0 ? `#${weeklyRank}` : 'Not scored'
+
+  // Find user's rank in season standings
+  const seasonRank =
+    seasonStandings && user
+      ? (seasonStandings.standings.findIndex(
+          (entry: { memberId: string }) => entry.memberId === user.id,
+        ) ?? -1) + 1
+      : null
+  const displaySeasonRank = seasonRank && seasonRank > 0 ? `#${seasonRank}` : 'Not scored'
 
   if (isLoading) {
     return null
@@ -133,7 +173,11 @@ export function DashboardPage() {
         </div>
       )}
       <div className="grid gap-4 sm:grid-cols-3">
-        {['Current week', 'My weekly rank', 'Season rank'].map((label) => (
+        {[
+          ['Current week', currentWeek ? `Week ${currentWeek.weekNumber}` : 'Unavailable'],
+          ['My weekly rank', isWeeklyLoading ? 'Loading…' : displayWeeklyRank],
+          ['Season rank', isSeasonLoading ? 'Loading…' : displaySeasonRank],
+        ].map(([label, value]) => (
           <div
             key={label}
             className="rounded-2xl border border-slate-200 bg-surface p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900"
@@ -141,7 +185,7 @@ export function DashboardPage() {
             <p className="text-xs font-bold uppercase tracking-[0.16em] text-ink-muted dark:text-slate-400">
               {label}
             </p>
-            <p className="mt-4 text-2xl font-black text-primary dark:text-white">Coming soon</p>
+            <p className="mt-4 text-2xl font-black text-primary dark:text-white">{value}</p>
           </div>
         ))}
       </div>
