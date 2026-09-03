@@ -2,13 +2,18 @@
 
 import asyncio
 from collections.abc import Awaitable, Callable
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 from authlib.integrations.base_client.errors import OAuthError
 from fastapi.testclient import TestClient
+from sqlalchemy.exc import IntegrityError
 
+from app.api import auth
 from app.api.auth import _run_google_request
 from app.core.exceptions import UnauthorizedError
+from app.models.user import User
 
 
 async def _slow_google_operation() -> None:
@@ -125,3 +130,171 @@ def test_google_login_returns_401_when_not_configured(client: TestClient) -> Non
     response = client.get("/api/v1/auth/google/login", follow_redirects=False)
 
     assert response.status_code == 401
+
+
+def test_google_login_uses_configured_redirect_url(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _mock_google_login(monkeypatch)
+    redirect_url = "https://nfl-confidence-web.fly.dev/api/v1/auth/google/callback"
+    monkeypatch.setattr(auth.settings, "google_oauth_redirect_url", redirect_url)
+
+    response = client.get("/api/v1/auth/google/login", follow_redirects=False)
+
+    assert response.status_code == 307
+    provider = auth.oauth.google
+    provider.authorize_redirect.assert_awaited_once()
+    assert provider.authorize_redirect.await_args.args[1] == redirect_url
+
+
+def test_google_login_uses_request_url_when_redirect_url_is_unconfigured(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _mock_google_login(monkeypatch)
+    monkeypatch.setattr(auth.settings, "google_oauth_redirect_url", "")
+
+    response = client.get("/api/v1/auth/google/login", follow_redirects=False)
+
+    assert response.status_code == 307
+    provider = auth.oauth.google
+    provider.authorize_redirect.assert_awaited_once()
+    assert provider.authorize_redirect.await_args.args[1] == (
+        "http://testserver/api/v1/auth/google/callback"
+    )
+
+
+def _mock_google_login(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(auth.settings, "google_client_id", "test-client-id")
+    monkeypatch.setattr(auth.settings, "google_client_secret", "test-client-secret")
+    monkeypatch.setattr("app.auth.oauth.settings.google_client_id", "test-client-id")
+    monkeypatch.setattr("app.auth.oauth.settings.google_client_secret", "test-client-secret")
+    authorize_redirect = AsyncMock(return_value=auth.RedirectResponse("https://accounts.google.com"))
+    monkeypatch.setattr(
+        auth.oauth,
+        "google",
+        SimpleNamespace(authorize_redirect=authorize_redirect),
+        raising=False,
+    )
+
+
+def _mock_google_callback(monkeypatch: pytest.MonkeyPatch, userinfo: dict[str, str] | None) -> None:
+    monkeypatch.setattr(auth.settings, "google_client_id", "test-client-id")
+    monkeypatch.setattr(auth.settings, "google_client_secret", "test-client-secret")
+    monkeypatch.setattr("app.auth.oauth.settings.google_client_id", "test-client-id")
+    monkeypatch.setattr("app.auth.oauth.settings.google_client_secret", "test-client-secret")
+    authorize_access_token = AsyncMock(return_value={"userinfo": userinfo})
+    monkeypatch.setattr(
+        auth.oauth,
+        "google",
+        SimpleNamespace(authorize_access_token=authorize_access_token),
+        raising=False,
+    )
+
+
+def test_google_callback_creates_user_and_redirects(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _mock_google_callback(
+        monkeypatch,
+        {
+            "sub": "google-user-123",
+            "email": "user@example.com",
+            "name": "Google User",
+            "picture": "https://example.com/avatar.png",
+        },
+    )
+    monkeypatch.setattr(auth.settings, "environment", "production")
+
+    response = client.get(
+        "/api/v1/auth/google/callback?code=test-code&state=test-state",
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"] == auth.settings.app_url
+    cookie = response.headers["set-cookie"].lower()
+    assert "refresh_token=" in cookie
+    assert "path=/api/v1/auth" in cookie
+    assert "secure" in cookie
+    assert "httponly" in cookie
+    assert "samesite=none" in cookie
+
+
+@pytest.mark.parametrize(
+    "userinfo",
+    [{"email": "user@example.com"}, {"sub": "google-user-123"}, None],
+)
+def test_google_callback_rejects_incomplete_userinfo(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    userinfo: dict[str, str] | None,
+) -> None:
+    _mock_google_callback(monkeypatch, userinfo)
+
+    response = client.get(
+        "/api/v1/auth/google/callback?code=test-code&state=test-state",
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 401
+    assert response.json()["error"]["code"] == "UNAUTHORIZED"
+
+
+def test_google_callback_rejects_email_already_linked_to_another_account(
+    client: TestClient,
+    db_session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db_session.add(
+        User(
+            google_id="different-google-user",
+            email="user@example.com",
+            display_name="Existing User",
+        )
+    )
+    db_session.flush()
+    _mock_google_callback(
+        monkeypatch,
+        {"sub": "google-user-123", "email": "user@example.com"},
+    )
+
+    response = client.get(
+        "/api/v1/auth/google/callback?code=test-code&state=test-state",
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "CONFLICT"
+
+
+def test_google_user_creation_retries_after_google_id_race(
+    db_session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    raced_user = User(
+        google_id="google-user-123",
+        email="user@example.com",
+        display_name="Google User",
+    )
+    get_by_google_id = iter([None, raced_user])
+    monkeypatch.setattr(
+        "app.services.auth_service.user_repository.get_by_google_id",
+        lambda _db, _google_id: next(get_by_google_id),
+    )
+    monkeypatch.setattr(
+        "app.services.auth_service.user_repository.get_by_email",
+        lambda _db, _email: None,
+    )
+    monkeypatch.setattr(
+        "app.services.auth_service.user_repository.create",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(IntegrityError("duplicate", {}, None)),
+    )
+
+    user = auth.auth_service.get_or_create_google_user(
+        db_session,
+        google_id="google-user-123",
+        email="user@example.com",
+        display_name="Google User",
+        avatar_url=None,
+    )
+
+    assert user is raced_user

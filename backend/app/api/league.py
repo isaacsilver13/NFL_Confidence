@@ -1,9 +1,11 @@
-"""League routes: create/view league, list members, invite, join.
+"""League routes: create/view league, list members, invite, join, and removal.
 
 Routes stay thin: validate request -> call service -> return response.
 """
 
-from fastapi import APIRouter, Depends
+import uuid
+
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import get_active_league_member, get_current_user
@@ -17,6 +19,7 @@ from app.schemas.league import (
     InviteCreateRequest,
     InviteRead,
     LeagueCreateRequest,
+    LeagueJoinCodeRequest,
     LeagueJoinRequest,
     LeagueMemberRead,
     LeagueRead,
@@ -90,6 +93,16 @@ def get_members(
     )
 
 
+@router.delete("/members/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+def remove_member(
+    user_id: uuid.UUID,
+    league_member: tuple[League, LeagueMember] = Depends(get_active_league_member),
+    db: Session = Depends(get_db),
+) -> None:
+    league, member = league_member
+    league_service.remove_member(db, league=league, commissioner=member.user, user_id=user_id)
+
+
 @router.post("/invite")
 def create_invite(
     body: InviteCreateRequest,
@@ -116,4 +129,14 @@ def join_league(
     db: Session = Depends(get_db),
 ) -> dict:
     league_service.join_league(db, user=current_user, token=body.token)
+    return success(None, message="Joined league successfully.")
+
+
+@router.post("/join-with-code")
+def join_league_with_code(
+    body: LeagueJoinCodeRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    league_service.join_league_with_code(db, user=current_user, code=body.code)
     return success(None, message="Joined league successfully.")

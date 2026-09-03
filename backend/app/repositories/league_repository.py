@@ -20,6 +20,13 @@ def get_active(db: Session) -> League | None:
     )
 
 
+def get_by_invite_code(db: Session, invite_code: str) -> League | None:
+    """Return the league identified by its member-shared passcode."""
+    return db.execute(
+        select(League).where(League.invite_code == invite_code).options(joinedload(League.owner))
+    ).scalar_one_or_none()
+
+
 def create(db: Session, *, name: str, season: int, owner_id: uuid.UUID, invite_code: str) -> League:
     league = League(name=name, season=season, owner_id=owner_id, invite_code=invite_code)
     db.add(league)

@@ -1,18 +1,20 @@
 """Authentication routes: Google OAuth login/callback, token refresh, logout, current user.
 
 Routes stay thin: validate request -> call service -> return response.
-The refresh token is delivered as an httpOnly, Secure, SameSite=Lax cookie scoped to
+The refresh token is delivered as an httpOnly, Secure cookie scoped to
 /api/v1/auth; the access token is returned in the JSON body for the SPA to hold in memory
 and send as `Authorization: Bearer <token>`.
 """
 
 import asyncio
-from collections.abc import Awaitable
+import logging
+from collections.abc import Awaitable, Mapping
 from typing import TypeVar
 
 import httpx
 from authlib.integrations.base_client.errors import OAuthError
 from fastapi import APIRouter, Depends, Request, Response
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from starlette.responses import RedirectResponse
 
@@ -35,6 +37,38 @@ settings = get_settings()
 REFRESH_COOKIE_NAME = "refresh_token"
 REFRESH_COOKIE_PATH = "/api/v1/auth"
 _GoogleResult = TypeVar("_GoogleResult")
+logger = logging.getLogger(__name__)
+
+
+def _extract_google_userinfo(token: object) -> tuple[str, str, str, str | None]:
+    if not isinstance(token, Mapping):
+        raise UnauthorizedError("Google sign-in returned an invalid response. Please try again.")
+
+    userinfo = token.get("userinfo")
+    if not isinstance(userinfo, Mapping):
+        raise UnauthorizedError(
+            "Google sign-in did not return the required account information. Please try again."
+        )
+
+    google_id = userinfo.get("sub")
+    email = userinfo.get("email")
+    if not isinstance(google_id, str) or not google_id.strip():
+        raise UnauthorizedError(
+            "Google sign-in did not return the required account information. Please try again."
+        )
+    if not isinstance(email, str) or not email.strip():
+        raise UnauthorizedError(
+            "Google sign-in did not return the required account information. Please try again."
+        )
+
+    display_name = userinfo.get("name")
+    picture = userinfo.get("picture")
+    return (
+        google_id,
+        email,
+        display_name if isinstance(display_name, str) and display_name.strip() else email,
+        picture if isinstance(picture, str) and picture.strip() else None,
+    )
 
 
 async def _run_google_request(operation: Awaitable[_GoogleResult]) -> _GoogleResult:
@@ -69,7 +103,7 @@ async def google_login(request: Request) -> Response:
         raise UnauthorizedError(
             "Google OAuth is not configured in this environment. Use /auth/dev-login instead."
         )
-    redirect_uri = str(request.url_for("google_callback"))
+    redirect_uri = settings.google_oauth_redirect_url or str(request.url_for("google_callback"))
     return await _run_google_request(oauth.google.authorize_redirect(request, redirect_uri))
 
 
@@ -79,17 +113,35 @@ async def google_callback(request: Request, db: Session = Depends(get_db)) -> Re
     if not is_google_oauth_configured():
         raise UnauthorizedError("Google OAuth is not configured in this environment.")
 
-    token = await _run_google_request(oauth.google.authorize_access_token(request))
-    userinfo = token.get("userinfo") or {}
+    try:
+        token = await _run_google_request(oauth.google.authorize_access_token(request))
+    except UnauthorizedError as exc:
+        logger.warning(
+            "Google OAuth token exchange failed: %s",
+            type(exc.__cause__ or exc).__name__,
+        )
+        raise
 
-    user = auth_service.get_or_create_google_user(
-        db,
-        google_id=userinfo["sub"],
-        email=userinfo["email"],
-        display_name=userinfo.get("name") or userinfo["email"],
-        avatar_url=userinfo.get("picture"),
-    )
-    issued = auth_service.issue_tokens(db, user)
+    try:
+        google_id, email, display_name, avatar_url = _extract_google_userinfo(token)
+    except UnauthorizedError:
+        logger.warning("Google OAuth response did not contain required user claims")
+        raise
+
+    try:
+        user = auth_service.get_or_create_google_user(
+            db,
+            google_id=google_id,
+            email=email,
+            display_name=display_name,
+            avatar_url=avatar_url,
+        )
+        issued = auth_service.issue_tokens(db, user)
+    except SQLAlchemyError as exc:
+        db.rollback()
+        logger.error("Google OAuth callback database operation failed: %s", type(exc).__name__)
+        raise UnauthorizedError("Google sign-in could not be completed. Please try again.") from exc
+
     redirect = RedirectResponse(url=settings.app_url, status_code=303)
     _set_refresh_cookie(redirect, issued.refresh_token)
     return redirect

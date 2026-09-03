@@ -166,6 +166,135 @@ def test_join_with_unknown_token_returns_404(client, db_session: Session) -> Non
     assert response.status_code == 404
 
 
+def test_join_with_league_passcode(client, db_session: Session) -> None:
+    owner = _make_user(
+        db_session,
+        google_id="g-owner-code",
+        email="owner-code@example.com",
+        display_name="Owner",
+    )
+    joiner = _make_user(
+        db_session,
+        google_id="g-joiner-code",
+        email="joiner-code@example.com",
+        display_name="Joiner",
+    )
+    db_session.commit()
+    create_response = client.post(
+        "/api/v1/league",
+        json={"name": "Passcode League", "season": 2026},
+        headers=_auth_header(owner),
+    )
+    code = create_response.json()["data"]["inviteCode"]
+
+    response = client.post(
+        "/api/v1/league/join-with-code",
+        json={"code": f"  {code}  "},
+        headers=_auth_header(joiner),
+    )
+
+    assert response.status_code == 200
+    members = client.get("/api/v1/league/members", headers=_auth_header(owner)).json()["data"]
+    assert {member["displayName"] for member in members} == {"Owner", "Joiner"}
+
+
+def test_join_with_invalid_league_passcode_fails(client, db_session: Session) -> None:
+    owner = _make_user(
+        db_session,
+        google_id="g-owner-bad-code",
+        email="owner-bad-code@example.com",
+        display_name="Owner",
+    )
+    joiner = _make_user(
+        db_session,
+        google_id="g-joiner-bad-code",
+        email="joiner-bad-code@example.com",
+        display_name="Joiner",
+    )
+    db_session.commit()
+    client.post(
+        "/api/v1/league",
+        json={"name": "Passcode League", "season": 2026},
+        headers=_auth_header(owner),
+    )
+
+    response = client.post(
+        "/api/v1/league/join-with-code",
+        json={"code": "wrong-code"},
+        headers=_auth_header(joiner),
+    )
+
+    assert response.status_code == 422
+
+
+def test_commissioner_can_remove_member(client, db_session: Session) -> None:
+    owner = _make_user(
+        db_session,
+        google_id="g-owner-remove",
+        email="owner-remove@example.com",
+        display_name="Owner",
+    )
+    member = _make_user(
+        db_session,
+        google_id="g-member-remove",
+        email="member-remove@example.com",
+        display_name="Member",
+    )
+    db_session.commit()
+    create_response = client.post(
+        "/api/v1/league",
+        json={"name": "Removal League", "season": 2026},
+        headers=_auth_header(owner),
+    )
+    code = create_response.json()["data"]["inviteCode"]
+    client.post(
+        "/api/v1/league/join-with-code", json={"code": code}, headers=_auth_header(member)
+    )
+    member_record = next(
+        item
+        for item in client.get("/api/v1/league/members", headers=_auth_header(owner)).json()["data"]
+        if item["userId"] == str(member.id)
+    )
+    response = client.delete(
+        f"/api/v1/league/members/{member.id}", headers=_auth_header(owner)
+    )
+
+    assert response.status_code == 204
+    assert client.get("/api/v1/league", headers=_auth_header(member)).status_code == 403
+    assert member_record["displayName"] == "Member"
+
+
+def test_non_commissioner_cannot_remove_member(client, db_session: Session) -> None:
+    owner = _make_user(
+        db_session,
+        google_id="g-owner-no-remove",
+        email="owner-no-remove@example.com",
+        display_name="Owner",
+    )
+    member = _make_user(
+        db_session,
+        google_id="g-member-no-remove",
+        email="member-no-remove@example.com",
+        display_name="Member",
+    )
+    db_session.commit()
+    create_response = client.post(
+        "/api/v1/league",
+        json={"name": "Removal League", "season": 2026},
+        headers=_auth_header(owner),
+    )
+    code = create_response.json()["data"]["inviteCode"]
+    client.post(
+        "/api/v1/league/join-with-code", json={"code": code}, headers=_auth_header(member)
+    )
+
+    response = client.delete(
+        f"/api/v1/league/members/{owner.id}", headers=_auth_header(member)
+    )
+
+    assert response.status_code == 403
+
+
 def test_join_twice_with_same_invite_fails(client, db_session: Session) -> None:
     owner = _make_user(
         db_session, google_id="g-owner7", email="owner7@example.com", display_name="Owner7"

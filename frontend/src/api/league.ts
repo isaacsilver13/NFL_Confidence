@@ -20,3 +20,14 @@ export async function createInvite(email: string): Promise<Invite> {
 export async function joinLeague(token: string): Promise<void> {
   await apiFetch<null>('/league/join', { method: 'POST', body: JSON.stringify({ token }) })
 }
+
+export async function joinLeagueWithCode(code: string): Promise<void> {
+  await apiFetch<null>('/league/join-with-code', {
+    method: 'POST',
+    body: JSON.stringify({ code }),
+  })
+}
+
+export async function removeLeagueMember(userId: string): Promise<void> {
+  await apiFetch<null>(`/league/members/${userId}`, { method: 'DELETE' })
+}

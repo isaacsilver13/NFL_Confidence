@@ -5,7 +5,7 @@ primary_region = "iad"
 dockerfile = "../docker/Dockerfile.frontend"
 
 [build.args]
-VITE_API_URL = "https://nfl-confidence-api.fly.dev/api/v1"
+VITE_API_URL = "/api/v1"
 
 [http_service]
 internal_port = 80

@@ -10,6 +10,7 @@ from app.core.exceptions import NotFoundError
 from app.core.responses import success
 from app.db.session import get_db
 from app.models.user import User
+from app.repositories import league_member_repository
 from app.schemas.auth import UserRead
 from app.schemas.league import LeagueRead
 from app.schemas.nfl import WeekRead
@@ -49,7 +50,9 @@ def bootstrap_session(
 
     try:
         league = league_service.get_active_league(db)
-        if league:
+        if league and league_member_repository.get_by_league_and_user(
+            db, league.id, current_user.id
+        ):
             member_count = league_service.get_member_count(db, league)
             league_data = LeagueRead(
                 id=league.id,

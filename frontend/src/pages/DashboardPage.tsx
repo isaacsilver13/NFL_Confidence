@@ -1,9 +1,9 @@
 import { useState } from 'react'
-import { ArrowUpRight, CalendarDays, Users } from 'lucide-react'
+import { ArrowUpRight, CalendarDays, KeyRound, Users } from 'lucide-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { ApiError } from '@/api/client'
-import { createLeague } from '@/api/league'
+import { createLeague, joinLeagueWithCode } from '@/api/league'
 import { fetchSessionBootstrap } from '@/api/session'
 import { fetchWeeklyLeaderboard, fetchSeasonStandings } from '@/api/leaderboard'
 import { Button } from '@/components/ui/Button'
@@ -61,6 +61,50 @@ function CreateLeagueForm() {
       </div>
       <Button type="submit" disabled={isSubmitting} fullWidth>
         {isSubmitting ? 'Creating…' : 'Create league'}
+      </Button>
+      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+    </form>
+  )
+}
+
+function JoinLeagueForm() {
+  const queryClient = useQueryClient()
+  const [code, setCode] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function handleSubmit(event: React.FormEvent) {
+    event.preventDefault()
+    setError(null)
+    setIsSubmitting(true)
+    try {
+      await joinLeagueWithCode(code.trim())
+      await queryClient.invalidateQueries({ queryKey: ['session', 'bootstrap'] })
+    } catch {
+      setError('That league passcode is invalid. Please check it and try again.')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  return (
+    <form onSubmit={(event) => void handleSubmit(event)} className="max-w-sm space-y-4">
+      <div>
+        <label htmlFor="league-passcode" className="mb-1 block text-sm font-medium">
+          League passcode
+        </label>
+        <input
+          id="league-passcode"
+          type="text"
+          required
+          value={code}
+          onChange={(event) => setCode(event.target.value)}
+          className="min-h-11 w-full rounded-md border border-slate-300 px-3 py-2 dark:border-slate-700 dark:bg-slate-900"
+        />
+      </div>
+      <Button type="submit" disabled={isSubmitting} fullWidth>
+        <KeyRound size={16} aria-hidden="true" />
+        {isSubmitting ? 'Joining…' : 'Join league'}
       </Button>
       {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
     </form>
@@ -137,6 +181,25 @@ export function DashboardPage() {
         </p>
         <div className="max-w-md rounded-2xl border border-slate-200 bg-surface p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <CreateLeagueForm />
+        </div>
+      </div>
+    )
+  }
+
+  if (!league) {
+    return (
+      <div className="animate-fade-in space-y-6">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.2em] text-accent">League access</p>
+          <h1 className="mt-2 text-3xl font-black tracking-tight text-primary dark:text-white">
+            Join your pool.
+          </h1>
+        </div>
+        <p className="text-slate-600 dark:text-slate-300">
+          Ask the commissioner for the league passcode to join.
+        </p>
+        <div className="max-w-md rounded-2xl border border-slate-200 bg-surface p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <JoinLeagueForm />
         </div>
       </div>
     )

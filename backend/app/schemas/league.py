@@ -45,3 +45,7 @@ class InviteRead(CamelModel):
 
 class LeagueJoinRequest(CamelModel):
     token: str
+
+
+class LeagueJoinCodeRequest(CamelModel):
+    code: str

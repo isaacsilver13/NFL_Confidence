@@ -73,6 +73,24 @@ def test_bootstrap_with_no_active_league(client, db_session: Session) -> None:
     assert data["currentWeek"] is None
 
 
+def test_bootstrap_hides_league_from_non_member(client, db_session: Session) -> None:
+    """Authenticated users outside the league receive no league metadata."""
+    owner = _make_user(db_session)
+    non_member = _make_user(db_session)
+    league_service.create_league(
+        db_session, owner=owner, name="Private Bootstrap League", season=2026
+    )
+    db_session.commit()
+
+    response = client.get("/api/v1/bootstrap", headers=_auth_header(non_member))
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["user"]["email"] == non_member.email
+    assert data["league"] is None
+    assert data["currentWeek"] is None
+
+
 def test_picks_card_requires_authentication(client) -> None:
     """Non-authenticated users get 401."""
     response = client.get("/api/v1/picks/card/current")
