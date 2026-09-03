@@ -6,10 +6,12 @@ before running Alembic autogenerate or creating tables directly.
 
 from app.models.audit_log import AuditLog
 from app.models.invite import Invite
+from app.models.job_run import JobRun
 from app.models.league import League
 from app.models.league_member import LeagueMember
 from app.models.nfl_game import NflGame
 from app.models.nfl_week import NflWeek
+from app.models.notification_delivery import NotificationDelivery
 from app.models.pick import Pick
 from app.models.refresh_token import RefreshToken
 from app.models.reminder_preference import ReminderPreference
@@ -21,10 +23,12 @@ from app.models.weekly_result import WeeklyResult
 __all__ = [
     "AuditLog",
     "Invite",
+    "JobRun",
     "League",
     "LeagueMember",
     "NflGame",
     "NflWeek",
+    "NotificationDelivery",
     "Pick",
     "RefreshToken",
     "ReminderPreference",

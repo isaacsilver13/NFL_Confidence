@@ -21,6 +21,7 @@ class ReminderPreference(Base):
         ForeignKey("users.id", ondelete="CASCADE"), unique=True, index=True
     )
     email_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    weekly_reminder: Mapped[bool] = mapped_column(Boolean, default=True)
     thursday_reminder: Mapped[bool] = mapped_column(Boolean, default=True)
     sunday_reminder: Mapped[bool] = mapped_column(Boolean, default=True)
     kickoff_reminder: Mapped[bool] = mapped_column(Boolean, default=True)

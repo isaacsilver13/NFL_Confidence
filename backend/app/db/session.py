@@ -9,7 +9,18 @@ from app.core.config import get_settings
 
 settings = get_settings()
 
-engine = create_engine(settings.database_url, pool_pre_ping=True)
+# Configure connection pool for production concurrency
+# - pool_size: Base number of connections to keep in the pool
+# - max_overflow: Allow up to this many additional connections during spikes
+# - pool_pre_ping: Verify connection is still valid before reusing
+# - pool_recycle: Refresh connections after this many seconds (prevents stale connections)
+engine = create_engine(
+    settings.database_url,
+    pool_size=10,
+    max_overflow=5,
+    pool_pre_ping=True,
+    pool_recycle=3600,
+)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
 
