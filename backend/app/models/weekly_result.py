@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, Integer, Uuid, func
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.session import Base
@@ -17,6 +17,9 @@ if TYPE_CHECKING:
 
 class WeeklyResult(Base):
     __tablename__ = "weekly_results"
+    __table_args__ = (
+        Index("uq_weekly_results_user_week", "league_id", "week_id", "user_id", unique=True),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     league_id: Mapped[uuid.UUID] = mapped_column(
@@ -31,6 +34,7 @@ class WeeklyResult(Base):
     total_points: Mapped[int] = mapped_column(Integer, default=0)
     correct_picks: Mapped[int] = mapped_column(Integer, default=0)
     incorrect_picks: Mapped[int] = mapped_column(Integer, default=0)
+    highest_confidence_win: Mapped[int] = mapped_column(Integer, default=0)
     weekly_rank: Mapped[int | None] = mapped_column(Integer, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

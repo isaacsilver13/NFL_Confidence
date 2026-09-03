@@ -3,7 +3,7 @@
 from datetime import datetime
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.models.nfl_week import NflWeek
 
@@ -36,7 +36,10 @@ def get_current(db: Session, *, season: int, at: datetime) -> NflWeek | None:
 def list_by_season(db: Session, *, season: int) -> list[NflWeek]:
     return list(
         db.execute(
-            select(NflWeek).where(NflWeek.season == season).order_by(NflWeek.week_number)
+            select(NflWeek)
+            .where(NflWeek.season == season)
+            .options(selectinload(NflWeek.games))
+            .order_by(NflWeek.week_number)
         ).scalars()
     )
 

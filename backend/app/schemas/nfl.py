@@ -13,6 +13,8 @@ class WeekRead(CamelModel):
     start_date: datetime
     end_date: datetime
     status: str
+    locks_at: datetime | None = None
+    is_locked: bool = False
 
 
 class GameRead(CamelModel):

@@ -16,6 +16,7 @@ from app.models.pick import Pick
 from app.models.weekly_result import WeeklyResult
 from app.repositories import (
     league_member_repository,
+    league_repository,
     season_result_repository,
     weekly_result_repository,
 )
@@ -31,7 +32,21 @@ from app.schemas.leaderboard import (
 )
 
 
-def _ranked_members(results: list, *, season: bool = False) -> list[LeaderboardMemberRead]:
+def _weekly_payout_cents(*, rank: int, member_count: int) -> int:
+    pool_cents = member_count * 1000
+    if rank == 1:
+        reserved = (200 if member_count >= 2 else 0) + (100 if member_count >= 3 else 0)
+        return max(pool_cents - reserved, 0)
+    if rank == 2 and member_count >= 2:
+        return 200
+    if rank == 3 and member_count >= 3:
+        return 100
+    return 0
+
+
+def _ranked_members(
+    results: list, *, season: bool = False, member_count: int = 0
+) -> list[LeaderboardMemberRead]:
     usable_results = [result for result in results if result.user is not None]
     ordered = sorted(
         usable_results,
@@ -42,24 +57,46 @@ def _ranked_members(results: list, *, season: bool = False) -> list[LeaderboardM
                 if season
                 else -(getattr(result, "correct_picks", 0) or 0)
             ),
+            -(getattr(result, "highest_confidence_win", 0) or 0),
             result.user.display_name,
         ),
     )
-    return [
-        LeaderboardMemberRead(
-            rank=rank,
-            member_id=result.user_id,
-            member_name=result.user.display_name,
-            total_points=result.total_points or 0,
-            correct_picks=getattr(result, "correct_picks", 0) or 0,
-            incorrect_picks=getattr(result, "incorrect_picks", 0) or 0,
-            weekly_wins=getattr(result, "weekly_wins", 0) or 0,
-            first_place_finishes=getattr(result, "first_place_finishes", 0) or 0,
-            second_place_finishes=getattr(result, "second_place_finishes", 0) or 0,
-            third_place_finishes=getattr(result, "third_place_finishes", 0) or 0,
+    members: list[LeaderboardMemberRead] = []
+    previous_key: tuple[int, int, int] | None = None
+    previous_rank = 0
+    for position, result in enumerate(ordered, start=1):
+        current_key = (
+            result.total_points or 0,
+            (
+                getattr(result, "weekly_wins", 0) or 0
+                if season
+                else getattr(result, "correct_picks", 0) or 0
+            ),
+            getattr(result, "highest_confidence_win", 0) or 0,
         )
-        for rank, result in enumerate(ordered, start=1)
-    ]
+        if current_key != previous_key:
+            previous_rank = position
+            previous_key = current_key
+        members.append(
+            LeaderboardMemberRead(
+                rank=previous_rank,
+                member_id=result.user_id,
+                member_name=result.user.display_name,
+                total_points=result.total_points or 0,
+                correct_picks=getattr(result, "correct_picks", 0) or 0,
+                incorrect_picks=getattr(result, "incorrect_picks", 0) or 0,
+                weekly_wins=getattr(result, "weekly_wins", 0) or 0,
+                first_place_finishes=getattr(result, "first_place_finishes", 0) or 0,
+                second_place_finishes=getattr(result, "second_place_finishes", 0) or 0,
+                third_place_finishes=getattr(result, "third_place_finishes", 0) or 0,
+                payout_cents=(
+                    _weekly_payout_cents(rank=previous_rank, member_count=member_count)
+                    if not season
+                    else 0
+                ),
+            )
+        )
+    return members
 
 
 def _get_week(db: Session, league: League, week_number: int | None) -> NflWeek:
@@ -97,7 +134,10 @@ def get_weekly_leaderboard(
     results = weekly_result_repository.list_by_league_and_week(
         db, league_id=league.id, week_id=week.id
     )
-    standings = _ranked_members(results)
+    standings = _ranked_members(
+        results,
+        member_count=league_repository.count_members(db, league.id),
+    )
     if not standings:
         raise NotFoundError(f"Week {week.week_number} has no leaderboard data.")
     return WeeklyLeaderboardRead(
