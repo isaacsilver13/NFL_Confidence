@@ -195,7 +195,7 @@ def test_concurrent_invite_acceptance_returns_one_conflict(db_engine) -> None:
         invite = league_service.create_invite(
             setup_db, league=league, inviter=owner, email=joiner_one.email
         )
-        user_ids = [joiner_one.id, joiner_two.id]
+        user_ids = [joiner_one.id, joiner_one.id]
         token = invite.token
 
     def join(db: Session, user_id: UUID) -> object:

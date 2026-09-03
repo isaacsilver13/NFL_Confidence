@@ -124,6 +124,29 @@ def test_picks_reject_duplicate_confidence_values(client, db_session: Session) -
     assert response.json()["error"]["code"] == "VALIDATION_ERROR"
 
 
+def test_picks_lock_for_entire_week_at_first_kickoff(client, db_session: Session) -> None:
+    user = _make_user(db_session)
+    _, games = _ensure_current_fixture(db_session, user)
+    games[0].kickoff_time = datetime.now(timezone.utc) - timedelta(minutes=1)
+    games[1].kickoff_time = datetime.now(timezone.utc) + timedelta(days=1)
+    db_session.commit()
+
+    response = client.post(
+        "/api/v1/picks",
+        json={
+            "week": 1,
+            "picks": [
+                {"gameId": str(game.id), "team": game.home_team, "confidence": index}
+                for index, game in enumerate(games, start=1)
+            ],
+        },
+        headers=_auth_header(user),
+    )
+
+    assert response.status_code == 422
+    assert "already kicked off" in response.json()["error"]["message"]
+
+
 def test_pick_history_is_private_and_contains_outcomes(db_session: Session) -> None:
     suffix = uuid.uuid4().hex
     owner = _make_user(db_session)

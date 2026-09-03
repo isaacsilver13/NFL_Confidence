@@ -32,6 +32,7 @@ class SeasonResult(Base):
     season: Mapped[int] = mapped_column(Integer)
     total_points: Mapped[int] = mapped_column(Integer, default=0)
     weekly_wins: Mapped[int] = mapped_column(Integer, default=0)
+    highest_confidence_win: Mapped[int] = mapped_column(Integer, default=0)
     first_place_finishes: Mapped[int] = mapped_column(Integer, default=0)
     second_place_finishes: Mapped[int] = mapped_column(Integer, default=0)
     third_place_finishes: Mapped[int] = mapped_column(Integer, default=0)

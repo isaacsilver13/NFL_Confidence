@@ -16,6 +16,7 @@ class LeaderboardMemberRead(CamelModel):
     first_place_finishes: int = 0
     second_place_finishes: int = 0
     third_place_finishes: int = 0
+    payout_cents: int = 0
 
 
 class WeekLabelRead(CamelModel):

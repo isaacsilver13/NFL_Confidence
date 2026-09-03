@@ -65,8 +65,9 @@ def test_get_league_requires_a_league_to_exist(client, db_session: Session) -> N
 
     response = client.get("/api/v1/league", headers=_auth_header(user))
 
-    assert response.status_code == 404
-    assert response.json()["error"]["code"] == "NOT_FOUND"
+    # Authorization check returns 403 if no active league exists (doesn't reveal league status)
+    assert response.status_code == 403
+    assert response.json()["error"]["code"] == "FORBIDDEN"
 
 
 def test_get_league_returns_summary(client, db_session: Session) -> None:
@@ -85,6 +86,7 @@ def test_get_league_returns_summary(client, db_session: Session) -> None:
 
 
 def test_invite_requires_commissioner_role(client, db_session: Session) -> None:
+    """Members who are not owners should receive 403 when trying to create an invite."""
     owner = _make_user(
         db_session, google_id="g-owner4", email="owner4@example.com", display_name="Owner4"
     )
@@ -96,6 +98,16 @@ def test_invite_requires_commissioner_role(client, db_session: Session) -> None:
         "/api/v1/league", json={"name": "Owned", "season": 2026}, headers=_auth_header(owner)
     )
 
+    # Add the member to the league
+    client.post(
+        "/api/v1/league/invite",
+        json={"email": "member1@example.com"},
+        headers=_auth_header(owner),
+    )
+    invite = db_session.query(Invite).filter_by(email="member1@example.com").one()
+    client.post("/api/v1/league/join", json={"token": invite.token}, headers=_auth_header(member))
+
+    # Now try to create an invite as a non-owner member
     response = client.post(
         "/api/v1/league/invite",
         json={"email": "friend@example.com"},
@@ -181,3 +193,187 @@ def test_join_twice_with_same_invite_fails(client, db_session: Session) -> None:
         "/api/v1/league/join", json={"token": invite.token}, headers=_auth_header(joiner)
     )
     assert second_join.status_code == 409
+
+
+# Tests for active-league membership authorization (Phase 1A)
+
+
+def test_non_member_cannot_view_league(client, db_session: Session) -> None:
+    """Non-members should receive 403 when accessing GET /league."""
+    owner = _make_user(
+        db_session,
+        google_id="g-owner-auth1",
+        email="owner-auth1@example.com",
+        display_name="Owner1",
+    )
+    non_member = _make_user(
+        db_session,
+        google_id="g-non-member1",
+        email="non-member1@example.com",
+        display_name="NonMember1",
+    )
+    db_session.commit()
+    client.post(
+        "/api/v1/league", json={"name": "Private", "season": 2026}, headers=_auth_header(owner)
+    )
+
+    response = client.get("/api/v1/league", headers=_auth_header(non_member))
+
+    assert response.status_code == 403
+    assert response.json()["error"]["code"] == "FORBIDDEN"
+
+
+def test_non_member_cannot_view_league_members(client, db_session: Session) -> None:
+    """Non-members should receive 403 when accessing GET /league/members."""
+    owner = _make_user(
+        db_session,
+        google_id="g-owner-auth2",
+        email="owner-auth2@example.com",
+        display_name="Owner2",
+    )
+    non_member = _make_user(
+        db_session,
+        google_id="g-non-member2",
+        email="non-member2@example.com",
+        display_name="NonMember2",
+    )
+    db_session.commit()
+    client.post(
+        "/api/v1/league", json={"name": "Private2", "season": 2026}, headers=_auth_header(owner)
+    )
+
+    response = client.get("/api/v1/league/members", headers=_auth_header(non_member))
+
+    assert response.status_code == 403
+    assert response.json()["error"]["code"] == "FORBIDDEN"
+
+
+def test_non_member_cannot_create_invite(client, db_session: Session) -> None:
+    """Non-members should receive 403 when accessing POST /league/invite."""
+    owner = _make_user(
+        db_session,
+        google_id="g-owner-auth3",
+        email="owner-auth3@example.com",
+        display_name="Owner3",
+    )
+    non_member = _make_user(
+        db_session,
+        google_id="g-non-member3",
+        email="non-member3@example.com",
+        display_name="NonMember3",
+    )
+    db_session.commit()
+    client.post(
+        "/api/v1/league", json={"name": "Private3", "season": 2026}, headers=_auth_header(owner)
+    )
+
+    response = client.post(
+        "/api/v1/league/invite",
+        json={"email": "someone@example.com"},
+        headers=_auth_header(non_member),
+    )
+
+    assert response.status_code == 403
+    assert response.json()["error"]["code"] == "FORBIDDEN"
+
+
+def test_member_can_view_league(client, db_session: Session) -> None:
+    """Members should receive 200 when accessing GET /league."""
+    owner = _make_user(
+        db_session,
+        google_id="g-owner-auth4",
+        email="owner-auth4@example.com",
+        display_name="Owner4",
+    )
+    member = _make_user(
+        db_session,
+        google_id="g-member-auth1",
+        email="member-auth1@example.com",
+        display_name="Member1",
+    )
+    db_session.commit()
+    client.post(
+        "/api/v1/league", json={"name": "MemberAccess", "season": 2026}, headers=_auth_header(owner)
+    )
+    client.post(
+        "/api/v1/league/invite",
+        json={"email": "member-auth1@example.com"},
+        headers=_auth_header(owner),
+    )
+    invite_token = db_session.query(Invite).filter_by(email="member-auth1@example.com").one().token
+    client.post("/api/v1/league/join", json={"token": invite_token}, headers=_auth_header(member))
+
+    response = client.get("/api/v1/league", headers=_auth_header(member))
+
+    assert response.status_code == 200
+    assert response.json()["data"]["name"] == "MemberAccess"
+
+
+def test_owner_can_create_invite(client, db_session: Session) -> None:
+    """Owners should receive 200 when accessing POST /league/invite."""
+    owner = _make_user(
+        db_session,
+        google_id="g-owner-auth5",
+        email="owner-auth5@example.com",
+        display_name="Owner5",
+    )
+    db_session.commit()
+    client.post(
+        "/api/v1/league", json={"name": "OwnerInvite", "season": 2026}, headers=_auth_header(owner)
+    )
+
+    response = client.post(
+        "/api/v1/league/invite",
+        json={"email": "newmember@example.com"},
+        headers=_auth_header(owner),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["email"] == "newmember@example.com"
+
+
+def test_member_cannot_create_invite(client, db_session: Session) -> None:
+    """Non-owner members should receive 403 when accessing POST /league/invite."""
+    owner = _make_user(
+        db_session,
+        google_id="g-owner-auth6",
+        email="owner-auth6@example.com",
+        display_name="Owner6",
+    )
+    member = _make_user(
+        db_session,
+        google_id="g-member-auth2",
+        email="member-auth2@example.com",
+        display_name="Member2",
+    )
+    db_session.commit()
+    client.post(
+        "/api/v1/league",
+        json={"name": "MemberNoInvite", "season": 2026},
+        headers=_auth_header(owner),
+    )
+    invite_token = (
+        db_session.query(Invite).filter(Invite.email == "member-auth2@example.com").first()
+    )
+    if not invite_token:
+        client.post(
+            "/api/v1/league/invite",
+            json={"email": "member-auth2@example.com"},
+            headers=_auth_header(owner),
+        )
+        invite_token = (
+            db_session.query(Invite).filter_by(email="member-auth2@example.com").one().token
+        )
+    else:
+        invite_token = invite_token.token
+
+    client.post("/api/v1/league/join", json={"token": invite_token}, headers=_auth_header(member))
+
+    response = client.post(
+        "/api/v1/league/invite",
+        json={"email": "another@example.com"},
+        headers=_auth_header(member),
+    )
+
+    assert response.status_code == 403
+    assert response.json()["error"]["code"] == "FORBIDDEN"
