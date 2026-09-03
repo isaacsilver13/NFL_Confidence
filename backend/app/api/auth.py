@@ -6,8 +6,15 @@ The refresh token is delivered as an httpOnly, Secure, SameSite=Lax cookie scope
 and send as `Authorization: Bearer <token>`.
 """
 
+import asyncio
+from collections.abc import Awaitable
+from typing import TypeVar
+
+import httpx
+from authlib.integrations.base_client.errors import OAuthError
 from fastapi import APIRouter, Depends, Request, Response
 from sqlalchemy.orm import Session
+from starlette.responses import RedirectResponse
 
 from app.auth.dependencies import get_current_user
 from app.auth.oauth import is_google_oauth_configured, oauth
@@ -27,6 +34,16 @@ settings = get_settings()
 
 REFRESH_COOKIE_NAME = "refresh_token"
 REFRESH_COOKIE_PATH = "/api/v1/auth"
+_GoogleResult = TypeVar("_GoogleResult")
+
+
+async def _run_google_request(operation: Awaitable[_GoogleResult]) -> _GoogleResult:
+    try:
+        return await asyncio.wait_for(operation, timeout=settings.google_oauth_timeout_seconds)
+    except (asyncio.TimeoutError, httpx.HTTPError, OAuthError) as exc:
+        raise UnauthorizedError(
+            "Google sign-in is temporarily unavailable. Please try again."
+        ) from exc
 
 
 def _set_refresh_cookie(response: Response, raw_refresh_token: str) -> None:
@@ -35,7 +52,7 @@ def _set_refresh_cookie(response: Response, raw_refresh_token: str) -> None:
         value=raw_refresh_token,
         httponly=True,
         secure=not settings.is_local,
-        samesite="lax",
+        samesite="lax" if settings.is_local else "none",  # cross-site frontend/backend in prod
         max_age=settings.jwt_refresh_token_expire_days * 24 * 60 * 60,
         path=REFRESH_COOKIE_PATH,
     )
@@ -53,18 +70,16 @@ async def google_login(request: Request) -> Response:
             "Google OAuth is not configured in this environment. Use /auth/dev-login instead."
         )
     redirect_uri = str(request.url_for("google_callback"))
-    return await oauth.google.authorize_redirect(request, redirect_uri)
+    return await _run_google_request(oauth.google.authorize_redirect(request, redirect_uri))
 
 
 @router.get("/google/callback", name="google_callback")
 @limiter.limit("30/hour")
-async def google_callback(
-    request: Request, response: Response, db: Session = Depends(get_db)
-) -> dict:
+async def google_callback(request: Request, db: Session = Depends(get_db)) -> RedirectResponse:
     if not is_google_oauth_configured():
         raise UnauthorizedError("Google OAuth is not configured in this environment.")
 
-    token = await oauth.google.authorize_access_token(request)
+    token = await _run_google_request(oauth.google.authorize_access_token(request))
     userinfo = token.get("userinfo") or {}
 
     user = auth_service.get_or_create_google_user(
@@ -75,15 +90,9 @@ async def google_callback(
         avatar_url=userinfo.get("picture"),
     )
     issued = auth_service.issue_tokens(db, user)
-    _set_refresh_cookie(response, issued.refresh_token)
-
-    return success(
-        TokenResponse(
-            access_token=issued.access_token,
-            expires_in=issued.expires_in,
-            user=UserRead.model_validate(user),
-        ).model_dump(by_alias=True)
-    )
+    redirect = RedirectResponse(url=settings.app_url, status_code=303)
+    _set_refresh_cookie(redirect, issued.refresh_token)
+    return redirect
 
 
 @router.post("/dev-login")

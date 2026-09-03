@@ -6,9 +6,12 @@ Routes stay thin: validate request -> call service -> return response.
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.auth.dependencies import get_current_user
+from app.auth.dependencies import get_active_league_member, get_current_user
+from app.core.exceptions import ForbiddenError
 from app.core.responses import success
 from app.db.session import get_db
+from app.models.league import League
+from app.models.league_member import LeagueMember
 from app.models.user import User
 from app.schemas.league import (
     InviteCreateRequest,
@@ -47,10 +50,10 @@ def create_league(
 
 @router.get("")
 def get_league(
-    current_user: User = Depends(get_current_user),
+    league_member: tuple[League, LeagueMember] = Depends(get_active_league_member),
     db: Session = Depends(get_db),
 ) -> dict:
-    league = league_service.get_active_league(db)
+    league, member = league_member
     return success(
         LeagueRead(
             id=league.id,
@@ -66,10 +69,10 @@ def get_league(
 
 @router.get("/members")
 def get_members(
-    current_user: User = Depends(get_current_user),
+    league_member: tuple[League, LeagueMember] = Depends(get_active_league_member),
     db: Session = Depends(get_db),
 ) -> dict:
-    league = league_service.get_active_league(db)
+    league, member = league_member
     members = league_service.list_members(db, league)
     return success(
         [
@@ -90,11 +93,15 @@ def get_members(
 @router.post("/invite")
 def create_invite(
     body: InviteCreateRequest,
-    current_user: User = Depends(get_current_user),
+    league_member: tuple[League, LeagueMember] = Depends(get_active_league_member),
     db: Session = Depends(get_db),
 ) -> dict:
-    league = league_service.get_active_league(db)
-    invite = league_service.create_invite(db, league=league, inviter=current_user, email=body.email)
+    league, member = league_member
+    # Only the league commissioner (owner) can create invitations
+    if league.owner_id != member.user_id:
+        raise ForbiddenError("Only the league commissioner can create invitations.")
+
+    invite = league_service.create_invite(db, league=league, inviter=member.user, email=body.email)
     return success(
         InviteRead(id=invite.id, email=invite.email, expires_at=invite.expires_at).model_dump(
             by_alias=True
