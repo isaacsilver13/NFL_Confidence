@@ -16,6 +16,7 @@ settings = get_settings()
 # - pool_recycle: Refresh connections after this many seconds (prevents stale connections)
 engine = create_engine(
     settings.database_url,
+    connect_args={"options": "-c search_path=public"},
     pool_size=10,
     max_overflow=5,
     pool_pre_ping=True,
