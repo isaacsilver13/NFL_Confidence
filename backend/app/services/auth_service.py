@@ -2,6 +2,7 @@
 
 import uuid
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.auth.jwt import (
@@ -10,7 +11,7 @@ from app.auth.jwt import (
     hash_refresh_token,
     refresh_token_expiry,
 )
-from app.core.exceptions import UnauthorizedError
+from app.core.exceptions import ConflictError, UnauthorizedError
 from app.models.user import User
 from app.repositories import refresh_token_repository, user_repository
 
@@ -36,13 +37,29 @@ def get_or_create_google_user(
     user = user_repository.get_by_google_id(db, google_id)
     if user is not None:
         return user
-    return user_repository.create(
-        db,
-        google_id=google_id,
-        email=email,
-        display_name=display_name,
-        avatar_url=avatar_url,
-    )
+
+    email_user = user_repository.get_by_email(db, email)
+    if email_user is not None:
+        raise ConflictError("This email is already associated with another Google account.")
+
+    try:
+        return user_repository.create(
+            db,
+            google_id=google_id,
+            email=email,
+            display_name=display_name,
+            avatar_url=avatar_url,
+        )
+    except IntegrityError as exc:
+        db.rollback()
+        user = user_repository.get_by_google_id(db, google_id)
+        if user is not None:
+            return user
+        if user_repository.get_by_email(db, email) is not None:
+            raise ConflictError(
+                "This email is already associated with another Google account."
+            ) from exc
+        raise
 
 
 def get_or_create_dev_user(db: Session) -> User:

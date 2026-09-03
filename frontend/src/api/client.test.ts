@@ -33,6 +33,7 @@ describe('api client authentication', () => {
 
     expect(results).toEqual([true, true])
     expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/v1/auth/refresh')
   })
 
   it('refreshes and retries an authenticated request after a 401', async () => {

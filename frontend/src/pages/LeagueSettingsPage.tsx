@@ -1,7 +1,12 @@
 import { useState } from 'react'
-import { Mail, ShieldCheck, Users } from 'lucide-react'
+import { KeyRound, Mail, ShieldCheck, UserMinus, Users } from 'lucide-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { createInvite, fetchLeague, fetchLeagueMembers } from '@/api/league'
+import {
+  createInvite,
+  fetchLeague,
+  fetchLeagueMembers,
+  removeLeagueMember,
+} from '@/api/league'
 import { Button } from '@/components/ui/Button'
 import { useAuth } from '@/features/auth/AuthContext'
 
@@ -57,6 +62,8 @@ function InviteForm({ onInvited }: { onInvited: () => void }) {
 
 export function LeagueSettingsPage() {
   const { user } = useAuth()
+  const [removingUserId, setRemovingUserId] = useState<string | null>(null)
+  const [removeError, setRemoveError] = useState<string | null>(null)
   const { data: league, isLoading: isLoadingLeague } = useQuery({
     queryKey: ['league'],
     queryFn: fetchLeague,
@@ -87,6 +94,21 @@ export function LeagueSettingsPage() {
   const isCommissioner =
     !!user && !!members?.some((member) => member.userId === user.id && member.role === 'owner')
 
+  async function handleRemoveMember(userId: string, displayName: string) {
+    if (!window.confirm(`Remove ${displayName} from the league?`)) return
+    setRemoveError(null)
+    setRemovingUserId(userId)
+    try {
+      await removeLeagueMember(userId)
+      await queryClient.invalidateQueries({ queryKey: ['league', 'members'] })
+      await queryClient.invalidateQueries({ queryKey: ['session', 'bootstrap'] })
+    } catch {
+      setRemoveError(`Could not remove ${displayName}. Please try again.`)
+    } finally {
+      setRemovingUserId(null)
+    }
+  }
+
   return (
     <div className="animate-fade-in space-y-6">
       <div>
@@ -112,7 +134,18 @@ export function LeagueSettingsPage() {
       </div>
 
       {isCommissioner && (
-        <div className="space-y-3">
+        <div className="space-y-5">
+          <div className="space-y-3">
+            <h2 className="flex items-center gap-2 text-lg font-bold">
+              <KeyRound size={18} aria-hidden="true" /> League passcode
+            </h2>
+            <p className="text-sm text-slate-600 dark:text-slate-300">
+              Share this code with people you want to add to the league.
+            </p>
+            <code className="inline-block rounded-lg bg-slate-100 px-4 py-3 text-lg font-bold tracking-widest text-primary dark:bg-slate-800 dark:text-white">
+              {league.inviteCode}
+            </code>
+          </div>
           <h2 className="flex items-center gap-2 text-lg font-bold">
             <Mail size={18} aria-hidden="true" /> Invite members
           </h2>
@@ -128,13 +161,27 @@ export function LeagueSettingsPage() {
         <h2 className="flex items-center gap-2 text-lg font-bold">
           <Users size={18} aria-hidden="true" /> Members
         </h2>
+        {removeError && <p className="text-sm text-red-600 dark:text-red-400">{removeError}</p>}
         <ul className="divide-y divide-slate-200 overflow-hidden rounded-2xl border border-slate-200 bg-surface shadow-sm dark:divide-slate-800 dark:border-slate-800 dark:bg-slate-900">
           {members?.map((member) => (
             <li key={member.id} className="flex items-center justify-between px-4 py-3">
-              <span>{member.displayName}</span>
-              <span className="text-sm capitalize text-slate-500 dark:text-slate-400">
-                {member.role}
-              </span>
+              <div>
+                <p>{member.displayName}</p>
+                <p className="text-sm capitalize text-slate-500 dark:text-slate-400">
+                  {member.role}
+                </p>
+              </div>
+              {isCommissioner && member.role !== 'owner' && (
+                <Button
+                  variant="danger"
+                  onClick={() => void handleRemoveMember(member.userId, member.displayName)}
+                  disabled={removingUserId === member.userId}
+                  aria-label={`Remove ${member.displayName}`}
+                >
+                  <UserMinus size={16} aria-hidden="true" />
+                  {removingUserId === member.userId ? 'Removing…' : 'Remove'}
+                </Button>
+              )}
             </li>
           ))}
         </ul>

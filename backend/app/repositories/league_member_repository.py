@@ -41,3 +41,8 @@ def create(
     db.add(member)
     db.flush()
     return member
+
+
+def delete(db: Session, member: LeagueMember) -> None:
+    db.delete(member)
+    db.flush()

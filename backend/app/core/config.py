@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     google_client_id: str = ""
     google_client_secret: str = ""
     google_oauth_timeout_seconds: float = 8.0
+    google_oauth_redirect_url: str = ""
 
     jwt_secret: str = _INSECURE_DEFAULT_JWT_SECRET
     jwt_algorithm: str = "HS256"

@@ -83,6 +83,8 @@ NFL_API_KEY
 
 APP_URL
 
+GOOGLE_OAUTH_REDIRECT_URL (production: `https://nfl-confidence-web.fly.dev/api/v1/auth/google/callback`)
+
 ---
 
 # Local Development
@@ -183,6 +185,7 @@ fly secrets set --app nfl-confidence-api `
   JWT_SECRET=$jwt `
   APP_URL=https://nfl-confidence-web.fly.dev `
   CORS_ORIGINS=https://nfl-confidence-web.fly.dev `
+	GOOGLE_OAUTH_REDIRECT_URL=https://nfl-confidence-web.fly.dev/api/v1/auth/google/callback `
   GOOGLE_CLIENT_ID='<google-client-id>' `
   GOOGLE_CLIENT_SECRET='<google-client-secret>' `
   RESEND_API_KEY='<resend-api-key>' `
@@ -198,20 +201,22 @@ fly secrets list --app nfl-confidence-api
 ```
 
 The list command shows names and timestamps, not secret values. The production
-configuration rejects the insecure local JWT default, and production cookies
-are `Secure`, `HttpOnly`, and `SameSite=None` so the browser can send the API
-cookie from the separately hosted frontend.
+configuration rejects the insecure local JWT default. The frontend proxy makes
+browser API requests same-origin, while the rollout cookie remains `Secure`,
+`HttpOnly`, and `SameSite=None` until the private-window callback flow has been
+verified; tighten it to `SameSite=Lax` in a follow-up after that check.
 
 ### Configure Google OAuth
 
 In Google Cloud Console, create or select a Web application OAuth client. Add:
 
 - Authorized JavaScript origin: `https://nfl-confidence-web.fly.dev`
-- Authorized redirect URI: `https://nfl-confidence-api.fly.dev/api/v1/auth/google/callback`
+- Authorized redirect URI: `https://nfl-confidence-web.fly.dev/api/v1/auth/google/callback`
 
-The redirect URI belongs to the API app because the OAuth callback is served by
-FastAPI. On success it sets the refresh cookie on the API origin and redirects
-the browser to `APP_URL`; the SPA then bootstraps the session through the API.
+The callback is proxied by the frontend to FastAPI. On success it sets the
+refresh cookie on the web origin and redirects the browser to `APP_URL`; the SPA
+then bootstraps the session through the same-origin proxy. Keep the old API
+callback URI authorized only during rollout if it is needed for rollback.
 The API bounds Google discovery and token exchange with
 `GOOGLE_OAUTH_TIMEOUT_SECONDS` (8 seconds by default) and returns a structured
 authentication error if the provider or network does not respond in time.
@@ -258,9 +263,11 @@ fly status --app nfl-confidence-web
 Invoke-WebRequest https://nfl-confidence-web.fly.dev/
 ```
 
-The frontend config bakes the API origin into the Vite build. If either Fly app
-name changes, update `frontend/fly.toml`, deploy the frontend again, and set the
-backend `APP_URL` and `CORS_ORIGINS` to the final frontend URL.
+The frontend config builds against `/api/v1`; Nginx proxies that path to the API.
+If either Fly app name changes, update `frontend/fly.toml` and
+`frontend/nginx.frontend.conf`, deploy the frontend again, and set the backend
+`APP_URL`, `CORS_ORIGINS`, and `GOOGLE_OAUTH_REDIRECT_URL` to the final frontend
+URL.
 
 ## Deployment smoke test
 
@@ -268,7 +275,10 @@ Run this against the deployed URLs with a real browser. Use a temporary test
 week or perform the checks before inviting the pool:
 
 1. Open `https://nfl-confidence-web.fly.dev/` and sign in with Google. Confirm
-	the browser returns to the frontend and a refresh preserves the session.
+	the browser returns to the frontend and a refresh preserves the session. In
+	a private/incognito window, confirm the post-redirect request is to
+	`https://nfl-confidence-web.fly.dev/api/v1/auth/refresh`, the refresh cookie is
+	`HttpOnly` and scoped to `/api/v1/auth`, and logout remains effective after reload.
 2. As commissioner, create the private league and send an invite. Accept it
 	with a second Google account and verify both members appear.
 3. Import the first week from the backend container or a local operator shell:
@@ -291,6 +301,33 @@ week or perform the checks before inviting the pool:
 
 Keep the manual import and sync commands available during the first live week;
 they are the recovery path for an ESPN outage or missed scheduler window.
+
+## Google OAuth troubleshooting
+
+If Google account selection returns an API `Internal Server Error`, watch the
+API logs while reproducing the login. Do not paste or replay the callback URL:
+its `code` and `state` query values are sensitive and single-use.
+
+```powershell
+fly logs --app nfl-confidence-api
+fly secrets list --app nfl-confidence-api
+```
+
+The secrets list should contain `DATABASE_URL`, `GOOGLE_CLIENT_ID`,
+`GOOGLE_CLIENT_SECRET`, and `JWT_SECRET`; it does not display their values.
+`JWT_SECRET` must be a non-default production secret because it signs access
+tokens and protects the OAuth session state.
+
+The Google OAuth client must use these exact production URLs:
+
+- JavaScript origin: `https://nfl-confidence-web.fly.dev`
+- Redirect URI: `https://nfl-confidence-web.fly.dev/api/v1/auth/google/callback`
+
+The callback should finish with a `303` redirect to the frontend. A `401`
+indicates a provider, session, or incomplete-claims authentication failure; a
+`409` indicates that the Google email is already linked to a different Google
+account. Any remaining `500` should be investigated in the Fly logs, especially
+for database connectivity or migration errors.
 
 With `ENABLE_SCHEDULER=false`, run the recurring operations from the backend
 directory with the manual job dispatcher:

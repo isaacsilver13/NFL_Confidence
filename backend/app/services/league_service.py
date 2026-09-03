@@ -5,6 +5,7 @@ permissions, and invite lifecycle, then delegates persistence to the repositorie
 """
 
 import secrets
+import uuid
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.exc import IntegrityError
@@ -136,3 +137,43 @@ def join_league(db: Session, *, user: User, token: str) -> LeagueMember:
         raise ConflictError("You are already a member of this league.") from exc
     db.refresh(membership)
     return membership
+
+
+def join_league_with_code(db: Session, *, user: User, code: str) -> LeagueMember:
+    """Add an authenticated user to the active league using its shared passcode."""
+    league = league_repository.get_by_invite_code(db, code.strip())
+    if league is None or not league.is_active:
+        raise ValidationError("That league passcode is invalid.")
+
+    existing_membership = league_member_repository.get_by_league_and_user(
+        db, league.id, user.id
+    )
+    if existing_membership is not None:
+        raise ConflictError("You are already a member of this league.")
+
+    try:
+        membership = league_member_repository.create(
+            db, league_id=league.id, user_id=user.id, role=LeagueRole.MEMBER
+        )
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise ConflictError("You are already a member of this league.") from exc
+    db.refresh(membership)
+    return membership
+
+
+def remove_member(
+    db: Session, *, league: League, commissioner: User, user_id: uuid.UUID
+) -> None:
+    """Remove a member without deleting their user account."""
+    _require_owner(league, commissioner)
+    if user_id == league.owner_id:
+        raise ForbiddenError("The league commissioner cannot be removed.")
+
+    membership = league_member_repository.get_by_league_and_user(db, league.id, user_id)
+    if membership is None:
+        raise NotFoundError("League member not found.")
+
+    league_member_repository.delete(db, membership)
+    db.commit()
