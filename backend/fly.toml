@@ -1,0 +1,39 @@
+app = "nfl-confidence-api"
+primary_region = "iad"
+
+[build]
+dockerfile = "../docker/Dockerfile.backend"
+
+[deploy]
+release_command = "alembic upgrade head"
+
+[http_service]
+internal_port = 8000
+force_https = true
+auto_stop_machines = "off"
+auto_start_machines = true
+min_machines_running = 1
+
+[[http_service.checks]]
+grace_period = "20s"
+interval = "30s"
+method = "GET"
+timeout = "5s"
+path = "/api/v1/health/ready"
+
+[[vm]]
+memory = "512mb"
+cpus = 1
+cpu_kind = "shared"
+
+[env]
+ENVIRONMENT = "production"
+ENABLE_SCHEDULER = "true"
+NFL_API_BASE_URL = "https://site.api.espn.com/apis/site/v2/sports/football/nfl"
+NFL_API_TIMEOUT_SECONDS = "10"
+GOOGLE_OAUTH_TIMEOUT_SECONDS = "8"
+APP_URL = "https://nfl-confidence-web.fly.dev"
+CORS_ORIGINS = "https://nfl-confidence-web.fly.dev"
+JWT_ACCESS_TOKEN_EXPIRE_MINUTES = "15"
+JWT_REFRESH_TOKEN_EXPIRE_DAYS = "30"
+EMAIL_FROM = "NFL Confidence Pool <pickspoolnfl@gmail.com>"

@@ -2,7 +2,7 @@
 
 from functools import lru_cache
 
-from pydantic import model_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _INSECURE_DEFAULT_JWT_SECRET = "dev-only-secret-change-me"
@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     environment: str = "local"
+    enable_scheduler: bool = True
 
     database_url: str = (
         "postgresql+psycopg://nfl_confidence:nfl_confidence@localhost:5432/nfl_confidence"
@@ -19,6 +20,7 @@ class Settings(BaseSettings):
 
     google_client_id: str = ""
     google_client_secret: str = ""
+    google_oauth_timeout_seconds: float = 8.0
 
     jwt_secret: str = _INSECURE_DEFAULT_JWT_SECRET
     jwt_algorithm: str = "HS256"
@@ -34,6 +36,16 @@ class Settings(BaseSettings):
 
     app_url: str = "http://127.0.0.1:5173"
     cors_origins: str = "http://127.0.0.1:5173"
+
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def _normalize_postgres_driver(cls, value: object) -> object:
+        if isinstance(value, str):
+            if value.startswith("postgres://"):
+                return "postgresql+psycopg://" + value.removeprefix("postgres://")
+            if value.startswith("postgresql://"):
+                return "postgresql+psycopg://" + value.removeprefix("postgresql://")
+        return value
 
     @model_validator(mode="after")
     def _reject_insecure_secret_outside_local(self) -> "Settings":
