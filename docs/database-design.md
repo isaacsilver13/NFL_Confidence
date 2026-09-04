@@ -2,8 +2,10 @@
 
 Version: 1.0
 
+Last verified: 2026-09-04
+
 Database:
-PostgreSQL 17
+PostgreSQL 16
 
 ORM:
 SQLAlchemy 2.0
