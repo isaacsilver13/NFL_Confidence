@@ -6,6 +6,7 @@ from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _INSECURE_DEFAULT_JWT_SECRET = "dev-only-secret-change-me"
+_INSECURE_DEFAULT_SESSION_SECRET = "dev-only-session-secret-change-me"
 
 
 class Settings(BaseSettings):
@@ -24,6 +25,7 @@ class Settings(BaseSettings):
     google_oauth_redirect_url: str = ""
 
     jwt_secret: str = _INSECURE_DEFAULT_JWT_SECRET
+    session_secret_key: str = _INSECURE_DEFAULT_SESSION_SECRET
     jwt_algorithm: str = "HS256"
     jwt_access_token_expire_minutes: int = 15
     jwt_refresh_token_expire_days: int = 30
@@ -50,8 +52,11 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _reject_insecure_secret_outside_local(self) -> "Settings":
-        if self.environment != "local" and self.jwt_secret == _INSECURE_DEFAULT_JWT_SECRET:
-            raise ValueError("JWT_SECRET must be set to a real secret outside local")
+        if self.environment != "local":
+            if self.jwt_secret == _INSECURE_DEFAULT_JWT_SECRET:
+                raise ValueError("JWT_SECRET must be set to a real secret outside local")
+            if self.session_secret_key == _INSECURE_DEFAULT_SESSION_SECRET:
+                raise ValueError("SESSION_SECRET_KEY must be set to a real secret outside local")
         return self
 
     @property

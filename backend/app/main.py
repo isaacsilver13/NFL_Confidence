@@ -78,7 +78,7 @@ app.add_middleware(
 )
 # Required by Authlib to store the OAuth `state`/nonce between the /google/login
 # redirect and the /google/callback request.
-app.add_middleware(SessionMiddleware, secret_key=settings.jwt_secret, same_site="lax")
+app.add_middleware(SessionMiddleware, secret_key=settings.session_secret_key, same_site="lax")
 
 
 @app.middleware("http")
