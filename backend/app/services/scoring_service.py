@@ -208,6 +208,8 @@ def score_week(db: Session, *, league: League, week_id: uuid.UUID) -> int:
             user_id=member.user_id,
         )
         season_result.total_points = sum(result.total_points for result in member_results)
+        # Both metrics currently count rank-one weeks; they remain separate for reporting,
+        # and could diverge if weekly-win and placement tie policies change independently.
         season_result.weekly_wins = sum(result.weekly_rank == 1 for result in member_results)
         season_result.highest_confidence_win = max(
             (result.highest_confidence_win for result in member_results),
