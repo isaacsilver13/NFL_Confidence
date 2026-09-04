@@ -100,13 +100,19 @@ Leaderboard ranking
 
 # Coverage
 
-Backend
+Long-term target
 
-90%
+- Backend: 90% line coverage
+- Frontend: 80% line coverage
 
-Frontend
+CI-enforced gate
 
-80%
+- Backend: 77% line coverage
+- Frontend: 77% statements, 68% branches, 75% functions, and 78% lines
+
+The CI gate starts at the measured baseline and will be ratcheted upward over time
+toward the long-term target. The backend baseline excludes the currently date-sensitive
+pick-lock fixture failures until those tests are repaired.
 
 ---
 
