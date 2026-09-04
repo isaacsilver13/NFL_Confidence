@@ -91,7 +91,7 @@ function GamesForm({ week, games, picks }: { week: NflWeek; games: NflGame[]; pi
     event.preventDefault()
     setSubmitError(null)
     if (isLocked) {
-      setSubmitError('Picks are locked after the first game kickoff.')
+      setSubmitError('Picks are locked after the earliest game kickoff.')
       return
     }
     const submissions: PickInput[] = games.map((game) => ({
@@ -131,7 +131,7 @@ function GamesForm({ week, games, picks }: { week: NflWeek; games: NflGame[]; pi
 
       {isLocked && (
         <p className="rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm font-semibold text-danger">
-          The first game has started. This week&apos;s picks are read-only.
+          The earliest game has started. This week&apos;s picks are read-only.
         </p>
       )}
 

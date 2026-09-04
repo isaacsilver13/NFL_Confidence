@@ -75,7 +75,8 @@ def create_picks(
 ) -> list[Pick]:
     """Create or update confidence picks for the current week.
 
-    Per-game validation: each game in the submission must have kickoff_time > now.
+    All picks for a week lock together at the earliest kickoff among that week's
+    games; there is no independent per-game lock.
     Confidence values must be unique across all picks (locked + submitted editable).
     Allows partial card submission (subset of week's games).
 
