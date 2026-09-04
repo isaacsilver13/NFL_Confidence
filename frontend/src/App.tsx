@@ -1,6 +1,7 @@
 import { Suspense, lazy } from 'react'
+import { LoaderCircle } from 'lucide-react'
 import { Route, Routes } from 'react-router-dom'
-import { ProtectedRoute } from './features/auth/ProtectedRoute'
+import { LeagueMemberRoute, ProtectedRoute } from './features/auth/ProtectedRoute'
 import { AppLayout } from './layouts/AppLayout'
 import { LoginPage } from './pages/LoginPage'
 
@@ -26,7 +27,14 @@ const StandingsPage = lazy(() =>
 )
 
 function PageLoader() {
-  return null // Show nothing while loading; page will render when ready
+  return (
+    <div className="flex min-h-screen items-center justify-center" role="status">
+      <div className="flex items-center gap-2 text-sm font-semibold text-ink-muted dark:text-slate-400">
+        <LoaderCircle className="h-5 w-5 animate-spin" aria-hidden="true" />
+        Loading...
+      </div>
+    </div>
+  )
 }
 
 function App() {
@@ -51,35 +59,45 @@ function App() {
               </Suspense>
             }
           />
+          <Route element={<LeagueMemberRoute />}>
+            <Route
+              path="/picks"
+              element={
+                <Suspense fallback={<PageLoader />}>
+                  <PicksPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/leaderboard"
+              element={
+                <Suspense fallback={<PageLoader />}>
+                  <LeaderboardPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/standings"
+              element={
+                <Suspense fallback={<PageLoader />}>
+                  <StandingsPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/profile"
+              element={
+                <Suspense fallback={<PageLoader />}>
+                  <ProfilePage />
+                </Suspense>
+              }
+            />
+          </Route>
           <Route
-            path="/picks"
+            path="/members"
             element={
               <Suspense fallback={<PageLoader />}>
-                <PicksPage />
-              </Suspense>
-            }
-          />
-          <Route
-            path="/leaderboard"
-            element={
-              <Suspense fallback={<PageLoader />}>
-                <LeaderboardPage />
-              </Suspense>
-            }
-          />
-          <Route
-            path="/standings"
-            element={
-              <Suspense fallback={<PageLoader />}>
-                <StandingsPage />
-              </Suspense>
-            }
-          />
-          <Route
-            path="/profile"
-            element={
-              <Suspense fallback={<PageLoader />}>
-                <ProfilePage />
+                <LeagueSettingsPage />
               </Suspense>
             }
           />
