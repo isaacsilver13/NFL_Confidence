@@ -121,17 +121,11 @@ Wednesday
 
 Members begin making picks.
 
-Thursday kickoff
+Earliest kickoff of the week
 
-Thursday games lock individually.
-
-Sunday kickoff
-
-Sunday games lock individually.
-
-Monday Night Football
-
-Last games lock.
+All picks for the week lock together at the earliest game kickoff. There is no
+independent per-game lock. This is a deliberate product decision that gives
+members a simpler mental model and avoids ambiguity about a partially locked card.
 
 After each game finishes
 
