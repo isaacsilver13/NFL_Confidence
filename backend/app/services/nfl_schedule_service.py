@@ -20,21 +20,23 @@ def import_games(db: Session, games: list[EspnGame]) -> int:
 
     imported = 0
     for (season, week_number), week_games in grouped.items():
-        start_date = min(game.kickoff_time for game in week_games)
+        first_kickoff = min(game.kickoff_time for game in week_games)
         end_date = max(game.kickoff_time for game in week_games)
         week = nfl_week_repository.get_by_season_and_week(
             db, season=season, week_number=week_number
         )
         if week is None:
+            release_date = min(datetime.now(timezone.utc), first_kickoff)
             week = nfl_week_repository.create(
                 db,
                 season=season,
                 week_number=week_number,
-                start_date=start_date,
+                start_date=release_date,
                 end_date=end_date,
             )
+            week.status = WeekStatus.REGULAR
         else:
-            week.start_date = min(week.start_date, start_date)
+            week.start_date = min(week.start_date, first_kickoff)
             week.end_date = max(week.end_date, end_date)
             if week.status == WeekStatus.PRESEASON:
                 week.status = WeekStatus.REGULAR

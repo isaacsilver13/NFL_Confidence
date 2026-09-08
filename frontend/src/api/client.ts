@@ -9,6 +9,7 @@
  */
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1'
+const AUTH_REFRESH_TIMEOUT_MS = 8_000
 
 interface ApiSuccessBody<T> {
   data: T
@@ -53,6 +54,10 @@ interface ApiFetchOptions extends RequestInit {
 }
 
 async function parseResponse<T>(response: Response): Promise<T> {
+  if (response.status === 204) {
+    return undefined as T
+  }
+
   const body = await response.json().catch(() => null)
 
   if (!response.ok) {
@@ -72,10 +77,14 @@ let refreshInFlight: Promise<boolean> | null = null
 
 export async function refreshAccessToken(): Promise<boolean> {
   refreshInFlight ??= (async () => {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), AUTH_REFRESH_TIMEOUT_MS)
+
     try {
       const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
         method: 'POST',
         credentials: 'include',
+        signal: controller.signal,
       })
       if (!response.ok) {
         setAccessToken(null)
@@ -88,6 +97,7 @@ export async function refreshAccessToken(): Promise<boolean> {
       setAccessToken(null)
       return false
     } finally {
+      clearTimeout(timeoutId)
       refreshInFlight = null
     }
   })()

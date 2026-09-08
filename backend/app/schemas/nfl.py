@@ -3,6 +3,8 @@
 import uuid
 from datetime import datetime
 
+from pydantic import Field
+
 from app.schemas.base import CamelModel
 
 
@@ -39,6 +41,8 @@ class PickRead(CamelModel):
     team: str
     confidence: int
     submitted_at: datetime
+    voided_at: datetime | None = None
+    is_voided: bool = False
 
 
 class HistoricalPickRead(CamelModel):
@@ -55,6 +59,7 @@ class HistoricalPickRead(CamelModel):
     is_tie: bool
     points_earned: int | None = None
     outcome: str
+    is_voided: bool = False
 
 
 class HistoricalWeekRead(CamelModel):
@@ -76,3 +81,4 @@ class PickCreate(CamelModel):
 class PicksCreateRequest(CamelModel):
     week: int
     picks: list[PickCreate]
+    voided_game_ids: list[uuid.UUID] = Field(default_factory=list)

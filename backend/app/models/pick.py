@@ -32,8 +32,12 @@ class Pick(Base):
     )
     locked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     points_earned: Mapped[int | None] = mapped_column(Integer)
+    voided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    voided_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True
+    )
 
-    user: Mapped["User"] = relationship(back_populates="picks")
+    user: Mapped["User"] = relationship(back_populates="picks", foreign_keys=[user_id])
     game: Mapped["NflGame"] = relationship(back_populates="picks")
 
     def __repr__(self) -> str:

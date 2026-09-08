@@ -64,13 +64,14 @@ def list_members(db: Session, league: League) -> list[LeagueMember]:
     return league_member_repository.list_by_league(db, league.id)
 
 
-def _require_owner(league: League, user: User) -> None:
-    if league.owner_id != user.id:
+def _require_owner(db: Session, league: League, user: User) -> None:
+    membership = league_member_repository.get_by_league_and_user(db, league.id, user.id)
+    if membership is None or membership.role != LeagueRole.OWNER:
         raise ForbiddenError("Only the league commissioner can perform this action.")
 
 
 def create_invite(db: Session, *, league: League, inviter: User, email: str) -> Invite:
-    _require_owner(league, inviter)
+    _require_owner(db, league, inviter)
 
     # Normalize email for consistency in database and matching.
     email_normalized = email.lower().strip()
@@ -145,9 +146,7 @@ def join_league_with_code(db: Session, *, user: User, code: str) -> LeagueMember
     if league is None or not league.is_active:
         raise ValidationError("That league passcode is invalid.")
 
-    existing_membership = league_member_repository.get_by_league_and_user(
-        db, league.id, user.id
-    )
+    existing_membership = league_member_repository.get_by_league_and_user(db, league.id, user.id)
     if existing_membership is not None:
         raise ConflictError("You are already a member of this league.")
 
@@ -163,11 +162,9 @@ def join_league_with_code(db: Session, *, user: User, code: str) -> LeagueMember
     return membership
 
 
-def remove_member(
-    db: Session, *, league: League, commissioner: User, user_id: uuid.UUID
-) -> None:
+def remove_member(db: Session, *, league: League, commissioner: User, user_id: uuid.UUID) -> None:
     """Remove a member without deleting their user account."""
-    _require_owner(league, commissioner)
+    _require_owner(db, league, commissioner)
     if user_id == league.owner_id:
         raise ForbiddenError("The league commissioner cannot be removed.")
 
@@ -177,3 +174,37 @@ def remove_member(
 
     league_member_repository.delete(db, membership)
     db.commit()
+
+
+def update_member(
+    db: Session,
+    *,
+    league: League,
+    commissioner: User,
+    user_id: uuid.UUID,
+    display_name: str | None,
+    role: LeagueRole | None,
+) -> LeagueMember:
+    """Update a member's editable profile and league role."""
+    _require_owner(db, league, commissioner)
+    if display_name is None and role is None:
+        raise ValidationError("Provide a display name or role to update.")
+
+    membership = league_member_repository.get_by_league_and_user(db, league.id, user_id)
+    if membership is None:
+        raise NotFoundError("League member not found.")
+
+    if display_name is not None:
+        normalized_name = display_name.strip()
+        if not normalized_name:
+            raise ValidationError("Display name cannot be blank.")
+        membership.user.display_name = normalized_name
+
+    if role is not None:
+        if user_id == league.owner_id and role != LeagueRole.OWNER:
+            raise ForbiddenError("The primary league commissioner cannot be demoted.")
+        membership.role = role
+
+    db.commit()
+    db.refresh(membership)
+    return membership

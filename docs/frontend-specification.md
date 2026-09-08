@@ -116,19 +116,19 @@ Weekly Finishes
 
 ---
 
-## League Settings
+## Members
 
-Commissioner Only
+Commissioner-only tab.
 
-Invite Members
+- View league members and their read-only Google email addresses
+- Edit display names
+- Edit member or commissioner role
+- Remove members
+- View the shared league passcode
+- Invite members by email
 
-Reminder Settings
-
-League Name
-
-Entry Fee
-
-Prize Breakdown
+The tab is shown to every member with the commissioner (`owner`) role. The
+backend also enforces this permission for direct navigation or API requests.
 
 ---
 

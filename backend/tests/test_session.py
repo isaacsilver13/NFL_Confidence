@@ -57,6 +57,7 @@ def test_bootstrap_returns_user_and_league(client, db_session: Session) -> None:
     assert data["user"]["email"] == user.email
     assert data["league"]["name"] == league.name
     assert data["currentWeek"]["weekNumber"] == 1
+    assert data["membership"] == {"status": "member", "role": "owner"}
 
 
 def test_bootstrap_with_no_active_league(client, db_session: Session) -> None:
@@ -71,6 +72,7 @@ def test_bootstrap_with_no_active_league(client, db_session: Session) -> None:
     assert data["user"]["email"] == user.email
     assert data["league"] is None
     assert data["currentWeek"] is None
+    assert data["membership"] == {"status": "no_league", "role": None}
 
 
 def test_bootstrap_hides_league_from_non_member(client, db_session: Session) -> None:
@@ -89,6 +91,7 @@ def test_bootstrap_hides_league_from_non_member(client, db_session: Session) -> 
     assert data["user"]["email"] == non_member.email
     assert data["league"] is None
     assert data["currentWeek"] is None
+    assert data["membership"] == {"status": "not_member", "role": None}
 
 
 def test_picks_card_requires_authentication(client) -> None:

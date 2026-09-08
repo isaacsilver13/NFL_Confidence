@@ -25,6 +25,8 @@ def _pick_read(pick: Pick) -> dict:
         team=pick.picked_team,
         confidence=pick.confidence_value,
         submitted_at=pick.submitted_at,
+        voided_at=pick.voided_at,
+        is_voided=pick.voided_at is not None,
     ).model_dump(by_alias=True)
 
 
@@ -72,6 +74,7 @@ def save_picks(
         user=current_user,
         week_number=body.week,
         submissions=submissions,
+        voided_game_ids=body.voided_game_ids,
     )
     return success([_pick_read(pick) for pick in saved_picks])
 

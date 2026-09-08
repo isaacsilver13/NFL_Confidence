@@ -12,7 +12,7 @@ from app.db.session import get_db
 from app.models.user import User
 from app.repositories import league_member_repository
 from app.schemas.auth import UserRead
-from app.schemas.league import LeagueRead
+from app.schemas.league import LeagueRead, SessionMembershipRead
 from app.schemas.nfl import WeekRead
 from app.services import league_service, weeks_service
 
@@ -47,12 +47,15 @@ def bootstrap_session(
     # Get active league if it exists
     league_data = None
     current_week_data = None
+    membership_data = SessionMembershipRead(status="no_league").model_dump(by_alias=True)
 
     try:
         league = league_service.get_active_league(db)
-        if league and league_member_repository.get_by_league_and_user(
-            db, league.id, current_user.id
-        ):
+        member = league_member_repository.get_by_league_and_user(db, league.id, current_user.id)
+        if member:
+            membership_data = SessionMembershipRead(status="member", role=member.role).model_dump(
+                by_alias=True
+            )
             member_count = league_service.get_member_count(db, league)
             league_data = LeagueRead(
                 id=league.id,
@@ -75,6 +78,8 @@ def bootstrap_session(
                     end_date=current_week.end_date,
                     status=current_week.status,
                 ).model_dump(by_alias=True)
+        else:
+            membership_data = SessionMembershipRead(status="not_member").model_dump(by_alias=True)
     except NotFoundError:
         # A first-time user has no league yet; return the documented null fields.
         pass
@@ -88,5 +93,6 @@ def bootstrap_session(
             "user": user_data,
             "league": league_data,
             "currentWeek": current_week_data,
+            "membership": membership_data,
         }
     )
