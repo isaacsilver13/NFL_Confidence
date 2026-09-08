@@ -124,6 +124,65 @@ def test_picks_reject_duplicate_confidence_values(client, db_session: Session) -
     assert response.json()["error"]["code"] == "VALIDATION_ERROR"
 
 
+def test_picks_void_invalid_games_while_saving_valid_games(client, db_session: Session) -> None:
+    user = _make_user(db_session)
+    week, games = _ensure_current_fixture(db_session, user)
+    headers = _auth_header(user)
+
+    initial_response = client.post(
+        "/api/v1/picks",
+        json={
+            "week": week.week_number,
+            "picks": [
+                {"gameId": str(games[0].id), "team": games[0].home_team, "confidence": 1},
+                {"gameId": str(games[1].id), "team": games[1].home_team, "confidence": 2},
+            ],
+        },
+        headers=headers,
+    )
+    assert initial_response.status_code == 200
+
+    response = client.post(
+        "/api/v1/picks",
+        json={
+            "week": week.week_number,
+            "picks": [
+                {"gameId": str(games[0].id), "team": games[0].home_team, "confidence": 1},
+            ],
+            "voidedGameIds": [str(games[1].id)],
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    saved_pick = db_session.query(Pick).filter_by(user_id=user.id, game_id=games[0].id).one()
+    voided_pick = db_session.query(Pick).filter_by(user_id=user.id, game_id=games[1].id).one()
+    assert saved_pick.voided_at is None
+    assert saved_pick.points_earned is None
+    assert voided_pick.voided_at is not None
+    assert voided_pick.voided_by_user_id == user.id
+
+    response = client.post(
+        "/api/v1/picks",
+        json={
+            "week": week.week_number,
+            "picks": [
+                {"gameId": str(games[0].id), "team": games[0].away_team, "confidence": 2},
+            ],
+            "voidedGameIds": [str(games[1].id)],
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"][0]["isVoided"] is False
+    assert response.json()["data"][0]["voidedAt"] is None
+    assert (
+        db_session.query(Pick).filter_by(user_id=user.id, game_id=games[0].id).one().picked_team
+        == games[0].away_team
+    )
+
+
 def test_picks_lock_for_entire_week_at_first_kickoff(client, db_session: Session) -> None:
     user = _make_user(db_session)
     _, games = _ensure_current_fixture(db_session, user)

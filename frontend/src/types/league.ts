@@ -28,3 +28,29 @@ export interface CreateLeagueInput {
   name: string
   season: number
 }
+
+export interface LeagueMemberUpdateInput {
+  displayName?: string
+  role?: LeagueMember['role']
+}
+
+export interface MemberPaymentStatus {
+  userId: string
+  displayName: string
+  email: string
+  role: LeagueMember['role']
+  isPaid: boolean
+  markedAt: string | null
+  voidedPickCount: number
+}
+
+export interface MemberPaymentStatuses {
+  week: number
+  members: MemberPaymentStatus[]
+}
+
+export interface VoidUnpaidPicksResult {
+  week: number
+  voidedPickCount: number
+  affectedMemberCount: number
+}

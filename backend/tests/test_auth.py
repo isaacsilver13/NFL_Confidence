@@ -168,7 +168,9 @@ def _mock_google_login(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(auth.settings, "google_client_secret", "test-client-secret")
     monkeypatch.setattr("app.auth.oauth.settings.google_client_id", "test-client-id")
     monkeypatch.setattr("app.auth.oauth.settings.google_client_secret", "test-client-secret")
-    authorize_redirect = AsyncMock(return_value=auth.RedirectResponse("https://accounts.google.com"))
+    authorize_redirect = AsyncMock(
+        return_value=auth.RedirectResponse("https://accounts.google.com")
+    )
     monkeypatch.setattr(
         auth.oauth,
         "google",

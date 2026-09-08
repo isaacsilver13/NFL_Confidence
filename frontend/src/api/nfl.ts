@@ -6,6 +6,10 @@ export function fetchCurrentWeek(): Promise<NflWeek> {
   return apiFetch<NflWeek>('/weeks/current')
 }
 
+export function fetchWeeks(): Promise<NflWeek[]> {
+  return apiFetch<NflWeek[]>('/weeks')
+}
+
 export function fetchCurrentGames(): Promise<NflGame[]> {
   return apiFetch<NflGame[]>('/games/current')
 }

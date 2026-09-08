@@ -2,7 +2,7 @@
 
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.models.enums import WeekStatus
@@ -31,6 +31,34 @@ def list_by_user_and_week(db: Session, *, user_id: uuid.UUID, week_id: uuid.UUID
             .where(Pick.user_id == user_id, NflGame.week_id == week_id)
             .order_by(Pick.confidence_value.desc())
         ).scalars()
+    )
+
+
+def list_by_week_and_users(
+    db: Session, *, week_id: uuid.UUID, user_ids: set[uuid.UUID]
+) -> list[Pick]:
+    if not user_ids:
+        return []
+    return list(
+        db.execute(
+            select(Pick)
+            .join(NflGame, Pick.game_id == NflGame.id)
+            .where(NflGame.week_id == week_id, Pick.user_id.in_(user_ids))
+        ).scalars()
+    )
+
+
+def count_voided_by_user_and_week(db: Session, *, user_id: uuid.UUID, week_id: uuid.UUID) -> int:
+    return int(
+        db.execute(
+            select(func.count(Pick.id))
+            .join(NflGame, Pick.game_id == NflGame.id)
+            .where(
+                Pick.user_id == user_id,
+                NflGame.week_id == week_id,
+                Pick.voided_at.is_not(None),
+            )
+        ).scalar_one()
     )
 
 

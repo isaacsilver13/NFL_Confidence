@@ -144,14 +144,20 @@ def score_week(db: Session, *, league: League, week_id: uuid.UUID) -> int:
 
     picks_by_user: dict[uuid.UUID, list[Pick]] = {}
     for pick in picks:
-        if pick.game.game_status == GameStatus.FINAL:
+        if pick.voided_at is not None:
+            pick.points_earned = None
+        elif pick.game.game_status == GameStatus.FINAL:
             pick.points_earned = _pick_points(pick)
         picks_by_user.setdefault(pick.user_id, []).append(pick)
 
     weekly_results: list[WeeklyResult] = []
     for member in members:
         member_picks = picks_by_user.get(member.user_id, [])
-        scored_picks = [pick for pick in member_picks if pick.points_earned is not None]
+        scored_picks = [
+            pick
+            for pick in member_picks
+            if pick.points_earned is not None and pick.voided_at is None
+        ]
         result = _get_or_create_weekly_result(
             db,
             league_id=league.id,

@@ -1,23 +1,28 @@
 """Tests for normalized ESPN NFL schedule imports."""
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.integrations.espn import EspnGame, fetch_schedule
+from app.models.enums import WeekStatus
 from app.models.nfl_game import NflGame
 from app.models.nfl_week import NflWeek
 from app.services.nfl_schedule_service import import_games
 
 
-def _espn_game(*, venue_name: str | None = "Arrowhead Stadium") -> EspnGame:
+def _espn_game(
+    *,
+    venue_name: str | None = "Arrowhead Stadium",
+    kickoff_time: datetime | None = None,
+) -> EspnGame:
     return EspnGame(
         espn_game_id="espn-import-test-1",
         season=2026,
         week_number=1,
-        kickoff_time=datetime(2026, 9, 10, 0, 0, tzinfo=timezone.utc),
+        kickoff_time=kickoff_time or datetime(2026, 9, 10, 0, 0, tzinfo=timezone.utc),
         away_team="BUF",
         home_team="KC",
         game_status="scheduled",
@@ -48,6 +53,19 @@ def test_import_games_upserts_metadata_and_allows_missing_feed_values(
     assert game.venue_location is None
     assert game.spread_team is None
     assert game.spread is None
+
+
+def test_import_games_releases_new_week_and_marks_it_regular(db_session: Session) -> None:
+    kickoff_time = datetime.now(timezone.utc) + timedelta(days=1)
+
+    assert import_games(db_session, [_espn_game(kickoff_time=kickoff_time)]) == 1
+
+    week = db_session.scalar(select(NflWeek).where(NflWeek.season == 2026))
+
+    assert week is not None
+    assert week.status == WeekStatus.REGULAR
+    assert week.start_date < kickoff_time
+    assert week.end_date == kickoff_time
 
 
 def test_fetch_schedule_normalizes_espn_venue_and_favorite_spread() -> None:

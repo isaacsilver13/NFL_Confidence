@@ -31,9 +31,11 @@ export interface NflPick {
   team: string
   confidence: number
   submittedAt: string
+  voidedAt?: string | null
+  isVoided?: boolean
 }
 
-export type PickOutcome = 'correct' | 'incorrect' | 'unscored'
+export type PickOutcome = 'correct' | 'incorrect' | 'unscored' | 'voided'
 
 export interface HistoricalPick {
   id: string
@@ -49,6 +51,7 @@ export interface HistoricalPick {
   isTie: boolean
   pointsEarned: number | null
   outcome: PickOutcome
+  isVoided?: boolean
 }
 
 export interface HistoricalWeek {
@@ -70,4 +73,5 @@ export interface PickInput {
 export interface SavePicksInput {
   week: number
   picks: PickInput[]
+  voidedGameIds: string[]
 }

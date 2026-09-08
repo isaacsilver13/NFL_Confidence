@@ -61,6 +61,19 @@ app.add_middleware(
 app.add_middleware(SessionMiddleware, secret_key=settings.jwt_secret, same_site="lax")
 
 
+@app.middleware("http")
+async def add_api_cache_headers(request: Request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith("/api/"):
+        response.headers["Cache-Control"] = "private, no-store"
+        vary_values = {
+            value.strip() for value in response.headers.get("Vary", "").split(",") if value.strip()
+        }
+        vary_values.update({"Authorization", "Cookie"})
+        response.headers["Vary"] = ", ".join(sorted(vary_values, key=str.lower))
+    return response
+
+
 @app.exception_handler(AppError)
 async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
     return JSONResponse(

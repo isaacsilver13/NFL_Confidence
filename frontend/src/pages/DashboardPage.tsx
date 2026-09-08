@@ -80,8 +80,14 @@ function JoinLeagueForm() {
     try {
       await joinLeagueWithCode(code.trim())
       await queryClient.invalidateQueries({ queryKey: ['session', 'bootstrap'] })
-    } catch {
-      setError('That league passcode is invalid. Please check it and try again.')
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 409) {
+        setError('You are already a member of this league.')
+      } else if (error instanceof ApiError && error.status === 422) {
+        setError('That league passcode is invalid. Please check it and try again.')
+      } else {
+        setError('Could not join the league. Please try again.')
+      }
     } finally {
       setIsSubmitting(false)
     }
@@ -121,6 +127,7 @@ export function DashboardPage() {
     queryKey: ['session', 'bootstrap'],
     queryFn: fetchSessionBootstrap,
     retry: false,
+    staleTime: 5 * 60_000,
   })
 
   const league = bootstrapData?.league ?? null
@@ -133,6 +140,7 @@ export function DashboardPage() {
     queryFn: () => fetchWeeklyLeaderboard(currentWeek?.weekNumber),
     enabled: Boolean(league && currentWeek),
     retry: false,
+    staleTime: 2 * 60_000,
   })
 
   // Fetch season standings if we have a league
@@ -141,6 +149,7 @@ export function DashboardPage() {
     queryFn: () => fetchSeasonStandings(),
     enabled: Boolean(league),
     retry: false,
+    staleTime: 10 * 60_000,
   })
 
   // Find user's rank in weekly leaderboard
@@ -165,7 +174,10 @@ export function DashboardPage() {
     return null
   }
 
-  if (error instanceof ApiError && error.status === 404) {
+  if (
+    (error instanceof ApiError && error.status === 404) ||
+    bootstrapData?.membership.status === 'no_league'
+  ) {
     return (
       <div className="animate-fade-in space-y-6">
         <div>
@@ -196,7 +208,8 @@ export function DashboardPage() {
           </h1>
         </div>
         <p className="text-slate-600 dark:text-slate-300">
-          Ask the commissioner for the league passcode to join.
+          You are signed in, but you are not a member yet. Ask the commissioner for the league
+          passcode to join.
         </p>
         <div className="max-w-md rounded-2xl border border-slate-200 bg-surface p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <JoinLeagueForm />
