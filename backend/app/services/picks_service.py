@@ -34,7 +34,9 @@ def get_user_pick_history(db: Session, *, user: User, league: League) -> PickHis
     picks_by_week: dict[int, list[HistoricalPickRead]] = {}
     for pick in picks:
         game = pick.game
-        if pick.points_earned is None:
+        if pick.voided_at is not None:
+            outcome = "voided"
+        elif pick.points_earned is None:
             outcome = "unscored"
         elif pick.points_earned > 0:
             outcome = "correct"
@@ -55,6 +57,7 @@ def get_user_pick_history(db: Session, *, user: User, league: League) -> PickHis
                 is_tie=game.is_tie,
                 points_earned=pick.points_earned,
                 outcome=outcome,
+                is_voided=pick.voided_at is not None,
             )
         )
     return PickHistoryRead(
@@ -72,11 +75,13 @@ def create_picks(
     user: User,
     week_number: int,
     submissions: list[PickSubmission],
+    voided_game_ids: list[uuid.UUID] | None = None,
 ) -> list[Pick]:
     """Create or update confidence picks for the current week.
 
-    Per-game validation: each game in the submission must have kickoff_time > now.
-    Confidence values must be unique across all picks (locked + submitted editable).
+    All picks for a week lock together at the earliest kickoff among that week's
+    games; there is no independent per-game lock.
+    Confidence values must be unique across all active picks (locked + submitted editable).
     Allows partial card submission (subset of week's games).
 
     Args:
@@ -84,6 +89,7 @@ def create_picks(
         user: Current user
         week_number: NFL week number (must match current week)
         submissions: List of game picks to create/update
+        voided_game_ids: Game IDs whose existing picks should be excluded from scoring
 
     Returns:
         List of saved Pick records
@@ -104,9 +110,18 @@ def create_picks(
     # Validate submission format
     submitted_game_ids = [submission.game_id for submission in submissions]
     submitted_confidences = [submission.confidence for submission in submissions]
+    voided_game_ids = list(voided_game_ids or [])
+    submitted_game_id_set = set(submitted_game_ids)
+    voided_game_id_set = set(voided_game_ids)
 
     if len(submitted_game_ids) != len(set(submitted_game_ids)):
         raise ValidationError("Each game may only be picked once per submission.")
+
+    if len(voided_game_ids) != len(voided_game_id_set):
+        raise ValidationError("Each game may only be voided once per submission.")
+
+    if submitted_game_id_set & voided_game_id_set:
+        raise ValidationError("A game cannot be submitted and voided in the same request.")
 
     if not all(1 <= c <= len(games) for c in submitted_confidences):
         raise ValidationError(f"Confidence values must be between 1 and {len(games)}.")
@@ -124,13 +139,23 @@ def create_picks(
         if game is None:
             raise ValidationError(f"Game {submission.game_id} is not in the current week.")
 
+    for game_id in voided_game_ids:
+        if game_id not in game_by_id:
+            raise ValidationError(f"Game {game_id} is not in the current week.")
+
     # Get all existing picks for this user/week
     existing_picks = pick_repository.list_by_user_and_week(db, user_id=user.id, week_id=week.id)
     existing_pick_by_game = {pick.game_id: pick for pick in existing_picks}
 
-    # Validate uniqueness on the final card so updating an existing pick does not
-    # treat its previous value as a second pick.
-    final_confidences_by_game = {pick.game_id: pick.confidence_value for pick in existing_picks}
+    # Validate uniqueness on the final active card. Voided and replaced picks do not
+    # reserve their previous confidence value.
+    final_confidences_by_game = {
+        pick.game_id: pick.confidence_value
+        for pick in existing_picks
+        if pick.voided_at is None
+        and pick.game_id not in submitted_game_id_set
+        and pick.game_id not in voided_game_id_set
+    }
     final_confidences_by_game.update(
         {submission.game_id: submission.confidence for submission in submissions}
     )
@@ -150,7 +175,15 @@ def create_picks(
         if submission.team not in {game.home_team, game.away_team}:
             raise ValidationError(f"{submission.team} is not a team in game {game.id}.")
 
-    # Create or update picks
+    # Void invalid picks first, then create or repair the valid submissions.
+    voided_at = datetime.now(timezone.utc)
+    for game_id in voided_game_ids:
+        pick = existing_pick_by_game.get(game_id)
+        if pick is not None:
+            pick.voided_at = voided_at
+            pick.voided_by_user_id = user.id
+            pick.points_earned = None
+
     saved_picks: list[Pick] = []
     for submission in submissions:
         pick = existing_pick_by_game.get(submission.game_id)
@@ -165,6 +198,9 @@ def create_picks(
         else:
             pick.picked_team = submission.team
             pick.confidence_value = submission.confidence
+            pick.voided_at = None
+            pick.voided_by_user_id = None
+            pick.points_earned = None
         saved_picks.append(pick)
 
     db.commit()

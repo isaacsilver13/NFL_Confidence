@@ -29,7 +29,11 @@ class User(TimestampMixin, Base):
 
     owned_leagues: Mapped[list["League"]] = relationship(back_populates="owner")
     league_memberships: Mapped[list["LeagueMember"]] = relationship(back_populates="user")
-    picks: Mapped[list["Pick"]] = relationship(back_populates="user", cascade="all, delete-orphan")
+    picks: Mapped[list["Pick"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+        foreign_keys="Pick.user_id",
+    )
     reminder_preference: Mapped["ReminderPreference | None"] = relationship(
         back_populates="user", cascade="all, delete-orphan", uselist=False
     )

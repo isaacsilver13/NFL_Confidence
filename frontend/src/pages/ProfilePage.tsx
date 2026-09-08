@@ -9,12 +9,18 @@ const OUTCOME_LABELS: Record<PickOutcome, string> = {
   correct: 'Correct',
   incorrect: 'Incorrect',
   unscored: 'Not scored',
+  voided: 'Voided',
 }
 
 type SortKey = 'game' | 'team' | 'confidence' | 'outcome' | 'points'
 type SortDirection = 'ascending' | 'descending'
 
-const OUTCOME_ORDER: Record<PickOutcome, number> = { unscored: 0, incorrect: 1, correct: 2 }
+const OUTCOME_ORDER: Record<PickOutcome, number> = {
+  voided: 0,
+  unscored: 1,
+  incorrect: 2,
+  correct: 3,
+}
 
 function formatKickoff(kickoff: string): string {
   return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(
@@ -28,7 +34,9 @@ function Outcome({ pick }: { pick: HistoricalPick }) {
       ? 'text-success'
       : pick.outcome === 'incorrect'
         ? 'text-danger'
-        : 'text-ink-muted dark:text-slate-400'
+        : pick.outcome === 'voided'
+          ? 'text-gold'
+          : 'text-ink-muted dark:text-slate-400'
   return <span className={`font-bold ${color}`}>{OUTCOME_LABELS[pick.outcome]}</span>
 }
 
@@ -172,7 +180,11 @@ function SortableHeader({
 }
 
 export function ProfilePage() {
-  const historyQuery = useQuery({ queryKey: ['picks', 'history'], queryFn: fetchPickHistory })
+  const historyQuery = useQuery({
+    queryKey: ['picks', 'history'],
+    queryFn: fetchPickHistory,
+    staleTime: 10 * 60_000,
+  })
   const [requestedWeek, setRequestedWeek] = useState<number | null>(null)
   const availableWeeks = historyQuery.data
     ? [...historyQuery.data.weeks].sort((left, right) => left.weekNumber - right.weekNumber)

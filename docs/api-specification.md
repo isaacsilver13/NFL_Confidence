@@ -83,6 +83,19 @@ Errors
 The SPA exchanges the refresh cookie for an in-memory access token through
 `POST /auth/refresh`, then loads the current user through `GET /auth/me`.
 
+## GET /bootstrap
+
+Returns the authenticated user, the active league when the user is a member, the
+current week, and explicit membership state.
+
+Authentication
+
+Required
+
+The `membership.status` value is one of `no_league`, `not_member`, or `member`.
+Members also receive their role (`member` or `owner`). A non-member receives no
+league metadata and should use the shared league passcode to join.
+
 ---
 
 ## POST /auth/logout
@@ -152,9 +165,89 @@ Returns all league members.
 
 Authentication
 
-Required
+Commissioner only.
 
 Sorted alphabetically.
+
+Each member includes their display name, Google email, role, avatar, and join date.
+
+---
+
+## PATCH /league/members/{user_id}
+
+Updates a league member.
+
+Authentication
+
+Commissioner only. A member can be promoted to `owner` here; owners are the
+commissioners used by all commissioner-only routes.
+
+Request fields
+
+```json
+{
+  "displayName": "New display name",
+  "role": "member"
+}
+```
+
+`displayName` and `role` are optional, but at least one must be provided. The
+Google email is read-only. Multiple commissioner (`owner`) members are allowed.
+
+---
+
+## GET /league/payments?week={week_number}
+
+Returns payment status for every member for the requested week. A missing
+payment record is returned as `isPaid: false`.
+
+Authentication
+
+Commissioner only.
+
+Each member includes `userId`, `displayName`, `email`, `role`, `isPaid`,
+`markedAt`, and `voidedPickCount`.
+
+---
+
+## PATCH /league/payments/{user_id}
+
+Creates or updates one member's payment status for a week.
+
+Authentication
+
+Commissioner only.
+
+Request body
+
+```json
+{
+  "week": 1,
+  "isPaid": true
+}
+```
+
+---
+
+## POST /league/payments/void-unpaid
+
+Marks all unvoided picks belonging to unpaid members as void for the requested
+week and refreshes the derived scoring rows. Voids are retained across later
+score-sync runs.
+
+Authentication
+
+Commissioner only.
+
+Request body
+
+```json
+{
+  "week": 1
+}
+```
+
+The response reports `voidedPickCount` and `affectedMemberCount`.
 
 ---
 
@@ -187,6 +280,29 @@ Request
 {
   "token": "abc123"
 }
+
+Invite-token joins remain bound to the invited email, single-use, and expiry-checked.
+
+---
+
+## POST /league/join-with-code
+
+Joins the active league using its shared passcode.
+
+Authentication
+
+Required
+
+Request
+
+```json
+{
+  "code": "league-passcode"
+}
+```
+
+Any authenticated user with the correct shared passcode may join. The passcode is
+not bound to an email address.
 
 ---
 

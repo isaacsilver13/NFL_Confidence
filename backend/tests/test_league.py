@@ -227,6 +227,38 @@ def test_join_with_invalid_league_passcode_fails(client, db_session: Session) ->
     assert response.status_code == 422
 
 
+def test_join_with_league_passcode_twice_fails(client, db_session: Session) -> None:
+    owner = _make_user(
+        db_session,
+        google_id="g-owner-code-twice",
+        email="owner-code-twice@example.com",
+        display_name="Owner",
+    )
+    joiner = _make_user(
+        db_session,
+        google_id="g-joiner-code-twice",
+        email="joiner-code-twice@example.com",
+        display_name="Joiner",
+    )
+    db_session.commit()
+    create_response = client.post(
+        "/api/v1/league",
+        json={"name": "Passcode Twice League", "season": 2026},
+        headers=_auth_header(owner),
+    )
+    code = create_response.json()["data"]["inviteCode"]
+
+    first_response = client.post(
+        "/api/v1/league/join-with-code", json={"code": code}, headers=_auth_header(joiner)
+    )
+    second_response = client.post(
+        "/api/v1/league/join-with-code", json={"code": code}, headers=_auth_header(joiner)
+    )
+
+    assert first_response.status_code == 200
+    assert second_response.status_code == 409
+
+
 def test_commissioner_can_remove_member(client, db_session: Session) -> None:
     owner = _make_user(
         db_session,
@@ -247,19 +279,19 @@ def test_commissioner_can_remove_member(client, db_session: Session) -> None:
         headers=_auth_header(owner),
     )
     code = create_response.json()["data"]["inviteCode"]
-    client.post(
-        "/api/v1/league/join-with-code", json={"code": code}, headers=_auth_header(member)
-    )
+    client.post("/api/v1/league/join-with-code", json={"code": code}, headers=_auth_header(member))
     member_record = next(
         item
         for item in client.get("/api/v1/league/members", headers=_auth_header(owner)).json()["data"]
         if item["userId"] == str(member.id)
     )
-    response = client.delete(
-        f"/api/v1/league/members/{member.id}", headers=_auth_header(owner)
-    )
+    response = client.delete(f"/api/v1/league/members/{member.id}", headers=_auth_header(owner))
 
     assert response.status_code == 204
+    remaining_members = client.get("/api/v1/league/members", headers=_auth_header(owner)).json()[
+        "data"
+    ]
+    assert all(item["userId"] != str(member.id) for item in remaining_members)
     assert client.get("/api/v1/league", headers=_auth_header(member)).status_code == 403
     assert member_record["displayName"] == "Member"
 
@@ -284,12 +316,98 @@ def test_non_commissioner_cannot_remove_member(client, db_session: Session) -> N
         headers=_auth_header(owner),
     )
     code = create_response.json()["data"]["inviteCode"]
-    client.post(
-        "/api/v1/league/join-with-code", json={"code": code}, headers=_auth_header(member)
+    client.post("/api/v1/league/join-with-code", json={"code": code}, headers=_auth_header(member))
+
+    response = client.delete(f"/api/v1/league/members/{owner.id}", headers=_auth_header(member))
+
+    assert response.status_code == 403
+
+
+def test_commissioner_can_update_member_name_and_role(client, db_session: Session) -> None:
+    owner = _make_user(
+        db_session,
+        google_id="g-owner-update",
+        email="owner-update@example.com",
+        display_name="Owner",
+    )
+    member = _make_user(
+        db_session,
+        google_id="g-member-update",
+        email="member-update@example.com",
+        display_name="Member",
+    )
+    db_session.commit()
+    create_response = client.post(
+        "/api/v1/league",
+        json={"name": "Update League", "season": 2026},
+        headers=_auth_header(owner),
+    )
+    code = create_response.json()["data"]["inviteCode"]
+    client.post("/api/v1/league/join-with-code", json={"code": code}, headers=_auth_header(member))
+
+    response = client.patch(
+        f"/api/v1/league/members/{member.id}",
+        json={"displayName": "Updated Member", "role": "owner"},
+        headers=_auth_header(owner),
     )
 
-    response = client.delete(
-        f"/api/v1/league/members/{owner.id}", headers=_auth_header(member)
+    assert response.status_code == 200
+    assert response.json()["data"]["displayName"] == "Updated Member"
+    assert response.json()["data"]["email"] == "member-update@example.com"
+    assert response.json()["data"]["role"] == "owner"
+    assert client.get("/api/v1/league/members", headers=_auth_header(member)).status_code == 200
+
+
+def test_non_commissioner_cannot_list_or_update_members(client, db_session: Session) -> None:
+    owner = _make_user(
+        db_session,
+        google_id="g-owner-no-update",
+        email="owner-no-update@example.com",
+        display_name="Owner",
+    )
+    member = _make_user(
+        db_session,
+        google_id="g-member-no-update",
+        email="member-no-update@example.com",
+        display_name="Member",
+    )
+    db_session.commit()
+    create_response = client.post(
+        "/api/v1/league",
+        json={"name": "No Update League", "season": 2026},
+        headers=_auth_header(owner),
+    )
+    code = create_response.json()["data"]["inviteCode"]
+    client.post("/api/v1/league/join-with-code", json={"code": code}, headers=_auth_header(member))
+
+    assert client.get("/api/v1/league/members", headers=_auth_header(member)).status_code == 403
+    response = client.patch(
+        f"/api/v1/league/members/{owner.id}",
+        json={"displayName": "Not Allowed"},
+        headers=_auth_header(member),
+    )
+
+    assert response.status_code == 403
+
+
+def test_primary_commissioner_cannot_be_demoted(client, db_session: Session) -> None:
+    owner = _make_user(
+        db_session,
+        google_id="g-owner-demote",
+        email="owner-demote@example.com",
+        display_name="Owner",
+    )
+    db_session.commit()
+    client.post(
+        "/api/v1/league",
+        json={"name": "Demotion League", "season": 2026},
+        headers=_auth_header(owner),
+    )
+
+    response = client.patch(
+        f"/api/v1/league/members/{owner.id}",
+        json={"role": "member"},
+        headers=_auth_header(owner),
     )
 
     assert response.status_code == 403

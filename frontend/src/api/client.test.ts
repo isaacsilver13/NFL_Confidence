@@ -15,6 +15,10 @@ function unauthorizedResponse(): Response {
   )
 }
 
+function noContentResponse(): Response {
+  return new Response(null, { status: 204 })
+}
+
 describe('api client authentication', () => {
   beforeEach(() => {
     setAccessToken(null)
@@ -22,6 +26,7 @@ describe('api client authentication', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals()
+    vi.useRealTimers()
     setAccessToken(null)
   })
 
@@ -51,5 +56,30 @@ describe('api client authentication', () => {
     expect(fetchMock.mock.calls[2][1]).toMatchObject({
       headers: { Authorization: 'Bearer access-token' },
     })
+  })
+
+  it('fails a refresh request that exceeds the startup timeout', async () => {
+    vi.useFakeTimers()
+    const fetchMock = vi.fn((_url: string, options: RequestInit) => {
+      return new Promise<Response>((_, reject) => {
+        options.signal?.addEventListener('abort', () => {
+          reject(new DOMException('The operation was aborted.', 'AbortError'))
+        })
+      })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const refresh = refreshAccessToken()
+    await vi.advanceTimersByTimeAsync(8_000)
+
+    await expect(refresh).resolves.toBe(false)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('resolves successfully for a 204 no-content response', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(noContentResponse())
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(apiFetch<void>('/league/members/member-1', { method: 'DELETE' })).resolves.toBeUndefined()
   })
 })

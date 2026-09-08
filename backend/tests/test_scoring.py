@@ -68,7 +68,14 @@ def test_score_week_recomputes_points_and_is_idempotent(db_session: Session) -> 
     db_session.add_all(
         [
             Pick(user_id=owner.id, game_id=games[0].id, picked_team="KC", confidence_value=2),
-            Pick(user_id=owner.id, game_id=games[1].id, picked_team="GB", confidence_value=1),
+            Pick(
+                user_id=owner.id,
+                game_id=games[1].id,
+                picked_team="GB",
+                confidence_value=1,
+                voided_at=datetime(2026, 9, 2, tzinfo=timezone.utc),
+                voided_by_user_id=owner.id,
+            ),
             Pick(
                 user_id=challenger.id,
                 game_id=games[0].id,
@@ -97,7 +104,7 @@ def test_score_week_recomputes_points_and_is_idempotent(db_session: Session) -> 
 
     scoring_service.score_week(db_session, league=league, week_id=week.id)
 
-    assert db_session.query(Pick).filter(Pick.points_earned.is_not(None)).count() == 4
+    assert db_session.query(Pick).filter(Pick.points_earned.is_not(None)).count() == 3
     assert (
         db_session.query(league.weekly_results[0].__class__).filter_by(week_id=week.id).count() == 2
     )

@@ -1,11 +1,13 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError } from '@/api/client'
 import { savePicks } from '@/api/nfl'
 import { fetchCurrentPicksCard } from '@/api/session'
 import { TeamLogo } from '@/components/nfl/TeamLogo'
-import { Button } from '@/components/ui/Button'
+import { getPicksCardRefetchInterval } from '@/features/nfl/picksPolling'
 import type { NflGame, NflPick, NflWeek, PickInput } from '@/types/nfl'
+
+const AUTO_SAVE_DEBOUNCE_MS = 400
 
 interface PickDraft {
   team: string
@@ -13,6 +15,16 @@ interface PickDraft {
 }
 
 type PickDrafts = Record<string, PickDraft>
+
+interface PendingSave {
+  drafts: PickDrafts
+  version: number
+}
+
+interface DraftSavePayload {
+  submissions: PickInput[]
+  voidedGameIds: string[]
+}
 
 function formatKickoff(kickoff: string): string {
   return new Intl.DateTimeFormat(undefined, {
@@ -43,9 +55,54 @@ function initialDrafts(games: NflGame[], picks: NflPick[]): PickDrafts {
   return Object.fromEntries(
     games.map((game) => {
       const pick = picksByGame.get(game.id)
-      return [game.id, { team: pick?.team ?? '', confidence: pick ? String(pick.confidence) : '' }]
+      const activePick = pick?.isVoided ? undefined : pick
+      return [
+        game.id,
+        {
+          team: activePick?.team ?? '',
+          confidence: activePick ? String(activePick.confidence) : '',
+        },
+      ]
     }),
   )
+}
+
+function draftSavePayload(games: NflGame[], drafts: PickDrafts): DraftSavePayload {
+  const candidates = games.map((game) => {
+    const draft = drafts[game.id]
+    const confidence = Number(draft?.confidence ?? 0)
+    const isComplete =
+      Boolean(draft?.team) &&
+      (draft?.team === game.awayTeam || draft?.team === game.homeTeam) &&
+      Number.isInteger(confidence) &&
+      confidence >= 1 &&
+      confidence <= games.length
+    return { game, team: draft?.team ?? '', confidence, isComplete }
+  })
+  const confidenceCounts = new Map<number, number>()
+  for (const candidate of candidates) {
+    if (candidate.isComplete) {
+      confidenceCounts.set(
+        candidate.confidence,
+        (confidenceCounts.get(candidate.confidence) ?? 0) + 1,
+      )
+    }
+  }
+
+  const submissions: PickInput[] = []
+  const voidedGameIds: string[] = []
+  for (const candidate of candidates) {
+    if (candidate.isComplete && confidenceCounts.get(candidate.confidence) === 1) {
+      submissions.push({
+        gameId: candidate.game.id,
+        team: candidate.team,
+        confidence: candidate.confidence,
+      })
+    } else {
+      voidedGameIds.push(candidate.game.id)
+    }
+  }
+  return { submissions, voidedGameIds }
 }
 
 function GamesForm({ week, games, picks }: { week: NflWeek; games: NflGame[]; picks: NflPick[] }) {
@@ -53,15 +110,26 @@ function GamesForm({ week, games, picks }: { week: NflWeek; games: NflGame[]; pi
   const [drafts, setDrafts] = useState<PickDrafts>(() => initialDrafts(games, picks))
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
+  const [voided, setVoided] = useState(false)
   const [now, setNow] = useState(() => Date.now())
   const locksAt = week.locksAt ? Date.parse(week.locksAt) : null
   const isLocked = Boolean(week.isLocked || (locksAt !== null && locksAt <= now))
+  const draftsRef = useRef(drafts)
+  const draftVersionRef = useRef(0)
+  const isLockedRef = useRef(isLocked)
+  const saveTimerRef = useRef<number | null>(null)
+  const pendingSaveRef = useRef<PendingSave | null>(null)
+  const savingRef = useRef(false)
 
   useEffect(() => {
     if (locksAt === null || isLocked) return
     const timer = window.setInterval(() => setNow(Date.now()), 1000)
     return () => window.clearInterval(timer)
   }, [isLocked, locksAt])
+
+  useEffect(() => {
+    isLockedRef.current = isLocked
+  }, [isLocked])
 
   const confidenceValues = Array.from({ length: games.length }, (_, index) => index + 1)
   // Maps a confidence value to the game it's currently assigned to, so each game card can check "used elsewhere" in O(1).
@@ -75,37 +143,96 @@ function GamesForm({ week, games, picks }: { week: NflWeek; games: NflGame[]; pi
   }, [drafts, games])
   const saveMutation = useMutation({
     mutationFn: savePicks,
-    onSuccess: async () => {
-      setSaved(true)
-      await queryClient.invalidateQueries({ queryKey: ['picks', 'card', 'current'] })
-    },
   })
 
+  async function saveDraft(pendingSave: PendingSave) {
+    if (savingRef.current) {
+      pendingSaveRef.current = pendingSave
+      return
+    }
+
+    if (isLockedRef.current) {
+      if (pendingSave.version === draftVersionRef.current) {
+        setSaved(false)
+        setVoided(false)
+        setSubmitError('Picks are locked after the earliest game kickoff.')
+      }
+      return
+    }
+
+    const { submissions, voidedGameIds } = draftSavePayload(games, pendingSave.drafts)
+
+    savingRef.current = true
+    try {
+      await saveMutation.mutateAsync({
+        week: week.weekNumber,
+        picks: submissions,
+        voidedGameIds,
+      })
+      if (pendingSave.version === draftVersionRef.current) {
+        await queryClient.invalidateQueries({ queryKey: ['picks', 'card', 'current'] })
+        if (pendingSave.version === draftVersionRef.current) {
+          setSaved(true)
+          setVoided(voidedGameIds.length > 0)
+          setSubmitError(null)
+        }
+      }
+    } catch (error) {
+      if (pendingSave.version === draftVersionRef.current) {
+        setSaved(false)
+        setSubmitError(
+          error instanceof ApiError ? error.message : "Could not save this week's picks.",
+        )
+      }
+      setVoided(false)
+    } finally {
+      savingRef.current = false
+      const queuedSave = pendingSaveRef.current
+      if (queuedSave && queuedSave.version > pendingSave.version) {
+        pendingSaveRef.current = null
+        scheduleSave(queuedSave, 0)
+      } else if (draftVersionRef.current > pendingSave.version) {
+        scheduleSave({ drafts: draftsRef.current, version: draftVersionRef.current }, 0)
+      }
+    }
+  }
+
+  function scheduleSave(pendingSave: PendingSave, delay = AUTO_SAVE_DEBOUNCE_MS) {
+    pendingSaveRef.current = pendingSave
+    if (saveTimerRef.current !== null) window.clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = window.setTimeout(() => {
+      saveTimerRef.current = null
+      const nextSave = pendingSaveRef.current
+      pendingSaveRef.current = null
+      if (nextSave) void saveDraft(nextSave)
+    }, delay)
+  }
+
   function updateDraft(gameId: string, update: Partial<PickDraft>) {
+    const currentDraft = draftsRef.current[gameId]
+    const nextDraft = { ...currentDraft, ...update }
+    if (
+      nextDraft.team === currentDraft?.team &&
+      nextDraft.confidence === currentDraft?.confidence
+    ) {
+      return
+    }
+    const nextDrafts = {
+      ...draftsRef.current,
+      [gameId]: nextDraft,
+    }
+    const nextVersion = draftVersionRef.current + 1
+    draftsRef.current = nextDrafts
+    draftVersionRef.current = nextVersion
     setSaved(false)
     setSubmitError(null)
-    setDrafts((current) => ({ ...current, [gameId]: { ...current[gameId], ...update } }))
+    setDrafts(nextDrafts)
+    scheduleSave({ drafts: nextDrafts, version: nextVersion })
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    setSubmitError(null)
-    if (isLocked) {
-      setSubmitError('Picks are locked after the first game kickoff.')
-      return
-    }
-    const submissions: PickInput[] = games.map((game) => ({
-      gameId: game.id,
-      team: drafts[game.id]?.team ?? '',
-      confidence: Number(drafts[game.id]?.confidence ?? 0),
-    }))
-    const hasMissingPick = submissions.some((pick) => !pick.team || pick.confidence < 1)
-    const uniqueConfidenceValues = new Set(submissions.map((pick) => pick.confidence))
-    if (hasMissingPick || uniqueConfidenceValues.size !== games.length) {
-      setSubmitError('Choose a team and a unique confidence value for every game.')
-      return
-    }
-    saveMutation.mutate({ week: week.weekNumber, picks: submissions })
+    scheduleSave({ drafts: draftsRef.current, version: draftVersionRef.current }, 0)
   }
 
   return (
@@ -201,7 +328,7 @@ function GamesForm({ week, games, picks }: { week: NflWeek; games: NflGame[]; pi
                           type="button"
                           aria-pressed={isSelected}
                           disabled={isLocked}
-                          onClick={() => updateDraft(game.id, { team })}
+                          onClick={() => updateDraft(game.id, { team: isSelected ? '' : team })}
                           className={`flex min-h-11 items-center gap-2 rounded-xl border px-3 py-2 text-sm font-bold transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-60 ${isSelected ? 'border-primary bg-primary text-white shadow-sm' : 'border-slate-300 bg-white text-ink hover:border-sky hover:bg-sky/10 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:hover:border-sky'}`}
                         >
                           <TeamLogo code={team} size="sm" decorative />
@@ -216,7 +343,7 @@ function GamesForm({ week, games, picks }: { week: NflWeek; games: NflGame[]; pi
                     Confidence
                   </p>
                   <div
-                    className="flex flex-wrap gap-2"
+                    className="grid grid-cols-4 gap-2"
                     role="group"
                     aria-label={`Confidence for ${game.awayTeam} at ${game.homeTeam}`}
                   >
@@ -236,7 +363,11 @@ function GamesForm({ week, games, picks }: { week: NflWeek; games: NflGame[]; pi
                           title={
                             isUsedElsewhere ? 'This confidence value is already used.' : undefined
                           }
-                          onClick={() => updateDraft(game.id, { confidence: String(value) })}
+                          onClick={() =>
+                            updateDraft(game.id, {
+                              confidence: isSelected ? '' : String(value),
+                            })
+                          }
                           className={`flex h-11 w-11 items-center justify-center rounded-xl border text-sm font-bold transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-60 ${isSelected ? 'border-gold bg-gold text-white shadow-sm' : isUsedElsewhere ? 'border-gold/60 bg-gold/10 text-gold hover:bg-gold/20' : 'border-slate-300 bg-white text-ink hover:border-gold hover:bg-gold/10 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100'}`}
                         >
                           {value}
@@ -252,12 +383,21 @@ function GamesForm({ week, games, picks }: { week: NflWeek; games: NflGame[]; pi
       })}
 
       <div className="sticky bottom-3 z-10 -mx-1 flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-surface/95 p-3 shadow-lg shadow-primary/10 backdrop-blur sm:static sm:mx-0 sm:border-0 sm:bg-transparent sm:p-0 sm:shadow-none sm:backdrop-blur-none dark:border-slate-800 dark:bg-slate-900/95 sm:dark:bg-transparent">
-        <Button type="submit" disabled={saveMutation.isPending || isLocked}>
-          {' '}
-          {saveMutation.isPending ? 'Saving…' : 'Save picks'}{' '}
-        </Button>
-        {saved && <p className="text-sm font-semibold text-accent">Picks saved.</p>}
-        {submitError && <p className="text-sm text-danger">{submitError}</p>}
+        {saveMutation.isPending && (
+          <p role="status" className="text-sm font-semibold text-ink-muted dark:text-slate-400">
+            Saving…
+          </p>
+        )}
+        {saved && (
+          <p role="status" className="text-sm font-semibold text-accent">
+            {voided ? 'Picks saved. Incomplete or conflicting picks were voided.' : 'Picks saved.'}
+          </p>
+        )}
+        {submitError && (
+          <p role="alert" className="text-sm text-danger">
+            {submitError}
+          </p>
+        )}
       </div>
     </form>
   )
@@ -271,6 +411,8 @@ export function PicksPage() {
   } = useQuery({
     queryKey: ['picks', 'card', 'current'],
     queryFn: fetchCurrentPicksCard,
+    staleTime: 10_000,
+    refetchInterval: (query) => getPicksCardRefetchInterval(query.state.data),
   })
 
   if (isPending)

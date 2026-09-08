@@ -46,10 +46,12 @@ export function StandingsPage() {
   const seasonQuery = useQuery({
     queryKey: ['leaderboard', 'season'],
     queryFn: () => fetchSeasonStandings(),
+    staleTime: 10 * 60_000,
   })
   const breakdownQuery = useQuery({
     queryKey: ['leaderboard', 'pick-breakdown'],
     queryFn: fetchPickBreakdown,
+    staleTime: 10 * 60_000,
   })
   const isLoading = seasonQuery.isPending || breakdownQuery.isPending
   const error = seasonQuery.error ?? breakdownQuery.error
