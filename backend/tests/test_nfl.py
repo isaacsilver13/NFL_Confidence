@@ -124,9 +124,7 @@ def test_picks_reject_duplicate_confidence_values(client, db_session: Session) -
     assert response.json()["error"]["code"] == "VALIDATION_ERROR"
 
 
-def test_picks_void_invalid_games_while_saving_valid_games(
-    client, db_session: Session
-) -> None:
+def test_picks_void_invalid_games_while_saving_valid_games(client, db_session: Session) -> None:
     user = _make_user(db_session)
     week, games = _ensure_current_fixture(db_session, user)
     headers = _auth_header(user)
@@ -180,10 +178,7 @@ def test_picks_void_invalid_games_while_saving_valid_games(
     assert response.json()["data"][0]["isVoided"] is False
     assert response.json()["data"][0]["voidedAt"] is None
     assert (
-        db_session.query(Pick)
-        .filter_by(user_id=user.id, game_id=games[0].id)
-        .one()
-        .picked_team
+        db_session.query(Pick).filter_by(user_id=user.id, game_id=games[0].id).one().picked_team
         == games[0].away_team
     )
 

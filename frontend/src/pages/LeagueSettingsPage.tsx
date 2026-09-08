@@ -175,7 +175,12 @@ function PaymentAdmin() {
               </li>
             ))}
           </ul>
-          <Button type="button" variant="danger" onClick={() => void handleVoidUnpaid()} disabled={isVoiding || weekNumber === 0}>
+          <Button
+            type="button"
+            variant="danger"
+            onClick={() => void handleVoidUnpaid()}
+            disabled={isVoiding || weekNumber === 0}
+          >
             {isVoiding ? 'Voiding unpaid picks...' : 'Void unpaid picks'}
           </Button>
         </>

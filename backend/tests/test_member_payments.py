@@ -71,9 +71,7 @@ def _fixture(db_session: Session, client) -> tuple[User, User, NflWeek, Pick]:
     return owner, member, week, pick
 
 
-def test_only_commissioner_can_manage_payments_and_void_unpaid_picks(
-    client, db_session: Session
-):
+def test_only_commissioner_can_manage_payments_and_void_unpaid_picks(client, db_session: Session):
     owner, member, week, pick = _fixture(db_session, client)
 
     forbidden = client.get(

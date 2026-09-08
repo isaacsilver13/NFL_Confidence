@@ -188,7 +188,9 @@ describe('LeagueSettingsPage', () => {
     expect((await screen.findAllByText('member@example.com')).length).toBeGreaterThan(0)
     await user.click(screen.getByRole('button', { name: 'Remove Member' }))
 
-    expect(await screen.findByText('Could not remove Member. Please try again.')).toBeInTheDocument()
+    expect(
+      await screen.findByText('Could not remove Member. Please try again.'),
+    ).toBeInTheDocument()
   })
 
   it('redirects a regular member away from commissioner tools', async () => {

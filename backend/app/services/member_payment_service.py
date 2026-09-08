@@ -103,12 +103,9 @@ def void_unpaid_picks(
     unpaid_user_ids = {
         member.user_id
         for member in members
-        if not payments.get(member.user_id, None)
-        or not payments[member.user_id].is_paid
+        if not payments.get(member.user_id, None) or not payments[member.user_id].is_paid
     }
-    picks = pick_repository.list_by_week_and_users(
-        db, week_id=week.id, user_ids=unpaid_user_ids
-    )
+    picks = pick_repository.list_by_week_and_users(db, week_id=week.id, user_ids=unpaid_user_ids)
     now = datetime.now(timezone.utc)
     for pick in picks:
         if pick.voided_at is None:

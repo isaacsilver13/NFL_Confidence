@@ -80,6 +80,8 @@ describe('api client authentication', () => {
     const fetchMock = vi.fn().mockResolvedValue(noContentResponse())
     vi.stubGlobal('fetch', fetchMock)
 
-    await expect(apiFetch<void>('/league/members/member-1', { method: 'DELETE' })).resolves.toBeUndefined()
+    await expect(
+      apiFetch<void>('/league/members/member-1', { method: 'DELETE' }),
+    ).resolves.toBeUndefined()
   })
 })

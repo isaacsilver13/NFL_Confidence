@@ -63,9 +63,7 @@ def upgrade() -> None:
             name="uq_member_weekly_payments_league_week_user",
         ),
     )
-    op.create_index(
-        "ix_member_weekly_payments_league_id", "member_weekly_payments", ["league_id"]
-    )
+    op.create_index("ix_member_weekly_payments_league_id", "member_weekly_payments", ["league_id"])
     op.create_index("ix_member_weekly_payments_week_id", "member_weekly_payments", ["week_id"])
     op.create_index("ix_member_weekly_payments_user_id", "member_weekly_payments", ["user_id"])
     op.create_index(
