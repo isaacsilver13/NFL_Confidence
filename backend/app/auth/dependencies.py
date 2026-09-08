@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.auth.jwt import InvalidTokenError, decode_access_token
 from app.core.exceptions import ForbiddenError, UnauthorizedError
 from app.db.session import get_db
+from app.models.enums import LeagueRole
 from app.models.league import League
 from app.models.league_member import LeagueMember
 from app.models.user import User
@@ -59,4 +60,14 @@ def get_active_league_member(
     if member is None:
         raise ForbiddenError("Not a member of this league")
 
+    return league, member
+
+
+def get_active_league_owner(
+    league_member: tuple[League, LeagueMember] = Depends(get_active_league_member),
+) -> tuple[League, LeagueMember]:
+    """Resolve the active league and verify the user has owner permissions."""
+    league, member = league_member
+    if member.role != LeagueRole.OWNER:
+        raise ForbiddenError("Only league commissioners can perform this action.")
     return league, member

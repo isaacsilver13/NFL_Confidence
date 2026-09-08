@@ -38,6 +38,28 @@ Dashboard
 
 ---
 
+# Flow 1A - Shared Passcode Join
+
+Sign In
+
+↓
+
+Dashboard shows the league passcode form
+
+↓
+
+Enter the shared passcode
+
+↓
+
+Join League
+
+↓
+
+Dashboard
+
+---
+
 # Flow 2 - Weekly Picks
 
 Dashboard
@@ -164,15 +186,15 @@ Dashboard
 
 ↓
 
-League Settings
+Members tab
 
 ↓
 
-Invite Member
+View members, edit display names or roles, and remove members
 
 ↓
 
-Send Email
+Invite Member or share the league passcode
 
 ↓
 

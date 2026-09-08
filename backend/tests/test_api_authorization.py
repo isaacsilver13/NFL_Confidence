@@ -249,7 +249,7 @@ def test_member_can_access_league_scoped_routes(client, db_session: Session) -> 
 
     # Now test that member can access all league-scoped routes (gets 200 or 404 for data endpoints)
     assert client.get("/api/v1/league", headers=_auth_header(member)).status_code == 200
-    assert client.get("/api/v1/league/members", headers=_auth_header(member)).status_code == 200
+    assert client.get("/api/v1/league/members", headers=_auth_header(member)).status_code == 403
     assert client.get("/api/v1/picks/current", headers=_auth_header(member)).status_code in (
         200,
         404,

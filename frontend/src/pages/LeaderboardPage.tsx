@@ -52,6 +52,7 @@ export function LeaderboardPage() {
   const weeksQuery = useQuery({
     queryKey: ['leaderboard', 'weeks'],
     queryFn: fetchCompletedWeeks,
+    staleTime: 10 * 60_000,
   })
   const completedWeeks = weeksQuery.data ?? []
   const selectedWeek = week ?? completedWeeks[completedWeeks.length - 1]?.weekNumber
@@ -59,6 +60,7 @@ export function LeaderboardPage() {
     queryKey: ['leaderboard', 'week', selectedWeek],
     queryFn: () => fetchWeeklyLeaderboard(selectedWeek as number),
     enabled: selectedWeek !== undefined,
+    staleTime: 10 * 60_000,
   })
 
   return (

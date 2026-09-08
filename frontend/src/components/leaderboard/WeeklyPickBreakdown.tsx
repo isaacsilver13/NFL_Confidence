@@ -1,4 +1,5 @@
-import { TeamLogo, getTeamPalette } from '@/components/nfl/TeamLogo'
+import { TeamLogo } from '@/components/nfl/TeamLogo'
+import { getTeamPalette } from '@/components/nfl/teamPalette'
 import type {
   GamePickBreakdown,
   TeamPickCount,

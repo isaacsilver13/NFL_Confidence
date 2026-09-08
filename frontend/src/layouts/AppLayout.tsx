@@ -1,5 +1,7 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { LogOut } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
+import { fetchSessionBootstrap } from '@/api/session'
 import { Button } from '@/components/ui/Button'
 import { NflMark } from '@/components/nfl/NflMark'
 import { useAuth } from '@/features/auth/AuthContext'
@@ -24,6 +26,16 @@ function navLinkClassName({ isActive }: { isActive: boolean }): string {
 export function AppLayout() {
   const { user, signOut } = useAuth()
   const navigate = useNavigate()
+  const { data: bootstrapData } = useQuery({
+    queryKey: ['session', 'bootstrap'],
+    queryFn: fetchSessionBootstrap,
+    enabled: Boolean(user),
+    retry: false,
+    staleTime: 5 * 60_000,
+  })
+  const isCommissioner =
+    bootstrapData?.membership.status === 'member' && bootstrapData.membership.role === 'owner'
+  const navLinks = isCommissioner ? [...NAV_LINKS, { to: '/members', label: 'Members' }] : NAV_LINKS
 
   async function handleSignOut() {
     await signOut()
@@ -37,7 +49,7 @@ export function AppLayout() {
           <NavLink to="/" end className="mr-4 shrink-0" aria-label="NFL Confidence home">
             <NflMark />
           </NavLink>
-          {NAV_LINKS.map((link) => (
+          {navLinks.map((link) => (
             <NavLink key={link.to} to={link.to} end={link.to === '/'} className={navLinkClassName}>
               {link.label}
             </NavLink>

@@ -4,7 +4,7 @@
  */
 
 import type { User } from '@/types/auth'
-import type { League } from '@/types/league'
+import type { League, LeagueMember } from '@/types/league'
 import type { NflWeek, NflGame, NflPick } from '@/types/nfl'
 import { apiFetch } from './client'
 
@@ -13,6 +13,12 @@ export interface SessionBootstrap {
   user: User
   league: League | null
   currentWeek: NflWeek | null
+  membership: SessionMembership
+}
+
+export interface SessionMembership {
+  status: 'no_league' | 'not_member' | 'member'
+  role: LeagueMember['role'] | null
 }
 
 /** Fetches user + league + current week in a single request. */
