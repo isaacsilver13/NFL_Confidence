@@ -86,6 +86,16 @@ describe('Team Logo Manifest', () => {
     expect(config?.name).toBe('Kansas City Chiefs')
   })
 
+  it('should resolve ESPN Washington alias to the Commanders logo', () => {
+    const config = getTeamLogoConfig('WSH')
+    expect(config).toEqual({
+      name: 'Washington Commanders',
+      espnCode: 'WAS',
+      logoPath: '/logos/WAS.png',
+    })
+    expect(isValidTeamCode('WSH')).toBe(true)
+  })
+
   it('should handle whitespace in lookups', () => {
     const config = getTeamLogoConfig('  SF  ')
     expect(config).toBeDefined()
@@ -155,6 +165,12 @@ describe('TeamLogo Component', () => {
     const image = screen.getByAltText('Kansas City Chiefs')
     expect(image).toBeInTheDocument()
     expect(image).toHaveAttribute('src', '/logos/KC.png')
+  })
+
+  it('should render the Washington logo for the ESPN WSH code', () => {
+    render(<TeamLogo code="WSH" />)
+    const image = screen.getByAltText('Washington Commanders')
+    expect(image).toHaveAttribute('src', '/logos/WAS.png')
   })
 
   it('should handle whitespace in team codes with logo', () => {

@@ -67,16 +67,22 @@ function initialDrafts(games: NflGame[], picks: NflPick[]): PickDrafts {
   )
 }
 
+function isCompleteDraft(game: NflGame, draft: PickDraft | undefined, gameCount: number): boolean {
+  const confidence = Number(draft?.confidence ?? 0)
+  return (
+    Boolean(draft?.team) &&
+    (draft?.team === game.awayTeam || draft?.team === game.homeTeam) &&
+    Number.isInteger(confidence) &&
+    confidence >= 1 &&
+    confidence <= gameCount
+  )
+}
+
 function draftSavePayload(games: NflGame[], drafts: PickDrafts): DraftSavePayload {
   const candidates = games.map((game) => {
     const draft = drafts[game.id]
     const confidence = Number(draft?.confidence ?? 0)
-    const isComplete =
-      Boolean(draft?.team) &&
-      (draft?.team === game.awayTeam || draft?.team === game.homeTeam) &&
-      Number.isInteger(confidence) &&
-      confidence >= 1 &&
-      confidence <= games.length
+    const isComplete = isCompleteDraft(game, draft, games.length)
     return { game, team: draft?.team ?? '', confidence, isComplete }
   })
   const confidenceCounts = new Map<number, number>()
@@ -132,15 +138,21 @@ function GamesForm({ week, games, picks }: { week: NflWeek; games: NflGame[]; pi
   }, [isLocked])
 
   const confidenceValues = Array.from({ length: games.length }, (_, index) => index + 1)
-  // Maps a confidence value to the game it's currently assigned to, so each game card can check "used elsewhere" in O(1).
-  const confidenceUsageByGame = useMemo(() => {
-    const usage = new Map<number, string>()
+  const confidenceUsageByValue = useMemo(() => {
+    const usage = new Map<number, string[]>()
     for (const game of games) {
+      if (!isCompleteDraft(game, drafts[game.id], games.length)) continue
       const confidence = Number(drafts[game.id]?.confidence)
-      if (confidence) usage.set(confidence, game.id)
+      const gameIds = usage.get(confidence) ?? []
+      gameIds.push(game.id)
+      usage.set(confidence, gameIds)
     }
     return usage
   }, [drafts, games])
+  const confidenceConflicts = useMemo(
+    () => Array.from(confidenceUsageByValue.entries()).filter(([, gameIds]) => gameIds.length > 1),
+    [confidenceUsageByValue],
+  )
   const saveMutation = useMutation({
     mutationFn: savePicks,
   })
@@ -262,6 +274,31 @@ function GamesForm({ week, games, picks }: { week: NflWeek; games: NflGame[]; pi
         </p>
       )}
 
+      {confidenceConflicts.length > 0 && (
+        <div
+          role="alert"
+          className="rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger"
+        >
+          <p className="font-bold">Conflicting picks</p>
+          <p className="mt-1">
+            These picks will be voided unless fixed. Each confidence value can be used only once.
+          </p>
+          <ul className="mt-2 list-disc space-y-1 pl-5">
+            {confidenceConflicts.map(([confidence, gameIds]) => (
+              <li key={confidence}>
+                {confidence} point{confidence === 1 ? '' : 's'}:{' '}
+                {gameIds
+                  .map((gameId) => {
+                    const game = games.find((candidate) => candidate.id === gameId)
+                    return game ? `${game.awayTeam} at ${game.homeTeam}` : gameId
+                  })
+                  .join(', ')}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {games.map((game) => {
         const draft = drafts[game.id] ?? { team: '', confidence: '' }
         const selectedConfidence = Number(draft.confidence)
@@ -329,7 +366,7 @@ function GamesForm({ week, games, picks }: { week: NflWeek; games: NflGame[]; pi
                           aria-pressed={isSelected}
                           disabled={isLocked}
                           onClick={() => updateDraft(game.id, { team: isSelected ? '' : team })}
-                          className={`flex min-h-11 items-center gap-2 rounded-xl border px-3 py-2 text-sm font-bold transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-60 ${isSelected ? 'border-primary bg-primary text-white shadow-sm' : 'border-slate-300 bg-white text-ink hover:border-sky hover:bg-sky/10 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:hover:border-sky'}`}
+                          className={`flex min-h-11 items-center gap-2 rounded-xl border px-3 py-2 text-sm font-bold transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-60 ${isSelected ? 'border-primary bg-primary text-white shadow-sm dark:border-sky dark:bg-sky/20 dark:text-sky' : 'border-slate-300 bg-white text-ink hover:border-sky hover:bg-sky/10 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:hover:border-sky'}`}
                         >
                           <TeamLogo code={team} size="sm" decorative />
                           {team}
@@ -350,9 +387,8 @@ function GamesForm({ week, games, picks }: { week: NflWeek; games: NflGame[]; pi
                     {confidenceValues.map((value) => {
                       const isSelected = selectedConfidence === value
                       const isUsedElsewhere =
-                        confidenceUsageByGame.get(value) === game.id
-                          ? false
-                          : confidenceUsageByGame.has(value)
+                        confidenceUsageByValue.get(value)?.some((gameId) => gameId !== game.id) ??
+                        false
                       return (
                         <button
                           key={value}

@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ApiError } from '@/api/client'
 import { savePicks } from '@/api/nfl'
@@ -134,13 +134,20 @@ describe('PicksPage', () => {
     ).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'GB' }))
-    await user.click(screen.getAllByRole('button', { name: '1' })[1])
+    const secondConfidenceGroup = screen.getByRole('group', {
+      name: 'Confidence for GB at CHI',
+    })
+    await user.click(within(secondConfidenceGroup).getByRole('button', { name: /1/ }))
+
+    expect(await screen.findByText('Conflicting picks')).toBeInTheDocument()
+    expect(screen.getByText(/1 point: BUF at KC, GB at CHI/)).toBeInTheDocument()
+    expect(screen.getByText(/These picks will be voided unless fixed/)).toBeInTheDocument()
 
     await waitFor(() => expect(mockedSavePicks).toHaveBeenCalledTimes(2))
     expect(mockedSavePicks.mock.calls[1][0]).toEqual({
       week: 1,
-      picks: [{ gameId: 'game-1', team: 'BUF', confidence: 1 }],
-      voidedGameIds: ['game-2'],
+      picks: [],
+      voidedGameIds: ['game-1', 'game-2'],
     })
   })
 
@@ -176,6 +183,7 @@ describe('PicksPage', () => {
     const winner = screen.getByRole('button', { name: 'BUF' })
     const confidence = screen.getAllByRole('button', { name: '2' })[0]
     expect(winner).toHaveAttribute('aria-pressed', 'true')
+    expect(winner).toHaveClass('dark:border-sky', 'dark:bg-sky/20', 'dark:text-sky')
     expect(confidence).toHaveAttribute('aria-pressed', 'true')
 
     await user.click(winner)
