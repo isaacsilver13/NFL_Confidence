@@ -35,7 +35,9 @@ export function AppLayout() {
   })
   const isCommissioner =
     bootstrapData?.membership.status === 'member' && bootstrapData.membership.role === 'owner'
-  const navLinks = isCommissioner ? [...NAV_LINKS, { to: '/members', label: 'Members' }] : NAV_LINKS
+  const navLinks = isCommissioner
+    ? [...NAV_LINKS, { to: '/league-settings', label: 'Members' }]
+    : NAV_LINKS
 
   async function handleSignOut() {
     await signOut()
