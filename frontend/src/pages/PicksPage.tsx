@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { AlertTriangle, Check } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError } from '@/api/client'
 import { savePicks } from '@/api/nfl'
@@ -78,6 +79,11 @@ function isCompleteDraft(game: NflGame, draft: PickDraft | undefined, gameCount:
   )
 }
 
+function isValidConfidence(confidence: string | undefined, gameCount: number): boolean {
+  const value = Number(confidence ?? 0)
+  return Number.isInteger(value) && value >= 1 && value <= gameCount
+}
+
 function draftSavePayload(games: NflGame[], drafts: PickDrafts): DraftSavePayload {
   const candidates = games.map((game) => {
     const draft = drafts[game.id]
@@ -118,7 +124,11 @@ function GamesForm({ week, games, picks }: { week: NflWeek; games: NflGame[]; pi
   const [saved, setSaved] = useState(false)
   const [voided, setVoided] = useState(false)
   const [now, setNow] = useState(() => Date.now())
-  const locksAt = week.locksAt ? Date.parse(week.locksAt) : null
+  const gameKickoffs = games
+    .map((game) => Date.parse(game.kickoff))
+    .filter((kickoff) => Number.isFinite(kickoff))
+  const earliestKickoff = gameKickoffs.length > 0 ? Math.min(...gameKickoffs) : null
+  const locksAt = week.locksAt ? Date.parse(week.locksAt) : earliestKickoff
   const isLocked = Boolean(week.isLocked || (locksAt !== null && locksAt <= now))
   const draftsRef = useRef(drafts)
   const draftVersionRef = useRef(0)
@@ -141,7 +151,7 @@ function GamesForm({ week, games, picks }: { week: NflWeek; games: NflGame[]; pi
   const confidenceUsageByValue = useMemo(() => {
     const usage = new Map<number, string[]>()
     for (const game of games) {
-      if (!isCompleteDraft(game, drafts[game.id], games.length)) continue
+      if (!isValidConfidence(drafts[game.id]?.confidence, games.length)) continue
       const confidence = Number(drafts[game.id]?.confidence)
       const gameIds = usage.get(confidence) ?? []
       gameIds.push(game.id)
@@ -153,6 +163,15 @@ function GamesForm({ week, games, picks }: { week: NflWeek; games: NflGame[]; pi
     () => Array.from(confidenceUsageByValue.entries()).filter(([, gameIds]) => gameIds.length > 1),
     [confidenceUsageByValue],
   )
+  const conflictingGameIds = useMemo(
+    () => new Set(confidenceConflicts.flatMap(([, gameIds]) => gameIds)),
+    [confidenceConflicts],
+  )
+  const pickedCount = useMemo(
+    () => games.filter((game) => isCompleteDraft(game, drafts[game.id], games.length)).length,
+    [drafts, games],
+  )
+  const hasConflicts = confidenceConflicts.length > 0
   const saveMutation = useMutation({
     mutationFn: savePicks,
   })
@@ -249,6 +268,62 @@ function GamesForm({ week, games, picks }: { week: NflWeek; games: NflGame[]; pi
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="sticky top-0 z-10 -mx-1 space-y-3 rounded-2xl border border-slate-200 bg-surface/95 px-4 py-3 shadow-sm backdrop-blur dark:border-slate-800 dark:bg-slate-900/95 sm:mx-0">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-ink-muted dark:text-slate-400">
+              Pick progress
+            </p>
+            <p className="mt-1 text-lg font-black text-primary dark:text-white">
+              {pickedCount} of {games.length} games picked
+            </p>
+          </div>
+          {hasConflicts ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-danger/10 px-3 py-1.5 text-xs font-black uppercase tracking-[0.12em] text-danger">
+              <AlertTriangle size={14} aria-hidden="true" /> Resolve conflicts
+            </span>
+          ) : pickedCount === games.length ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-accent/10 px-3 py-1.5 text-xs font-black uppercase tracking-[0.12em] text-accent">
+              <Check size={14} aria-hidden="true" /> Complete
+            </span>
+          ) : null}
+        </div>
+        <div
+          role="progressbar"
+          aria-label="Games picked"
+          aria-valuemin={0}
+          aria-valuemax={games.length}
+          aria-valuenow={pickedCount}
+          className="h-2 overflow-hidden rounded-full bg-surface-muted dark:bg-slate-800"
+        >
+          <div
+            className={`h-full rounded-full transition-[width] ${hasConflicts ? 'bg-danger' : 'bg-accent'}`}
+            style={{ width: `${games.length ? (pickedCount / games.length) * 100 : 0}%` }}
+          />
+        </div>
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.14em] text-ink-muted dark:text-slate-400">
+            Confidence values
+          </p>
+          <div className="mt-2 flex flex-wrap gap-1.5" role="list" aria-label="Confidence values">
+            {confidenceValues.map((value) => {
+              const usedBy = confidenceUsageByValue.get(value) ?? []
+              const isConflict = usedBy.length > 1
+              return (
+                <span
+                  key={value}
+                  role="listitem"
+                  aria-label={`Confidence ${value}${usedBy.length ? ' used' : ' available'}${isConflict ? ', conflict' : ''}`}
+                  className={`inline-flex h-7 min-w-7 items-center justify-center gap-0.5 rounded-md border px-1.5 text-xs font-bold ${isConflict ? 'border-danger bg-danger/10 text-danger' : usedBy.length ? 'border-slate-300 bg-surface-muted text-ink-muted line-through dark:border-slate-700 dark:bg-slate-950 dark:text-slate-500' : 'border-accent/40 bg-accent/5 text-accent'}`}
+                >
+                  {usedBy.length > 0 && <Check size={11} aria-hidden="true" />}
+                  {value}
+                </span>
+              )
+            })}
+          </div>
+        </div>
+      </div>
       <div className="flex flex-wrap items-end justify-between gap-3 border-b border-slate-200 pb-5 dark:border-slate-800">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.2em] text-accent">
@@ -260,9 +335,13 @@ function GamesForm({ week, games, picks }: { week: NflWeek; games: NflGame[]; pi
         </div>
         <div className="text-right text-sm text-slate-600 dark:text-slate-300">
           <p>Use each confidence value from 1 to {games.length} once.</p>
-          {week.locksAt && (
+          {(week.locksAt || isLocked) && (
             <p className={isLocked ? 'font-bold text-danger' : 'font-semibold text-accent'}>
-              {isLocked ? 'Picks locked' : `Locks ${formatDeadline(week.locksAt)}`}
+              {isLocked
+                ? 'Picks locked'
+                : week.locksAt
+                  ? `Locks ${formatDeadline(week.locksAt)}`
+                  : null}
             </p>
           )}
         </div>
@@ -281,18 +360,30 @@ function GamesForm({ week, games, picks }: { week: NflWeek; games: NflGame[]; pi
         >
           <p className="font-bold">Conflicting picks</p>
           <p className="mt-1">
-            These picks will be voided unless fixed. Each confidence value can be used only once.
+            These picks will be voided unless fixed. They remain invalid until fixed because each
+            confidence value can be used only once.
           </p>
           <ul className="mt-2 list-disc space-y-1 pl-5">
             {confidenceConflicts.map(([confidence, gameIds]) => (
               <li key={confidence}>
-                {confidence} point{confidence === 1 ? '' : 's'}:{' '}
-                {gameIds
-                  .map((gameId) => {
-                    const game = games.find((candidate) => candidate.id === gameId)
-                    return game ? `${game.awayTeam} at ${game.homeTeam}` : gameId
-                  })
-                  .join(', ')}
+                <button
+                  type="button"
+                  className="text-left font-semibold underline decoration-danger/40 underline-offset-2 hover:decoration-danger"
+                  onClick={() => {
+                    const firstGame = document.getElementById(`game-${gameIds[0]}`)
+                    if (firstGame && 'scrollIntoView' in firstGame) {
+                      firstGame.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                    }
+                  }}
+                >
+                  {confidence} point{confidence === 1 ? '' : 's'}:{' '}
+                  {gameIds
+                    .map((gameId) => {
+                      const game = games.find((candidate) => candidate.id === gameId)
+                      return game ? `${game.awayTeam} at ${game.homeTeam}` : gameId
+                    })
+                    .join(', ')}
+                </button>
               </li>
             ))}
           </ul>
@@ -302,18 +393,34 @@ function GamesForm({ week, games, picks }: { week: NflWeek; games: NflGame[]; pi
       {games.map((game) => {
         const draft = drafts[game.id] ?? { team: '', confidence: '' }
         const selectedConfidence = Number(draft.confidence)
+        const isPicked = isCompleteDraft(game, draft, games.length)
+        const isConflicting = conflictingGameIds.has(game.id)
         return (
           <fieldset
             key={game.id}
-            className="animate-slide-up overflow-hidden rounded-2xl border border-slate-200 bg-surface shadow-sm transition-shadow hover:shadow-md dark:border-slate-800 dark:bg-slate-900"
+            id={`game-${game.id}`}
+            data-testid={`pick-card-${game.id}`}
+            className={`animate-slide-up overflow-hidden rounded-2xl border bg-surface shadow-sm transition-shadow hover:shadow-md dark:bg-slate-900 ${isConflicting ? 'border-danger bg-danger/5 dark:border-danger' : isPicked ? 'border-accent/70 bg-accent/5 dark:border-accent/70' : 'border-slate-200 dark:border-slate-800'}`}
           >
             <legend className="sr-only">
               {game.awayTeam} at {game.homeTeam}
             </legend>
             <div className="border-b border-slate-200 bg-surface-muted/60 px-4 py-3 dark:border-slate-800 dark:bg-slate-950/50">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-ink-muted dark:text-slate-400">
-                {formatKickoff(game.kickoff)} · {game.status}
-              </p>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-ink-muted dark:text-slate-400">
+                  {formatKickoff(game.kickoff)} · {game.status}
+                </p>
+                <span
+                  className={`inline-flex items-center gap-1 text-xs font-black uppercase tracking-[0.12em] ${isConflicting ? 'text-danger' : isPicked ? 'text-accent' : 'text-ink-muted dark:text-slate-400'}`}
+                >
+                  {isConflicting ? (
+                    <AlertTriangle size={13} aria-hidden="true" />
+                  ) : isPicked ? (
+                    <Check size={13} aria-hidden="true" />
+                  ) : null}
+                  {isConflicting ? 'Conflict' : isPicked ? 'Picked' : 'Not picked'}
+                </span>
+              </div>
               <p className="mt-2 text-sm text-ink-muted dark:text-slate-400">
                 <span className="font-semibold text-ink dark:text-slate-200">
                   {game.venueName ?? 'Venue unavailable'}
@@ -426,7 +533,11 @@ function GamesForm({ week, games, picks }: { week: NflWeek; games: NflGame[]; pi
         )}
         {saved && (
           <p role="status" className="text-sm font-semibold text-accent">
-            {voided ? 'Picks saved. Incomplete or conflicting picks were voided.' : 'Picks saved.'}
+            {hasConflicts
+              ? 'Picks saved, but conflicts must be resolved before this week is complete.'
+              : voided
+                ? 'Picks saved. Incomplete or conflicting picks were voided.'
+                : 'Picks saved.'}
           </p>
         )}
         {submitError && (
@@ -436,6 +547,17 @@ function GamesForm({ week, games, picks }: { week: NflWeek; games: NflGame[]; pi
         )}
       </div>
     </form>
+  )
+}
+
+function PicksScrollPane({ children }: { children: ReactNode }) {
+  return (
+    <div
+      data-testid="picks-scroll-pane"
+      className="h-[calc(100dvh-8rem)] overflow-y-auto overscroll-contain px-1 pb-4 sm:h-auto sm:overflow-visible sm:px-0 sm:pb-0"
+    >
+      {children}
+    </div>
   )
 }
 
@@ -485,5 +607,9 @@ export function PicksPage() {
     )
 
   const picksKey = picks.map((pick) => `${pick.gameId}:${pick.team}:${pick.confidence}`).join('|')
-  return <GamesForm key={`${week.id}:${picksKey}`} week={week} games={games} picks={picks} />
+  return (
+    <PicksScrollPane>
+      <GamesForm key={`${week.id}:${picksKey}`} week={week} games={games} picks={picks} />
+    </PicksScrollPane>
+  )
 }

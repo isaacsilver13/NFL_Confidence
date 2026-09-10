@@ -211,16 +211,16 @@ export function ProfilePage() {
       {historyQuery.error && (
         <p role="alert" className="text-danger">
           {historyQuery.error instanceof ApiError && historyQuery.error.status === 404
-            ? 'No completed pick history is available.'
+            ? 'No pick history is available.'
             : 'Could not load your pick history.'}
         </p>
       )}
       {historyQuery.data && historyQuery.data.weeks.length === 0 && (
         <div className="rounded-2xl border border-slate-200 bg-surface p-8 text-center shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <UserRound className="mx-auto text-sky" size={40} aria-hidden="true" />
-          <h2 className="mt-4 text-xl font-bold">No completed picks yet.</h2>
+          <h2 className="mt-4 text-xl font-bold">No picks submitted yet.</h2>
           <p className="mt-2 text-slate-600 dark:text-slate-300">
-            Your completed-week picks will appear here.
+            Your current and completed-week picks will appear here.
           </p>
         </div>
       )}

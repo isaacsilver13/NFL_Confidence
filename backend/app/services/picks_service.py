@@ -10,7 +10,7 @@ from app.core.exceptions import ValidationError
 from app.models.league import League
 from app.models.pick import Pick
 from app.models.user import User
-from app.repositories import nfl_game_repository, pick_repository
+from app.repositories import nfl_game_repository, nfl_week_repository, pick_repository
 from app.schemas.nfl import HistoricalPickRead, HistoricalWeekRead, PickHistoryRead
 from app.services import weeks_service
 
@@ -28,8 +28,15 @@ def get_user_picks(db: Session, *, user: User) -> list[Pick]:
 
 
 def get_user_pick_history(db: Session, *, user: User, league: League) -> PickHistoryRead:
-    picks = pick_repository.list_by_user_and_completed_season(
-        db, user_id=user.id, league_id=league.id, season=league.season
+    current_week = nfl_week_repository.get_current(
+        db, season=league.season, at=datetime.now(timezone.utc)
+    )
+    picks = pick_repository.list_by_user_and_history_season(
+        db,
+        user_id=user.id,
+        league_id=league.id,
+        season=league.season,
+        current_week_id=current_week.id if current_week is not None else None,
     )
     picks_by_week: dict[int, list[HistoricalPickRead]] = {}
     for pick in picks:

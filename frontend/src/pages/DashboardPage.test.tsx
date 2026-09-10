@@ -5,8 +5,26 @@ import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '@/api/client'
 import { joinLeagueWithCode } from '@/api/league'
-import { fetchSessionBootstrap, type SessionBootstrap } from '@/api/session'
+import { fetchCurrentPicksCard, fetchSessionBootstrap, type SessionBootstrap } from '@/api/session'
+import { fetchCompletedWeeks } from '@/api/nfl'
+import { fetchSeasonStandings } from '@/api/leaderboard'
 import { DashboardPage } from './DashboardPage'
+
+vi.mock('./PicksPage', () => ({
+  PicksPage: () => <div>Picks section body</div>,
+}))
+
+vi.mock('./LeaderboardPage', () => ({
+  LeaderboardPage: () => <div>Leaderboard section body</div>,
+}))
+
+vi.mock('./StandingsPage', () => ({
+  StandingsPage: () => <div>Standings section body</div>,
+}))
+
+vi.mock('./ProfilePage', () => ({
+  ProfilePage: () => <div>Profile section body</div>,
+}))
 
 vi.mock('@/api/league', () => ({
   createLeague: vi.fn(),
@@ -15,6 +33,12 @@ vi.mock('@/api/league', () => ({
 
 vi.mock('@/api/session', () => ({
   fetchSessionBootstrap: vi.fn(),
+  fetchCurrentPicksCard: vi.fn(),
+}))
+
+vi.mock('@/api/nfl', () => ({
+  fetchCompletedWeeks: vi.fn(),
+  fetchPickHistory: vi.fn(),
 }))
 
 vi.mock('@/api/leaderboard', () => ({
@@ -24,6 +48,9 @@ vi.mock('@/api/leaderboard', () => ({
 
 const mockedJoinLeagueWithCode = vi.mocked(joinLeagueWithCode)
 const mockedFetchSessionBootstrap = vi.mocked(fetchSessionBootstrap)
+const mockedFetchCurrentPicksCard = vi.mocked(fetchCurrentPicksCard)
+const mockedFetchCompletedWeeks = vi.mocked(fetchCompletedWeeks)
+const mockedFetchSeasonStandings = vi.mocked(fetchSeasonStandings)
 
 const nonMemberSession: SessionBootstrap = {
   user: {
@@ -42,6 +69,28 @@ const noLeagueSession: SessionBootstrap = {
   membership: { status: 'no_league', role: null },
 }
 
+const memberSession: SessionBootstrap = {
+  ...nonMemberSession,
+  league: {
+    id: 'league-1',
+    name: 'Test League',
+    season: 2026,
+    memberCount: 2,
+    commissionerName: 'Commissioner',
+    inviteCode: 'invite-code',
+    isActive: true,
+  },
+  currentWeek: {
+    id: 'week-1',
+    season: 2026,
+    weekNumber: 1,
+    startDate: '2026-09-01T00:00:00Z',
+    endDate: '2026-09-08T00:00:00Z',
+    status: 'regular',
+  },
+  membership: { status: 'member', role: 'member' },
+}
+
 function renderPage() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
@@ -56,7 +105,16 @@ function renderPage() {
 describe('DashboardPage league access', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    window.localStorage.clear()
+    window.history.replaceState(null, '', '/')
     mockedFetchSessionBootstrap.mockResolvedValue(nonMemberSession)
+    mockedFetchCurrentPicksCard.mockResolvedValue({
+      week: memberSession.currentWeek!,
+      games: [],
+      picks: [],
+    })
+    mockedFetchCompletedWeeks.mockResolvedValue([])
+    mockedFetchSeasonStandings.mockResolvedValue({ season: 2026, standings: [] })
   })
 
   it('prompts a signed-in non-member for the shared league passcode', async () => {
@@ -100,5 +158,36 @@ describe('DashboardPage league access', () => {
     await user.click(screen.getByRole('button', { name: /join league/i }))
 
     expect(await screen.findByText('You are already a member of this league.')).toBeInTheDocument()
+  })
+
+  it('opens only Picks by default and fetches leaderboard data after expansion', async () => {
+    const user = userEvent.setup()
+    mockedFetchSessionBootstrap.mockResolvedValueOnce(memberSession)
+    renderPage()
+
+    const picksSection = await screen.findByRole('button', { name: /^Picks/ })
+    const leaderboardSection = screen.getByRole('button', { name: /^Leaderboard/ })
+    expect(picksSection).toHaveAttribute('aria-expanded', 'true')
+    expect(leaderboardSection).toHaveAttribute('aria-expanded', 'false')
+    expect(await screen.findByText('Picks section body')).toBeInTheDocument()
+    expect(mockedFetchCompletedWeeks).not.toHaveBeenCalled()
+
+    await user.click(leaderboardSection)
+
+    expect(leaderboardSection).toHaveAttribute('aria-expanded', 'true')
+    await screen.findByText('Leaderboard section body')
+    expect(mockedFetchCompletedWeeks).toHaveBeenCalledTimes(1)
+  })
+
+  it('opens a section named by the URL hash and keeps Picks open for multiple panes', async () => {
+    mockedFetchSessionBootstrap.mockResolvedValueOnce(memberSession)
+    window.history.replaceState(null, '', '/#standings')
+    renderPage()
+
+    expect(await screen.findByRole('button', { name: /^Standings/ })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    )
+    expect(screen.getByRole('button', { name: /^Picks/ })).toHaveAttribute('aria-expanded', 'true')
   })
 })

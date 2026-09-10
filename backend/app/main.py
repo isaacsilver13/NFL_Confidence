@@ -4,6 +4,7 @@ Wires together CORS, rate limiting, the standard error envelope, and API routers
 Routes must stay thin: validate request -> call service -> return response.
 """
 
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -26,13 +27,32 @@ from app.core.config import get_settings
 from app.core.exceptions import AppError
 from app.core.limiter import limiter
 from app.core.responses import error
+from app.db.schema_validator import validate_schema
+from app.db.session import SessionLocal
 from app.jobs.scheduler import create_scheduler
 
 settings = get_settings()
+logger = logging.getLogger(__name__)
+
+
+def _validate_startup_schema() -> None:
+    db = SessionLocal()
+    try:
+        schema_issues = validate_schema(db)
+    except Exception as exc:
+        logger.exception("Application startup schema validation could not run")
+        raise RuntimeError("Application startup schema validation failed") from exc
+    finally:
+        db.close()
+
+    if schema_issues:
+        logger.error("Application startup detected database schema drift: %s", schema_issues)
+        raise RuntimeError("Application startup detected database schema drift")
 
 
 @asynccontextmanager
 async def lifespan(application: FastAPI):
+    _validate_startup_schema()
     scheduler = create_scheduler() if settings.enable_scheduler else None
     if scheduler is not None:
         scheduler.start()

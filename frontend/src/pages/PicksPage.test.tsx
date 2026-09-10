@@ -37,7 +37,7 @@ const games: NflGame[] = [
     id: 'game-1',
     awayTeam: 'BUF',
     homeTeam: 'KC',
-    kickoff: '2026-08-25T20:00:00Z',
+    kickoff: '2099-08-25T20:00:00Z',
     status: 'scheduled',
     venueName: 'Highmark Stadium',
     venueLocation: 'Orchard Park, NY',
@@ -52,7 +52,7 @@ const games: NflGame[] = [
     id: 'game-2',
     awayTeam: 'GB',
     homeTeam: 'CHI',
-    kickoff: '2026-08-26T20:00:00Z',
+    kickoff: '2099-08-26T20:00:00Z',
     status: 'scheduled',
     venueName: null,
     venueLocation: null,
@@ -93,6 +93,10 @@ describe('PicksPage', () => {
     renderPage()
 
     expect(await screen.findByRole('button', { name: 'BUF' })).toBeInTheDocument()
+    expect(screen.getByTestId('picks-scroll-pane')).toHaveClass(
+      'overflow-y-auto',
+      'sm:overflow-visible',
+    )
     expect(screen.getByRole('button', { name: 'GB' })).toBeInTheDocument()
     expect(screen.getByText('Highmark Stadium')).toBeInTheDocument()
     expect(screen.getByText(/Line: KC -3.5/)).toBeInTheDocument()
@@ -113,6 +117,25 @@ describe('PicksPage', () => {
     })
     expect(screen.queryByRole('button', { name: 'Save picks' })).not.toBeInTheDocument()
     expect(await screen.findByText('Picks saved.')).toBeInTheDocument()
+  })
+
+  it('makes picks read-only after the earliest kickoff', async () => {
+    const user = userEvent.setup()
+    mockedFetchCurrentPicksCard.mockResolvedValueOnce({
+      week,
+      games: [{ ...games[0], kickoff: '2026-08-25T19:00:00Z' }, games[1]],
+      picks: [],
+    })
+    renderPage()
+
+    expect(await screen.findByText('Picks locked')).toBeInTheDocument()
+    expect(screen.getByText(/This week's picks are read-only/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'BUF' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'KC' })).toBeDisabled()
+    expect(screen.getAllByRole('button', { name: '1' })[0]).toBeDisabled()
+
+    await user.click(screen.getByRole('button', { name: 'KC' }))
+    expect(mockedSavePicks).not.toHaveBeenCalled()
   })
 
   it('voids incomplete and conflicting drafts while keeping the save flow live', async () => {
@@ -142,6 +165,12 @@ describe('PicksPage', () => {
     expect(await screen.findByText('Conflicting picks')).toBeInTheDocument()
     expect(screen.getByText(/1 point: BUF at KC, GB at CHI/)).toBeInTheDocument()
     expect(screen.getByText(/These picks will be voided unless fixed/)).toBeInTheDocument()
+    expect(screen.getByTestId('pick-card-game-1')).toHaveClass('border-danger')
+    expect(screen.getByTestId('pick-card-game-2')).toHaveClass('border-danger')
+    expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '2')
+    expect(
+      screen.getByRole('listitem', { name: 'Confidence 1 used, conflict' }),
+    ).toBeInTheDocument()
 
     await waitFor(() => expect(mockedSavePicks).toHaveBeenCalledTimes(2))
     expect(mockedSavePicks.mock.calls[1][0]).toEqual({

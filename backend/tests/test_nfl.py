@@ -246,7 +246,7 @@ def test_picks_lock_for_entire_week_at_first_kickoff(client, db_session: Session
     assert "already kicked off" in response.json()["error"]["message"]
 
 
-def test_pick_history_is_private_and_contains_outcomes(db_session: Session) -> None:
+def test_pick_history_is_private_and_includes_current_week(db_session: Session) -> None:
     suffix = uuid.uuid4().hex
     owner = _make_user(db_session)
     other_user = _make_user(db_session)
@@ -272,11 +272,12 @@ def test_pick_history_is_private_and_contains_outcomes(db_session: Session) -> N
         end_date=datetime(2026, 9, 7, tzinfo=timezone.utc),
         status=WeekStatus.COMPLETE,
     )
+    now = datetime.now(timezone.utc)
     open_week = NflWeek(
         season=league.season,
         week_number=3,
-        start_date=datetime(2026, 9, 8, tzinfo=timezone.utc),
-        end_date=datetime(2026, 9, 14, tzinfo=timezone.utc),
+        start_date=now - timedelta(days=1),
+        end_date=now + timedelta(days=6),
         status=WeekStatus.REGULAR,
     )
     db_session.add_all([complete_week, open_week])
@@ -297,7 +298,7 @@ def test_pick_history_is_private_and_contains_outcomes(db_session: Session) -> N
     open_game = NflGame(
         week_id=open_week.id,
         espn_game_id=f"history-open-{suffix}",
-        kickoff_time=datetime(2026, 9, 10, tzinfo=timezone.utc),
+        kickoff_time=now + timedelta(days=1),
         away_team="DAL",
         home_team="NYG",
         game_status=GameStatus.FINAL,
@@ -340,8 +341,9 @@ def test_pick_history_is_private_and_contains_outcomes(db_session: Session) -> N
 
     result = picks_service.get_user_pick_history(db_session, user=owner, league=league)
 
-    assert [week.week_number for week in result.weeks] == [2]
+    assert [week.week_number for week in result.weeks] == [2, 3]
     assert [(pick.team, pick.outcome) for pick in result.weeks[0].picks] == [
         ("KC", "correct"),
         ("GB", "unscored"),
     ]
+    assert [(pick.team, pick.outcome) for pick in result.weeks[1].picks] == [("DAL", "unscored")]
