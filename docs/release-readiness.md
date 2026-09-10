@@ -8,7 +8,9 @@ small, dependency-ordered pull requests. The implementation includes:
 - active-league authorization for league-scoped API routes
 - invite recipient email binding and escaped invite HTML
 - week-level pick locking at the earliest kickoff
+- current-week pick history with read-only UI state after the earliest kickoff
 - idempotent weekly scoring and uniqueness protection
+- schema drift validation at startup and readiness, with idempotent repair migrations
 - database-backed job execution records and admin job controls
 - session bootstrap and health/readiness endpoints
 - local team logo assets with an accessible badge fallback
@@ -60,12 +62,17 @@ Frontend:
 
 Before deployment from merged `main`:
 
-1. Apply Alembic migrations against the target PostgreSQL database.
+1. Apply Alembic migrations against the target PostgreSQL database. The repair
+   migrations are safe to rerun through Alembic and restore missing auth/job
+   tables or missing season-result rows without resetting the database.
 2. Set `JWT_SECRET`, OAuth, email, database, `APP_URL`, and exact CORS secrets in Fly.
 3. Deploy the API and verify `/api/v1/health` and `/api/v1/health/ready`.
-4. Confirm readiness reports a healthy database and a running scheduler.
+4. Confirm readiness reports a healthy database, `schema: valid`, and a running scheduler.
 5. Deploy the frontend and verify the root page loads and logo requests return 200.
-6. Run the invite, pick-lock, score-sync, and reminder smoke checks in
+6. Confirm the pick history includes the active week and that the picks UI becomes
+   read-only at the earliest kickoff; a schema mismatch must remain a `503`
+   until the corresponding migration is applied.
+7. Run the invite, pick-lock, score-sync, and reminder smoke checks in
    `deployment.md`.
 
 A deployment must not proceed if the production JWT secret is still the local

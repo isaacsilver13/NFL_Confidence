@@ -67,7 +67,37 @@ describe('ProfilePage', () => {
     mockedFetchPickHistory.mockResolvedValueOnce({ season: 2026, weeks: [] })
     renderPage()
 
-    expect(await screen.findByText('No completed picks yet.')).toBeInTheDocument()
+    expect(await screen.findByText('No picks submitted yet.')).toBeInTheDocument()
+  })
+
+  it("renders the user's current-week picks alongside completed history", async () => {
+    mockedFetchPickHistory.mockResolvedValueOnce({
+      ...history,
+      weeks: [
+        ...history.weeks,
+        {
+          weekNumber: 2,
+          picks: [
+            {
+              ...history.weeks[0].picks[0],
+              id: 'pick-current',
+              gameId: 'game-current',
+              awayTeam: 'DAL',
+              homeTeam: 'NYG',
+              status: 'scheduled',
+              winningTeam: null,
+              pointsEarned: null,
+              outcome: 'unscored',
+            },
+          ],
+        },
+      ],
+    })
+    renderPage()
+
+    expect(await screen.findByText('DAL at NYG')).toBeInTheDocument()
+    expect(screen.getByText('Not scored')).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'Week 2' })).toBeInTheDocument()
   })
 
   it('defaults to the latest week and switches the reviewed week', async () => {
