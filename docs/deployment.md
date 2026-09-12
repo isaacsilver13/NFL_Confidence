@@ -14,12 +14,12 @@ Fly.io
 
 The checked-in Fly configs use these default app names:
 
-- API: `nfl-confidence-api`
-- Frontend: `nfl-confidence-web`
+- API: `nfl-confidence-api` (prod, `backend/fly.toml`), `nfl-confidence-api-dev` (dev, `backend/fly.dev.toml`)
+- Frontend: `nfl-confidence-web` (prod, `frontend/fly.toml`), `nfl-confidence-web-dev` (dev, `frontend/fly.dev.toml`)
 
-Fly app names are globally unique. Change the `app` value in
-`backend/fly.toml` or `frontend/fly.toml` if either name is already taken, and
-update the frontend `VITE_API_URL` build argument and the URLs below to match.
+Fly app names are globally unique. Change the `app` value in the relevant
+config file if a name is already taken, and update the frontend
+`VITE_API_URL` build argument and the URLs below to match.
 
 ---
 
@@ -27,7 +27,9 @@ update the frontend `VITE_API_URL` build argument and the URLs below to match.
 
 Development
 
-Local machine
+Local machine (docker-compose or local processes + Neon Free), plus a
+hosted dev environment on Fly.io (`nfl-confidence-api-dev`,
+`nfl-confidence-web-dev`) for pre-production verification.
 
 Testing
 
@@ -35,7 +37,7 @@ GitHub Actions
 
 Production
 
-Fly.io
+Fly.io (`nfl-confidence-api`, `nfl-confidence-web`)
 
 ---
 
@@ -263,11 +265,75 @@ fly status --app nfl-confidence-web
 Invoke-WebRequest https://nfl-confidence-web.fly.dev/
 ```
 
-The frontend config builds against `/api/v1`; Nginx proxies that path to the API.
-If either Fly app name changes, update `frontend/fly.toml` and
-`frontend/nginx.frontend.conf`, deploy the frontend again, and set the backend
-`APP_URL`, `CORS_ORIGINS`, and `GOOGLE_OAUTH_REDIRECT_URL` to the final frontend
+The frontend config builds against `/api/v1`; Nginx proxies that path to the API
+using the `API_UPSTREAM` env var set in `frontend/fly.toml`'s `[env]` block. If
+either Fly app name changes, update the `app` value and `[env] API_UPSTREAM` in
+`frontend/fly.toml` (and `frontend/fly.dev.toml` for dev), deploy the frontend
+again, and set the backend `APP_URL` and `CORS_ORIGINS` to the final frontend
 URL.
+
+## Dev environment one-time setup
+
+The dev environment (`nfl-confidence-api-dev`, `nfl-confidence-web-dev`)
+mirrors production but uses its own database and its own copy of every
+secret. Run once, using the same account/org as prod:
+
+```powershell
+fly apps create nfl-confidence-api-dev
+fly apps create nfl-confidence-web-dev
+```
+
+Provision a dev database on Neon Free (a separate project or branch from
+whatever Neon project is used for local/CI testing — do not point dev at
+the same database used for automated tests) and set it:
+
+```powershell
+fly secrets set --app nfl-confidence-api-dev DATABASE_URL='<neon-dev-connection-string>'
+```
+
+Generate a dev-only JWT secret (distinct from prod's) and set the
+remaining secrets, reusing prod's Google OAuth client and Resend key:
+
+```powershell
+$jwt = & .\backend\.venv\Scripts\python.exe -c "import secrets; print(secrets.token_urlsafe(64))"
+
+fly secrets set --app nfl-confidence-api-dev `
+  JWT_SECRET=$jwt `
+  GOOGLE_CLIENT_ID='<same-value-as-prod>' `
+  GOOGLE_CLIENT_SECRET='<same-value-as-prod>' `
+  RESEND_API_KEY='<same-value-as-prod>'
+```
+
+In Google Cloud Console, add to the **existing** OAuth client (do not
+create a new one unless isolation from prod becomes a concern later):
+
+- Authorized JavaScript origin: `https://nfl-confidence-web-dev.fly.dev`
+- Authorized redirect URI: `https://nfl-confidence-web-dev.fly.dev/api/v1/auth/google/callback`
+
+Dev sends real email through the same verified Resend domain as prod —
+use your own address, not a real invitee's, when testing the invite flow
+in dev.
+
+Create an org-scoped Fly deploy token (not `fly tokens create deploy`,
+which is limited to a single app) and add it as a GitHub Actions secret so
+CI can deploy all four apps, which share one Fly org:
+
+```powershell
+fly orgs list
+fly tokens create org --org <org-slug>
+gh secret set FLY_API_TOKEN
+```
+
+Finally, create the `develop` branch:
+
+```powershell
+git checkout -b develop main
+git push -u origin develop
+```
+
+A push to `develop` after this setup triggers the first dev deploy. Run
+the "Deployment smoke test" checklist below against the `-dev` URLs
+before trusting the environment for pre-production verification.
 
 ## Deployment smoke test
 
@@ -350,42 +416,29 @@ Run `lock` around the earliest kickoff, `sync` during and after live games, and
 Every Pull Request
 
 - Install dependencies
-- Run linter
+- Run linter (and format/type checks)
 - Run backend tests
 - Run frontend tests
-- Build frontend
-- Build backend
-- Build Docker images
+- Build frontend (`npm run build`)
 
 ---
 
 # Continuous Deployment
 
-Merge into main
+`.github/workflows/ci.yml` deploys automatically after its lint/test/build
+jobs pass:
 
-↓
+- Push to `develop` → deploys `nfl-confidence-api-dev` then
+  `nfl-confidence-web-dev` (the `deploy-dev` job).
+- Push or merge to `main` → deploys `nfl-confidence-api` then
+  `nfl-confidence-web` (the `deploy-prod` job).
 
-GitHub Actions
-
-↓
-
-Build Images
-
-↓
-
-Deploy to Fly.io
-
-↓
-
-Run Database Migrations
-
-↓
-
-Health Check
-
-↓
-
-Deployment Complete
+Each deploy runs the backend first — its `release_command` applies Alembic
+migrations before the new machine takes traffic — then the frontend. A
+failed backend deploy blocks the frontend deploy in the same run. The
+manual `fly deploy` commands under "Deploy in order" above remain the
+rollback/fallback path if CI is unavailable or a deploy needs to be run
+by hand.
 
 ---
 

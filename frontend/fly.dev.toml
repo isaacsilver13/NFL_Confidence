@@ -1,4 +1,4 @@
-app = "nfl-confidence-web"
+app = "nfl-confidence-web-dev"
 primary_region = "iad"
 
 [build]
@@ -27,4 +27,4 @@ cpus = 1
 cpu_kind = "shared"
 
 [env]
-API_UPSTREAM = "nfl-confidence-api.fly.dev"
+API_UPSTREAM = "nfl-confidence-api-dev.fly.dev"

@@ -17,9 +17,9 @@ server {
     }
 
     location /api/ {
-        proxy_pass https://nfl-confidence-api.fly.dev;
+        proxy_pass https://${API_UPSTREAM};
         proxy_ssl_server_name on;
-        proxy_ssl_name nfl-confidence-api.fly.dev;
+        proxy_ssl_name ${API_UPSTREAM};
 
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-Host $host;
