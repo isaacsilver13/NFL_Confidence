@@ -98,12 +98,12 @@ jobs:
       - uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1 # v1.6
 
       - name: Deploy backend (dev)
-        run: flyctl deploy ./backend --config ./backend/fly.dev.toml --remote-only
+        run: flyctl deploy ./backend --config fly.dev.toml --remote-only
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
 
       - name: Deploy frontend (dev)
-        run: flyctl deploy ./frontend --config ./frontend/fly.dev.toml --remote-only
+        run: flyctl deploy ./frontend --config fly.dev.toml --remote-only
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
 
@@ -117,11 +117,11 @@ jobs:
       - uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1 # v1.6
 
       - name: Deploy backend (prod)
-        run: flyctl deploy ./backend --config ./backend/fly.toml --remote-only
+        run: flyctl deploy ./backend --config fly.toml --remote-only
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
 
       - name: Deploy frontend (prod)
-        run: flyctl deploy ./frontend --config ./frontend/fly.toml --remote-only
+        run: flyctl deploy ./frontend --config fly.toml --remote-only
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
