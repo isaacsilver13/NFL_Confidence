@@ -155,69 +155,6 @@ not declare a second worker process. Do not scale the API to multiple machines
 until the scheduler has moved to a dedicated worker or has a platform-level
 singleton.
 
-## Dev environment one-time setup
-
-The dev environment (`nfl-confidence-api-dev`, `nfl-confidence-web-dev`)
-mirrors production but uses its own database and its own copy of every
-secret. Run once, using the same account/org as prod:
-
-```powershell
-fly apps create nfl-confidence-api-dev
-fly apps create nfl-confidence-web-dev
-```
-
-Provision a dev database on Neon Free (a separate project or branch from
-whatever Neon project is used for local/CI testing — do not point dev at
-the same database used for automated tests) and set it:
-
-```powershell
-fly secrets set --app nfl-confidence-api-dev DATABASE_URL='<neon-dev-connection-string>'
-```
-
-Generate a dev-only JWT secret (distinct from prod's) and set the
-remaining secrets, reusing prod's Google OAuth client and Resend key:
-
-```powershell
-$jwt = & .\backend\.venv\Scripts\python.exe -c "import secrets; print(secrets.token_urlsafe(64))"
-
-fly secrets set --app nfl-confidence-api-dev `
-  JWT_SECRET=$jwt `
-  GOOGLE_CLIENT_ID='<same-value-as-prod>' `
-  GOOGLE_CLIENT_SECRET='<same-value-as-prod>' `
-  RESEND_API_KEY='<same-value-as-prod>'
-```
-
-In Google Cloud Console, add to the **existing** OAuth client (do not
-create a new one unless isolation from prod becomes a concern later):
-
-- Authorized JavaScript origin: `https://nfl-confidence-web-dev.fly.dev`
-- Authorized redirect URI: `https://nfl-confidence-web-dev.fly.dev/api/v1/auth/google/callback`
-
-Dev sends real email through the same verified Resend domain as prod —
-use your own address, not a real invitee's, when testing the invite flow
-in dev.
-
-Create an org-scoped Fly deploy token (not `fly tokens create deploy`,
-which is limited to a single app) and add it as a GitHub Actions secret so
-CI can deploy all four apps, which share one Fly org:
-
-```powershell
-fly orgs list
-fly tokens create org --org <org-slug>
-gh secret set FLY_API_TOKEN
-```
-
-Finally, create the `develop` branch:
-
-```powershell
-git checkout -b develop main
-git push -u origin develop
-```
-
-A push to `develop` after this setup triggers the first dev deploy. Run
-the "Deployment smoke test" checklist below against the `-dev` URLs
-before trusting the environment for pre-production verification.
-
 ### Provision Postgres
 
 Use Fly Managed Postgres for a new deployment. The exact plan names depend on
@@ -333,6 +270,69 @@ If either Fly app name changes, update `frontend/fly.toml` and
 `frontend/nginx.frontend.conf`, deploy the frontend again, and set the backend
 `APP_URL`, `CORS_ORIGINS`, and `GOOGLE_OAUTH_REDIRECT_URL` to the final frontend
 URL.
+
+## Dev environment one-time setup
+
+The dev environment (`nfl-confidence-api-dev`, `nfl-confidence-web-dev`)
+mirrors production but uses its own database and its own copy of every
+secret. Run once, using the same account/org as prod:
+
+```powershell
+fly apps create nfl-confidence-api-dev
+fly apps create nfl-confidence-web-dev
+```
+
+Provision a dev database on Neon Free (a separate project or branch from
+whatever Neon project is used for local/CI testing — do not point dev at
+the same database used for automated tests) and set it:
+
+```powershell
+fly secrets set --app nfl-confidence-api-dev DATABASE_URL='<neon-dev-connection-string>'
+```
+
+Generate a dev-only JWT secret (distinct from prod's) and set the
+remaining secrets, reusing prod's Google OAuth client and Resend key:
+
+```powershell
+$jwt = & .\backend\.venv\Scripts\python.exe -c "import secrets; print(secrets.token_urlsafe(64))"
+
+fly secrets set --app nfl-confidence-api-dev `
+  JWT_SECRET=$jwt `
+  GOOGLE_CLIENT_ID='<same-value-as-prod>' `
+  GOOGLE_CLIENT_SECRET='<same-value-as-prod>' `
+  RESEND_API_KEY='<same-value-as-prod>'
+```
+
+In Google Cloud Console, add to the **existing** OAuth client (do not
+create a new one unless isolation from prod becomes a concern later):
+
+- Authorized JavaScript origin: `https://nfl-confidence-web-dev.fly.dev`
+- Authorized redirect URI: `https://nfl-confidence-web-dev.fly.dev/api/v1/auth/google/callback`
+
+Dev sends real email through the same verified Resend domain as prod —
+use your own address, not a real invitee's, when testing the invite flow
+in dev.
+
+Create an org-scoped Fly deploy token (not `fly tokens create deploy`,
+which is limited to a single app) and add it as a GitHub Actions secret so
+CI can deploy all four apps, which share one Fly org:
+
+```powershell
+fly orgs list
+fly tokens create org --org <org-slug>
+gh secret set FLY_API_TOKEN
+```
+
+Finally, create the `develop` branch:
+
+```powershell
+git checkout -b develop main
+git push -u origin develop
+```
+
+A push to `develop` after this setup triggers the first dev deploy. Run
+the "Deployment smoke test" checklist below against the `-dev` URLs
+before trusting the environment for pre-production verification.
 
 ## Deployment smoke test
 
