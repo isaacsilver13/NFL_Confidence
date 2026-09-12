@@ -14,12 +14,12 @@ Fly.io
 
 The checked-in Fly configs use these default app names:
 
-- API: `nfl-confidence-api`
-- Frontend: `nfl-confidence-web`
+- API: `nfl-confidence-api` (prod, `backend/fly.toml`), `nfl-confidence-api-dev` (dev, `backend/fly.dev.toml`)
+- Frontend: `nfl-confidence-web` (prod, `frontend/fly.toml`), `nfl-confidence-web-dev` (dev, `frontend/fly.dev.toml`)
 
-Fly app names are globally unique. Change the `app` value in
-`backend/fly.toml` or `frontend/fly.toml` if either name is already taken, and
-update the frontend `VITE_API_URL` build argument and the URLs below to match.
+Fly app names are globally unique. Change the `app` value in the relevant
+config file if a name is already taken, and update the frontend
+`VITE_API_URL` build argument and the URLs below to match.
 
 ---
 
@@ -265,10 +265,11 @@ fly status --app nfl-confidence-web
 Invoke-WebRequest https://nfl-confidence-web.fly.dev/
 ```
 
-The frontend config builds against `/api/v1`; Nginx proxies that path to the API.
-If either Fly app name changes, update `frontend/fly.toml` and
-`frontend/nginx.frontend.conf`, deploy the frontend again, and set the backend
-`APP_URL`, `CORS_ORIGINS`, and `GOOGLE_OAUTH_REDIRECT_URL` to the final frontend
+The frontend config builds against `/api/v1`; Nginx proxies that path to the API
+using the `API_UPSTREAM` env var set in `frontend/fly.toml`'s `[env]` block. If
+either Fly app name changes, update the `app` value and `[env] API_UPSTREAM` in
+`frontend/fly.toml` (and `frontend/fly.dev.toml` for dev), deploy the frontend
+again, and set the backend `APP_URL` and `CORS_ORIGINS` to the final frontend
 URL.
 
 ## Dev environment one-time setup
@@ -415,12 +416,10 @@ Run `lock` around the earliest kickoff, `sync` during and after live games, and
 Every Pull Request
 
 - Install dependencies
-- Run linter
+- Run linter (and format/type checks)
 - Run backend tests
 - Run frontend tests
-- Build frontend
-- Build backend
-- Build Docker images
+- Build frontend (`npm run build`)
 
 ---
 
@@ -437,7 +436,7 @@ jobs pass:
 Each deploy runs the backend first — its `release_command` applies Alembic
 migrations before the new machine takes traffic — then the frontend. A
 failed backend deploy blocks the frontend deploy in the same run. The
-manual `fly deploy` commands under "Deploy in order" below remain the
+manual `fly deploy` commands under "Deploy in order" above remain the
 rollback/fallback path if CI is unavailable or a deploy needs to be run
 by hand.
 
