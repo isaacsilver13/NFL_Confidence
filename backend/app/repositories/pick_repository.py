@@ -2,7 +2,7 @@
 
 import uuid
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.models.enums import WeekStatus
@@ -62,9 +62,17 @@ def count_voided_by_user_and_week(db: Session, *, user_id: uuid.UUID, week_id: u
     )
 
 
-def list_by_user_and_completed_season(
-    db: Session, *, user_id: uuid.UUID, league_id: uuid.UUID, season: int
+def list_by_user_and_history_season(
+    db: Session,
+    *,
+    user_id: uuid.UUID,
+    league_id: uuid.UUID,
+    season: int,
+    current_week_id: uuid.UUID | None = None,
 ) -> list[Pick]:
+    week_filter = NflWeek.status == WeekStatus.COMPLETE
+    if current_week_id is not None:
+        week_filter = or_(week_filter, NflWeek.id == current_week_id)
     return list(
         db.execute(
             select(Pick)
@@ -75,7 +83,7 @@ def list_by_user_and_completed_season(
                 Pick.user_id == user_id,
                 LeagueMember.league_id == league_id,
                 NflWeek.season == season,
-                NflWeek.status == WeekStatus.COMPLETE,
+                week_filter,
             )
             .options(joinedload(Pick.game).joinedload(NflGame.week))
             .order_by(NflWeek.week_number, NflGame.kickoff_time)

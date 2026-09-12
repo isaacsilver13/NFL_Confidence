@@ -60,7 +60,10 @@ describe('AppLayout commissioner navigation', () => {
   it('shows the Members tab to owners', async () => {
     renderLayout({ status: 'member', role: 'owner' })
 
-    expect(await screen.findByRole('link', { name: 'Members' })).toBeInTheDocument()
+    expect(await screen.findByRole('link', { name: 'Members' })).toHaveAttribute(
+      'href',
+      '/league-settings',
+    )
   })
 
   it('hides the Members tab from regular members', async () => {

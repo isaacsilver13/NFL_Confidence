@@ -3,13 +3,15 @@
 import uuid
 from datetime import datetime, timedelta, timezone
 
+import pytest
 from sqlalchemy.orm import Session
 
 from app.auth.jwt import create_access_token
+from app.core.exceptions import NotFoundError
 from app.models import League, LeagueMember, NflGame, NflWeek, Pick, User
 from app.models.enums import GameStatus, LeagueRole, WeekStatus
 from app.repositories import league_repository, nfl_game_repository, nfl_week_repository
-from app.services import league_service, picks_service
+from app.services import league_service, picks_service, weeks_service
 
 
 def _make_user(db_session: Session) -> User:
@@ -103,6 +105,44 @@ def test_current_nfl_endpoints_and_pick_update(client, db_session: Session) -> N
     update_response = client.post("/api/v1/picks", json=payload, headers=headers)
     assert update_response.status_code == 200
     assert db_session.query(Pick).filter_by(user_id=user.id).count() == len(games)
+
+
+def test_get_current_week_falls_back_to_earliest_incomplete_week(db_session: Session) -> None:
+    """A week's `end_date` is derived from its last game's kickoff time, so the
+    strict date-range lookup can stop matching before that game (or the
+    week's scoring) has actually finished -- e.g. the moment Monday Night
+    Football kicks off. `get_current_week` must still resolve that week (so
+    it stays reachable for sync) rather than raising, as long as it hasn't
+    reached WeekStatus.COMPLETE.
+    """
+    user = _make_user(db_session)
+    league = league_service.create_league(
+        db_session, owner=user, name="Fallback Test League", season=2026
+    )
+    now = datetime.now(timezone.utc)
+
+    # Simulate the window having closed right after the last kickoff, before
+    # that game (or scoring) actually finished.
+    stuck_week = nfl_week_repository.create(
+        db_session,
+        season=league.season,
+        week_number=1,
+        start_date=now - timedelta(days=8),
+        end_date=now - timedelta(hours=1),
+    )
+    stuck_week.status = WeekStatus.REGULAR
+    db_session.commit()
+
+    resolved = weeks_service.get_current_week(db_session)
+    assert resolved.id == stuck_week.id
+
+    # Once the week is actually complete, it must no longer be treated as
+    # current -- the fallback should not resurrect a finished week forever.
+    stuck_week.status = WeekStatus.COMPLETE
+    db_session.commit()
+
+    with pytest.raises(NotFoundError):
+        weeks_service.get_current_week(db_session)
 
 
 def test_picks_reject_duplicate_confidence_values(client, db_session: Session) -> None:
@@ -206,7 +246,7 @@ def test_picks_lock_for_entire_week_at_first_kickoff(client, db_session: Session
     assert "already kicked off" in response.json()["error"]["message"]
 
 
-def test_pick_history_is_private_and_contains_outcomes(db_session: Session) -> None:
+def test_pick_history_is_private_and_includes_current_week(db_session: Session) -> None:
     suffix = uuid.uuid4().hex
     owner = _make_user(db_session)
     other_user = _make_user(db_session)
@@ -232,11 +272,12 @@ def test_pick_history_is_private_and_contains_outcomes(db_session: Session) -> N
         end_date=datetime(2026, 9, 7, tzinfo=timezone.utc),
         status=WeekStatus.COMPLETE,
     )
+    now = datetime.now(timezone.utc)
     open_week = NflWeek(
         season=league.season,
         week_number=3,
-        start_date=datetime(2026, 9, 8, tzinfo=timezone.utc),
-        end_date=datetime(2026, 9, 14, tzinfo=timezone.utc),
+        start_date=now - timedelta(days=1),
+        end_date=now + timedelta(days=6),
         status=WeekStatus.REGULAR,
     )
     db_session.add_all([complete_week, open_week])
@@ -257,7 +298,7 @@ def test_pick_history_is_private_and_contains_outcomes(db_session: Session) -> N
     open_game = NflGame(
         week_id=open_week.id,
         espn_game_id=f"history-open-{suffix}",
-        kickoff_time=datetime(2026, 9, 10, tzinfo=timezone.utc),
+        kickoff_time=now + timedelta(days=1),
         away_team="DAL",
         home_team="NYG",
         game_status=GameStatus.FINAL,
@@ -300,8 +341,9 @@ def test_pick_history_is_private_and_contains_outcomes(db_session: Session) -> N
 
     result = picks_service.get_user_pick_history(db_session, user=owner, league=league)
 
-    assert [week.week_number for week in result.weeks] == [2]
+    assert [week.week_number for week in result.weeks] == [2, 3]
     assert [(pick.team, pick.outcome) for pick in result.weeks[0].picks] == [
         ("KC", "correct"),
         ("GB", "unscored"),
     ]
+    assert [(pick.team, pick.outcome) for pick in result.weeks[1].picks] == [("DAL", "unscored")]

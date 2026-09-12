@@ -1,12 +1,203 @@
-import { useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { ArrowUpRight, CalendarDays, KeyRound, Users } from 'lucide-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { ApiError } from '@/api/client'
 import { createLeague, joinLeagueWithCode } from '@/api/league'
-import { fetchSessionBootstrap } from '@/api/session'
+import { fetchCompletedWeeks, fetchPickHistory } from '@/api/nfl'
 import { fetchWeeklyLeaderboard, fetchSeasonStandings } from '@/api/leaderboard'
+import { fetchCurrentPicksCard, fetchSessionBootstrap } from '@/api/session'
 import { Button } from '@/components/ui/Button'
+import { AccordionSection } from '@/components/ui/AccordionSection'
+
+const PicksPage = lazy(() =>
+  import('./PicksPage').then((module) => ({ default: module.PicksPage })),
+)
+const LeaderboardPage = lazy(() =>
+  import('./LeaderboardPage').then((module) => ({ default: module.LeaderboardPage })),
+)
+const StandingsPage = lazy(() =>
+  import('./StandingsPage').then((module) => ({ default: module.StandingsPage })),
+)
+const ProfilePage = lazy(() =>
+  import('./ProfilePage').then((module) => ({ default: module.ProfilePage })),
+)
+
+const SECTION_IDS = ['picks', 'leaderboard', 'standings', 'profile'] as const
+type SectionId = (typeof SECTION_IDS)[number]
+const OPEN_SECTIONS_STORAGE_PREFIX = 'nfl-confidence:open-sections:'
+
+function sectionFromHash(): SectionId | null {
+  const hash = window.location.hash.replace(/^#/, '')
+  if (hash === 'profile-picks') return 'profile'
+  return SECTION_IDS.includes(hash as SectionId) ? (hash as SectionId) : null
+}
+
+function initialOpenSections(userId: string): SectionId[] {
+  let storedSections: SectionId[] = ['picks']
+  try {
+    const stored = window.localStorage.getItem(`${OPEN_SECTIONS_STORAGE_PREFIX}${userId}`)
+    if (stored) {
+      const parsed = JSON.parse(stored) as unknown
+      if (Array.isArray(parsed)) {
+        storedSections = parsed.filter((section): section is SectionId =>
+          SECTION_IDS.includes(section as SectionId),
+        )
+      }
+    }
+  } catch {
+    storedSections = ['picks']
+  }
+  const hashSection = sectionFromHash()
+  return hashSection && !storedSections.includes(hashSection)
+    ? [...storedSections, hashSection]
+    : storedSections
+}
+
+function sectionSummary(value: string | undefined, fallback: string): string {
+  return value ?? fallback
+}
+
+function DashboardSections({ userId }: { userId: string }) {
+  const [openSections, setOpenSections] = useState<SectionId[]>(() => initialOpenSections(userId))
+  const isOpen = (section: SectionId) => openSections.includes(section)
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        `${OPEN_SECTIONS_STORAGE_PREFIX}${userId}`,
+        JSON.stringify(openSections),
+      )
+    } catch {
+      return
+    }
+  }, [openSections, userId])
+
+  useEffect(() => {
+    function handleHashChange() {
+      const section = sectionFromHash()
+      if (section) {
+        setOpenSections((current) => (current.includes(section) ? current : [...current, section]))
+      }
+    }
+    window.addEventListener('hashchange', handleHashChange)
+    return () => window.removeEventListener('hashchange', handleHashChange)
+  }, [])
+
+  function toggleSection(section: SectionId) {
+    setOpenSections((current) => {
+      const next = current.includes(section)
+        ? current.filter((currentSection) => currentSection !== section)
+        : [...current, section]
+      const nextLocation = current.includes(section)
+        ? `${window.location.pathname}${window.location.search}`
+        : `${window.location.pathname}${window.location.search}#${section}`
+      window.history.replaceState(null, '', nextLocation)
+      return next
+    })
+  }
+
+  const leaderboardWeeksQuery = useQuery({
+    queryKey: ['leaderboard', 'weeks'],
+    queryFn: fetchCompletedWeeks,
+    enabled: isOpen('leaderboard'),
+    staleTime: 10 * 60_000,
+  })
+  const latestCompletedWeek = leaderboardWeeksQuery.data?.at(-1)?.weekNumber
+  const leaderboardQuery = useQuery({
+    queryKey: ['leaderboard', 'week', latestCompletedWeek],
+    queryFn: () => fetchWeeklyLeaderboard(latestCompletedWeek as number),
+    enabled: isOpen('leaderboard') && latestCompletedWeek !== undefined,
+    staleTime: 10 * 60_000,
+  })
+  const standingsQuery = useQuery({
+    queryKey: ['leaderboard', 'season'],
+    queryFn: () => fetchSeasonStandings(),
+    enabled: isOpen('standings'),
+    staleTime: 10 * 60_000,
+  })
+  const picksQuery = useQuery({
+    queryKey: ['picks', 'card', 'current'],
+    queryFn: fetchCurrentPicksCard,
+    enabled: isOpen('picks') || isOpen('profile'),
+    staleTime: 10_000,
+  })
+  const historyQuery = useQuery({
+    queryKey: ['picks', 'history'],
+    queryFn: fetchPickHistory,
+    enabled: isOpen('profile'),
+    staleTime: 10 * 60_000,
+  })
+
+  const weeklyMember = leaderboardQuery.data?.standings.find((member) => member.memberId === userId)
+  const seasonMember = standingsQuery.data?.standings.find((member) => member.memberId === userId)
+  const currentPickCount = picksQuery.data?.picks.filter((pick) => !pick.isVoided).length
+  const currentGameCount = picksQuery.data?.games.length ?? 16
+  const summaries: Record<SectionId, string> = {
+    picks: sectionSummary(
+      picksQuery.data
+        ? `${currentPickCount ?? 0} of ${currentGameCount} picked this week`
+        : undefined,
+      "Make this week's picks",
+    ),
+    leaderboard: sectionSummary(
+      weeklyMember ? `Your current rank is #${weeklyMember.rank}` : undefined,
+      'See the weekly race and your current rank',
+    ),
+    standings: sectionSummary(
+      seasonMember
+        ? `Your season pick record is ${seasonMember.correctPicks}-${seasonMember.incorrectPicks}`
+        : undefined,
+      'See your season record and league standings',
+    ),
+    profile: sectionSummary(
+      picksQuery.data
+        ? `${currentPickCount ?? 0} of ${currentGameCount} picked this week`
+        : historyQuery.data?.weeks.at(-1)
+          ? `Last reviewed: Week ${historyQuery.data.weeks.at(-1)?.weekNumber}`
+          : undefined,
+      'Review your current and completed-week picks',
+    ),
+  }
+
+  const sectionContent: Record<SectionId, React.ReactNode> = {
+    picks: <PicksPage />,
+    leaderboard: <LeaderboardPage />,
+    standings: <StandingsPage />,
+    profile: <ProfilePage />,
+  }
+  const sectionTitles: Record<SectionId, string> = {
+    picks: 'Picks',
+    leaderboard: 'Leaderboard',
+    standings: 'Standings',
+    profile: 'Profile Picks',
+  }
+
+  return (
+    <div className="space-y-4" aria-label="League sections">
+      {SECTION_IDS.map((section) => (
+        <AccordionSection
+          key={section}
+          id={section}
+          title={sectionTitles[section]}
+          summary={summaries[section]}
+          isOpen={isOpen(section)}
+          onToggle={() => toggleSection(section)}
+        >
+          <Suspense
+            fallback={
+              <p className="text-slate-600 dark:text-slate-300" aria-live="polite">
+                Loading {sectionTitles[section].toLowerCase()}...
+              </p>
+            }
+          >
+            {sectionContent[section]}
+          </Suspense>
+        </AccordionSection>
+      ))}
+    </div>
+  )
+}
 
 const CURRENT_SEASON = new Date().getFullYear()
 
@@ -134,42 +325,6 @@ export function DashboardPage() {
   const currentWeek = bootstrapData?.currentWeek ?? null
   const user = bootstrapData?.user
 
-  // Fetch leaderboard data for current week if we have a league and week
-  const { data: weeklyLeaderboard, isLoading: isWeeklyLoading } = useQuery({
-    queryKey: ['leaderboard', 'week', currentWeek?.weekNumber],
-    queryFn: () => fetchWeeklyLeaderboard(currentWeek?.weekNumber),
-    enabled: Boolean(league && currentWeek),
-    retry: false,
-    staleTime: 2 * 60_000,
-  })
-
-  // Fetch season standings if we have a league
-  const { data: seasonStandings, isLoading: isSeasonLoading } = useQuery({
-    queryKey: ['leaderboard', 'season'],
-    queryFn: () => fetchSeasonStandings(),
-    enabled: Boolean(league),
-    retry: false,
-    staleTime: 10 * 60_000,
-  })
-
-  // Find user's rank in weekly leaderboard
-  const weeklyRank =
-    weeklyLeaderboard && user
-      ? (weeklyLeaderboard.standings.findIndex(
-          (entry: { memberId: string }) => entry.memberId === user.id,
-        ) ?? -1) + 1
-      : null
-  const displayWeeklyRank = weeklyRank && weeklyRank > 0 ? `#${weeklyRank}` : 'Not scored'
-
-  // Find user's rank in season standings
-  const seasonRank =
-    seasonStandings && user
-      ? (seasonStandings.standings.findIndex(
-          (entry: { memberId: string }) => entry.memberId === user.id,
-        ) ?? -1) + 1
-      : null
-  const displaySeasonRank = seasonRank && seasonRank > 0 ? `#${seasonRank}` : 'Not scored'
-
   if (isLoading) {
     return null
   }
@@ -218,6 +373,8 @@ export function DashboardPage() {
     )
   }
 
+  if (!user) return null
+
   return (
     <div className="animate-fade-in space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
@@ -227,7 +384,7 @@ export function DashboardPage() {
             Dashboard
           </h1>
         </div>
-        <Button variant="secondary" onClick={() => void navigate('/picks')}>
+        <Button variant="secondary" onClick={() => void navigate('/#picks')}>
           Make picks <ArrowUpRight size={16} aria-hidden="true" />
         </Button>
       </div>
@@ -248,23 +405,15 @@ export function DashboardPage() {
           </div>
         </div>
       )}
-      <div className="grid gap-4 sm:grid-cols-3">
-        {[
-          ['Current week', currentWeek ? `Week ${currentWeek.weekNumber}` : 'Unavailable'],
-          ['My weekly rank', isWeeklyLoading ? 'Loading…' : displayWeeklyRank],
-          ['Season rank', isSeasonLoading ? 'Loading…' : displaySeasonRank],
-        ].map(([label, value]) => (
-          <div
-            key={label}
-            className="rounded-2xl border border-slate-200 bg-surface p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900"
-          >
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-ink-muted dark:text-slate-400">
-              {label}
-            </p>
-            <p className="mt-4 text-2xl font-black text-primary dark:text-white">{value}</p>
-          </div>
-        ))}
+      <div className="rounded-2xl border border-slate-200 bg-surface p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <p className="text-xs font-bold uppercase tracking-[0.16em] text-ink-muted dark:text-slate-400">
+          Current week
+        </p>
+        <p className="mt-2 text-2xl font-black text-primary dark:text-white">
+          {currentWeek ? `Week ${currentWeek.weekNumber}` : 'Unavailable'}
+        </p>
       </div>
+      <DashboardSections userId={user.id} />
     </div>
   )
 }

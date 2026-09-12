@@ -51,8 +51,8 @@ export function TeamLogo({
   size = 'md',
   ...imgProps
 }: TeamLogoProps) {
-  const normalizedCode = code.trim().toUpperCase()
-  const teamConfig = getTeamLogoConfig(normalizedCode)
+  const teamConfig = getTeamLogoConfig(code)
+  const normalizedCode = teamConfig?.espnCode ?? code.trim().toUpperCase()
   const teamName = getTeamName(normalizedCode)
   const palette = getTeamPalette(normalizedCode)
   const pixelSize = imageSizePixels[size]

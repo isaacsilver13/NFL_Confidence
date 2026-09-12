@@ -8,10 +8,10 @@ from unittest.mock import AsyncMock
 import pytest
 from authlib.integrations.base_client.errors import OAuthError
 from fastapi.testclient import TestClient
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, ProgrammingError
 
 from app.api import auth
-from app.api.auth import _run_google_request
+from app.api.auth import _database_error_details, _run_google_request
 from app.core.exceptions import UnauthorizedError
 from app.models.user import User
 
@@ -35,6 +35,26 @@ async def test_google_request_timeout_is_mapped_to_unauthorized(
 
     with pytest.raises(UnauthorizedError, match="Google sign-in is temporarily unavailable"):
         await _run_google_request(_slow_google_operation())
+
+
+def test_database_error_details_keep_safe_driver_diagnostics() -> None:
+    original = RuntimeError("do not expose this message")
+    original.sqlstate = "42P01"
+    original.diag = SimpleNamespace(
+        table_name="refresh_tokens",
+        column_name=None,
+        constraint_name=None,
+    )
+    error = ProgrammingError("statement", {}, original)
+
+    assert _database_error_details(error) == (
+        "ProgrammingError",
+        "RuntimeError",
+        "42P01",
+        "refresh_tokens",
+        None,
+        None,
+    )
 
 
 @pytest.mark.parametrize("operation", [_timeout_operation, _provider_error_operation])

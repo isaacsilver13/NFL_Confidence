@@ -6,13 +6,7 @@ import { Button } from '@/components/ui/Button'
 import { NflMark } from '@/components/nfl/NflMark'
 import { useAuth } from '@/features/auth/AuthContext'
 
-const NAV_LINKS = [
-  { to: '/', label: 'Dashboard' },
-  { to: '/picks', label: 'Picks' },
-  { to: '/leaderboard', label: 'Leaderboard' },
-  { to: '/standings', label: 'Standings' },
-  { to: '/profile', label: 'Profile' },
-]
+const NAV_LINKS = [{ to: '/', label: 'Dashboard' }]
 
 function navLinkClassName({ isActive }: { isActive: boolean }): string {
   return [
@@ -35,7 +29,9 @@ export function AppLayout() {
   })
   const isCommissioner =
     bootstrapData?.membership.status === 'member' && bootstrapData.membership.role === 'owner'
-  const navLinks = isCommissioner ? [...NAV_LINKS, { to: '/members', label: 'Members' }] : NAV_LINKS
+  const navLinks = isCommissioner
+    ? [...NAV_LINKS, { to: '/league-settings', label: 'Members' }]
+    : NAV_LINKS
 
   async function handleSignOut() {
     await signOut()
