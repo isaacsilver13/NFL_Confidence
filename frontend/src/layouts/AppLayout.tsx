@@ -40,17 +40,29 @@ export function AppLayout() {
 
   return (
     <div className="flex min-h-screen flex-col">
-      <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/95 backdrop-blur dark:border-slate-800 dark:bg-slate-950/95">
-        <nav className="mx-auto flex max-w-5xl items-center gap-1 overflow-x-auto px-4 py-3">
+      {/* Fixed height (rather than padding-driven) so nested sticky bars (e.g.
+          PicksPage's progress header) can offset by the same `top-16` and
+          stack below this header instead of sliding underneath it. */}
+      <header className="sticky top-0 z-10 h-16 border-b border-slate-200 bg-white/95 backdrop-blur dark:border-slate-800 dark:bg-slate-950/95">
+        <nav className="mx-auto flex h-full max-w-5xl items-center gap-1 px-4">
           <NavLink to="/" end className="mr-4 shrink-0" aria-label="NFL Confidence home">
             <NflMark />
           </NavLink>
-          {navLinks.map((link) => (
-            <NavLink key={link.to} to={link.to} end={link.to === '/'} className={navLinkClassName}>
-              {link.label}
-            </NavLink>
-          ))}
-          <span className="ml-auto flex shrink-0 items-center gap-3">
+          {/* Only this middle section scrolls on overflow, so the logo and the
+              sign-out button below are never pushed off-screen on narrow phones. */}
+          <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
+            {navLinks.map((link) => (
+              <NavLink
+                key={link.to}
+                to={link.to}
+                end={link.to === '/'}
+                className={navLinkClassName}
+              >
+                {link.label}
+              </NavLink>
+            ))}
+          </div>
+          <span className="ml-2 flex shrink-0 items-center gap-3">
             {user && (
               <span className="hidden max-w-32 truncate text-sm font-semibold text-ink-muted sm:inline dark:text-slate-300">
                 {user.displayName}

@@ -4,11 +4,12 @@ import { Trophy } from 'lucide-react'
 import { ApiError } from '@/api/client'
 import { fetchWeeklyLeaderboard } from '@/api/leaderboard'
 import { fetchCompletedWeeks } from '@/api/nfl'
+import { ScrollableTable } from '@/components/ui/ScrollableTable'
 import type { LeaderboardMember } from '@/types/leaderboard'
 
 function LeaderboardTable({ standings }: { standings: LeaderboardMember[] }) {
   return (
-    <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-surface shadow-sm dark:border-slate-800 dark:bg-slate-900">
+    <ScrollableTable>
       <table className="w-full min-w-[680px] text-left text-sm">
         <caption className="sr-only">Weekly leaderboard rankings</caption>
         <thead className="bg-surface-muted text-xs uppercase tracking-[0.14em] text-ink-muted dark:bg-slate-950 dark:text-slate-400">
@@ -26,7 +27,7 @@ function LeaderboardTable({ standings }: { standings: LeaderboardMember[] }) {
           {standings.map((member) => (
             <tr
               key={member.memberId}
-              className="transition-colors hover:bg-surface-muted/60 dark:hover:bg-slate-950/60"
+              className="odd:bg-surface-muted/40 transition-colors hover:bg-surface-muted/60 dark:odd:bg-slate-950/40 dark:hover:bg-slate-950/60"
             >
               <th scope="row" className="px-5 py-4 font-black text-primary dark:text-white">
                 {member.rank}
@@ -43,7 +44,7 @@ function LeaderboardTable({ standings }: { standings: LeaderboardMember[] }) {
           ))}
         </tbody>
       </table>
-    </div>
+    </ScrollableTable>
   )
 }
 

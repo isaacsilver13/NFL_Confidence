@@ -1,5 +1,6 @@
 import { Suspense, lazy } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
+import { PageLoader } from './components/ui/PageLoader'
 import { ProtectedRoute } from './features/auth/ProtectedRoute'
 import { AppLayout } from './layouts/AppLayout'
 import { LoginPage } from './pages/LoginPage'
@@ -14,10 +15,6 @@ const JoinLeaguePage = lazy(() =>
 const LeagueSettingsPage = lazy(() =>
   import('./pages/LeagueSettingsPage').then((m) => ({ default: m.LeagueSettingsPage })),
 )
-
-function PageLoader() {
-  return null // Show nothing while loading; page will render when ready
-}
 
 function App() {
   return (

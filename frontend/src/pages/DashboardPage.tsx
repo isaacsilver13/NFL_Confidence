@@ -9,6 +9,7 @@ import { fetchWeeklyLeaderboard, fetchSeasonStandings } from '@/api/leaderboard'
 import { fetchCurrentPicksCard, fetchSessionBootstrap } from '@/api/session'
 import { Button } from '@/components/ui/Button'
 import { AccordionSection } from '@/components/ui/AccordionSection'
+import { PageLoader } from '@/components/ui/PageLoader'
 
 const PicksPage = lazy(() =>
   import('./PicksPage').then((module) => ({ default: module.PicksPage })),
@@ -215,8 +216,14 @@ function CreateLeagueForm() {
     try {
       await createLeague({ name: name.trim(), season })
       await queryClient.invalidateQueries({ queryKey: ['session', 'bootstrap'] })
-    } catch {
-      setError('Could not create the league. Please try again.')
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 409) {
+        setError('A league already exists. This application supports only one league.')
+      } else if (error instanceof ApiError) {
+        setError(error.message)
+      } else {
+        setError('Could not create the league. Please try again.')
+      }
     } finally {
       setIsSubmitting(false)
     }
@@ -326,7 +333,7 @@ export function DashboardPage() {
   const user = bootstrapData?.user
 
   if (isLoading) {
-    return null
+    return <PageLoader />
   }
 
   if (

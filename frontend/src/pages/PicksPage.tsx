@@ -268,7 +268,9 @@ function GamesForm({ week, games, picks }: { week: NflWeek; games: NflGame[]; pi
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="sticky top-0 z-10 -mx-1 space-y-3 rounded-2xl border border-slate-200 bg-surface/95 px-4 py-3 shadow-sm backdrop-blur dark:border-slate-800 dark:bg-slate-900/95 sm:mx-0">
+      {/* top-16 (not top-0) so this stacks below AppLayout's own sticky header
+          (h-16) instead of sliding underneath/behind it once both are stuck. */}
+      <div className="sticky top-16 z-10 -mx-1 space-y-3 rounded-2xl border border-slate-200 bg-surface/95 px-4 py-3 shadow-sm backdrop-blur dark:border-slate-800 dark:bg-slate-900/95 sm:mx-0">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.16em] text-ink-muted dark:text-slate-400">
@@ -554,7 +556,7 @@ function PicksScrollPane({ children }: { children: ReactNode }) {
   return (
     <div
       data-testid="picks-scroll-pane"
-      className="h-[calc(100dvh-8rem)] overflow-y-auto overscroll-contain px-1 pb-4 sm:h-auto sm:overflow-visible sm:px-0 sm:pb-0"
+      className="h-[calc(100dvh-12rem)] overflow-y-auto overscroll-contain px-1 pb-4 sm:h-auto sm:overflow-visible sm:px-0 sm:pb-0"
     >
       {children}
     </div>

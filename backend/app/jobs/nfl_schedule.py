@@ -5,6 +5,7 @@ import logging
 from datetime import datetime, timezone
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import get_settings
@@ -153,14 +154,22 @@ def _send_weekly_reminders(db: Session) -> int:
         remaining = len(games) - len(picks)
         if remaining <= 0:
             continue
-        send_weekly_reminder(
-            to=member.user.email,
-            season=league.season,
-            week_number=week.week_number,
-            remaining_picks=remaining,
-            deadline=deadline.isoformat(),
-            picks_link=f"{get_settings().app_url.rstrip('/')}/picks",
-        )
+        try:
+            send_weekly_reminder(
+                to=member.user.email,
+                season=league.season,
+                week_number=week.week_number,
+                remaining_picks=remaining,
+                deadline=deadline.isoformat(),
+                picks_link=f"{get_settings().app_url.rstrip('/')}/picks",
+            )
+        except Exception:
+            logger.exception(
+                "Failed to send weekly reminder to user=%s week=%s",
+                member.user_id,
+                week.id,
+            )
+            continue
         db.add(
             NotificationDelivery(
                 user_id=member.user_id,
@@ -168,8 +177,23 @@ def _send_weekly_reminders(db: Session) -> int:
                 notification_type="weekly_picks_reminder",
             )
         )
+        try:
+            # Commit per member so a later failure (or a concurrent run hitting
+            # the unique constraint) cannot roll back deliveries that already
+            # succeeded.
+            db.commit()
+        except IntegrityError:
+            # Another concurrent run already recorded this delivery. The email
+            # was already sent above, but we must not crash the rest of the
+            # batch over a race we can no longer undo.
+            db.rollback()
+            logger.warning(
+                "Duplicate weekly reminder delivery detected for user=%s week=%s",
+                member.user_id,
+                week.id,
+            )
+        delivered.add(member.user_id)
         sent += 1
-    db.commit()
     logger.info(
         "Weekly reminder run season=%s week=%s sent=%s",
         league.season,

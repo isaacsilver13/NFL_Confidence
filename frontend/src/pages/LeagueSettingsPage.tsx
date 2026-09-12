@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { KeyRound, Mail, Pencil, Save, ShieldCheck, UserMinus, Users, X } from 'lucide-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Navigate } from 'react-router-dom'
+import { ApiError } from '@/api/client'
 import {
   createInvite,
   fetchMemberPaymentStatuses,
@@ -15,7 +16,14 @@ import {
 import { fetchWeeks } from '@/api/nfl'
 import { fetchSessionBootstrap } from '@/api/session'
 import { Button } from '@/components/ui/Button'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
+import { PageLoader } from '@/components/ui/PageLoader'
 import type { LeagueMember } from '@/types/league'
+
+/** Surfaces the backend's own error message when available, since it's already user-facing. */
+function getErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof ApiError ? error.message : fallback
+}
 
 function InviteForm({ onInvited }: { onInvited: () => void }) {
   const [email, setEmail] = useState('')
@@ -33,8 +41,8 @@ function InviteForm({ onInvited }: { onInvited: () => void }) {
       setSuccessMessage(`Invite sent to ${invite.email}.`)
       setEmail('')
       onInvited()
-    } catch {
-      setError('Could not send the invite. Please try again.')
+    } catch (error) {
+      setError(getErrorMessage(error, 'Could not send the invite. Please try again.'))
     } finally {
       setIsSubmitting(false)
     }
@@ -72,6 +80,7 @@ function PaymentAdmin() {
   const [actionUserId, setActionUserId] = useState<string | null>(null)
   const [isVoiding, setIsVoiding] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [showVoidConfirm, setShowVoidConfirm] = useState(false)
   const queryClient = useQueryClient()
   const { data: weeks } = useQuery({
     queryKey: ['weeks'],
@@ -92,15 +101,15 @@ function PaymentAdmin() {
     try {
       await updateMemberPayment(userId, weekNumber, isPaid)
       await queryClient.invalidateQueries({ queryKey: ['league', 'payments', weekNumber] })
-    } catch {
-      setError('Could not update payment status. Please try again.')
+    } catch (error) {
+      setError(getErrorMessage(error, 'Could not update payment status. Please try again.'))
     } finally {
       setActionUserId(null)
     }
   }
 
   async function handleVoidUnpaid() {
-    if (weekNumber === 0 || !window.confirm(`Void all unpaid picks for Week ${weekNumber}?`)) return
+    setShowVoidConfirm(false)
     setError(null)
     setIsVoiding(true)
     try {
@@ -108,8 +117,8 @@ function PaymentAdmin() {
       await queryClient.invalidateQueries({ queryKey: ['league', 'payments', weekNumber] })
       await queryClient.invalidateQueries({ queryKey: ['picks'] })
       await queryClient.invalidateQueries({ queryKey: ['leaderboard'] })
-    } catch {
-      setError('Could not void unpaid picks. Please try again.')
+    } catch (error) {
+      setError(getErrorMessage(error, 'Could not void unpaid picks. Please try again.'))
     } finally {
       setIsVoiding(false)
     }
@@ -130,7 +139,7 @@ function PaymentAdmin() {
             aria-label="Payment week"
             value={weekNumber || ''}
             onChange={(event) => setSelectedWeek(Number(event.target.value))}
-            className="ml-2 min-h-10 rounded-md border border-slate-300 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900"
+            className="ml-2 min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900"
           >
             {weeks?.map((week) => (
               <option key={week.id} value={week.weekNumber}>
@@ -160,7 +169,7 @@ function PaymentAdmin() {
                     </p>
                   )}
                 </div>
-                <label className="flex min-h-10 items-center gap-2 text-sm font-semibold">
+                <label className="flex min-h-11 items-center gap-2 text-sm font-semibold">
                   <input
                     type="checkbox"
                     checked={payment.isPaid}
@@ -178,13 +187,22 @@ function PaymentAdmin() {
           <Button
             type="button"
             variant="danger"
-            onClick={() => void handleVoidUnpaid()}
+            onClick={() => setShowVoidConfirm(true)}
             disabled={isVoiding || weekNumber === 0}
           >
             {isVoiding ? 'Voiding unpaid picks...' : 'Void unpaid picks'}
           </Button>
         </>
       )}
+      <ConfirmDialog
+        open={showVoidConfirm}
+        title="Void unpaid picks"
+        description={`Void all unpaid picks for Week ${weekNumber}? This cannot be undone.`}
+        confirmLabel="Void picks"
+        isBusy={isVoiding}
+        onConfirm={() => void handleVoidUnpaid()}
+        onCancel={() => setShowVoidConfirm(false)}
+      />
     </section>
   )
 }
@@ -200,6 +218,10 @@ export function LeagueSettingsPage() {
     bootstrapData?.membership.status === 'member' && bootstrapData.membership.role === 'owner'
   const [removingUserId, setRemovingUserId] = useState<string | null>(null)
   const [removeError, setRemoveError] = useState<string | null>(null)
+  const [pendingRemoval, setPendingRemoval] = useState<{
+    userId: string
+    displayName: string
+  } | null>(null)
   const [editingUserId, setEditingUserId] = useState<string | null>(null)
   const [draftDisplayName, setDraftDisplayName] = useState('')
   const [draftRole, setDraftRole] = useState<LeagueMember['role']>('member')
@@ -221,7 +243,7 @@ export function LeagueSettingsPage() {
   const queryClient = useQueryClient()
 
   if (isLoadingMembership) {
-    return null
+    return <PageLoader />
   }
 
   if (!isCommissioner) {
@@ -229,7 +251,7 @@ export function LeagueSettingsPage() {
   }
 
   if (isLoadingLeague) {
-    return null
+    return <PageLoader />
   }
 
   if (!league) {
@@ -267,23 +289,25 @@ export function LeagueSettingsPage() {
       await queryClient.invalidateQueries({ queryKey: ['league', 'members'] })
       await queryClient.invalidateQueries({ queryKey: ['session', 'bootstrap'] })
       setEditingUserId(null)
-    } catch {
-      setUpdateError('Could not update this member. Please try again.')
+    } catch (error) {
+      setUpdateError(getErrorMessage(error, 'Could not update this member. Please try again.'))
     } finally {
       setUpdatingUserId(null)
     }
   }
 
-  async function handleRemoveMember(userId: string, displayName: string) {
-    if (!window.confirm(`Remove ${displayName} from the league?`)) return
+  async function handleRemoveMember() {
+    if (!pendingRemoval) return
+    const { userId, displayName } = pendingRemoval
+    setPendingRemoval(null)
     setRemoveError(null)
     setRemovingUserId(userId)
     try {
       await removeLeagueMember(userId)
       await queryClient.invalidateQueries({ queryKey: ['league', 'members'] })
       await queryClient.invalidateQueries({ queryKey: ['session', 'bootstrap'] })
-    } catch {
-      setRemoveError(`Could not remove ${displayName}. Please try again.`)
+    } catch (error) {
+      setRemoveError(getErrorMessage(error, `Could not remove ${displayName}. Please try again.`))
     } finally {
       setRemovingUserId(null)
     }
@@ -424,7 +448,12 @@ export function LeagueSettingsPage() {
                     {member.role !== 'owner' && (
                       <Button
                         variant="danger"
-                        onClick={() => void handleRemoveMember(member.userId, member.displayName)}
+                        onClick={() =>
+                          setPendingRemoval({
+                            userId: member.userId,
+                            displayName: member.displayName,
+                          })
+                        }
                         disabled={removingUserId === member.userId}
                         aria-label={`Remove ${member.displayName}`}
                       >
@@ -441,6 +470,19 @@ export function LeagueSettingsPage() {
       </div>
 
       <PaymentAdmin />
+      <ConfirmDialog
+        open={pendingRemoval !== null}
+        title="Remove member"
+        description={
+          pendingRemoval
+            ? `Remove ${pendingRemoval.displayName} from the league? This cannot be undone.`
+            : ''
+        }
+        confirmLabel="Remove"
+        isBusy={removingUserId !== null}
+        onConfirm={() => void handleRemoveMember()}
+        onCancel={() => setPendingRemoval(null)}
+      />
     </div>
   )
 }

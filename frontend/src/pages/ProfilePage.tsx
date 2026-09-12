@@ -3,6 +3,7 @@ import { ArrowDown, ArrowUp, ArrowUpDown, UserRound } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { ApiError } from '@/api/client'
 import { fetchPickHistory } from '@/api/nfl'
+import { ScrollableTable } from '@/components/ui/ScrollableTable'
 import type { HistoricalPick, PickOutcome } from '@/types/nfl'
 
 const OUTCOME_LABELS: Record<PickOutcome, string> = {
@@ -31,7 +32,7 @@ function formatKickoff(kickoff: string): string {
 function Outcome({ pick }: { pick: HistoricalPick }) {
   const color =
     pick.outcome === 'correct'
-      ? 'text-success'
+      ? 'text-accent'
       : pick.outcome === 'incorrect'
         ? 'text-danger'
         : pick.outcome === 'voided'
@@ -61,7 +62,7 @@ function HistoryTable({ picks }: { picks: HistoricalPick[] }) {
   }
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
+    <ScrollableTable>
       <table className="w-full min-w-[760px] text-left text-sm">
         <caption className="sr-only">Your picks</caption>
         <thead className="bg-surface-muted text-xs uppercase tracking-[0.14em] text-ink-muted dark:bg-slate-950 dark:text-slate-400">
@@ -107,7 +108,7 @@ function HistoryTable({ picks }: { picks: HistoricalPick[] }) {
         </thead>
         <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
           {sortedPicks.map((pick) => (
-            <tr key={pick.id}>
+            <tr key={pick.id} className="odd:bg-surface-muted/40 dark:odd:bg-slate-950/40">
               <th scope="row" className="px-4 py-3 font-semibold">
                 {pick.awayTeam} at {pick.homeTeam}
                 <span className="block text-xs font-normal text-ink-muted dark:text-slate-400">
@@ -124,7 +125,7 @@ function HistoryTable({ picks }: { picks: HistoricalPick[] }) {
           ))}
         </tbody>
       </table>
-    </div>
+    </ScrollableTable>
   )
 }
 

@@ -1,5 +1,5 @@
 import { ChevronDown } from 'lucide-react'
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 
 interface AccordionSectionProps {
   id: string
@@ -20,6 +20,14 @@ export function AccordionSection({
 }: AccordionSectionProps) {
   const headingId = `${id}-heading`
   const bodyId = `${id}-body`
+  // Defer mounting children until first opened (keeps the lazy-loaded page
+  // out of the bundle cost until needed), but once mounted, keep it mounted
+  // and just hide it — unmounting on every collapse would tear down the
+  // section's queries and remount/refetch them each time it reopens.
+  const [hasOpened, setHasOpened] = useState(isOpen)
+  if (isOpen && !hasOpened) {
+    setHasOpened(true)
+  }
 
   return (
     <section
@@ -48,11 +56,12 @@ export function AccordionSection({
           />
         </button>
       </h2>
-      {isOpen && (
+      {hasOpened && (
         <div
           id={bodyId}
           role="region"
           aria-labelledby={headingId}
+          hidden={!isOpen}
           className="border-t border-slate-200 p-4 dark:border-slate-800 sm:p-5"
         >
           {children}

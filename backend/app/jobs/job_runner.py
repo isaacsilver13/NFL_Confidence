@@ -9,8 +9,16 @@ Jobs are:
 - sync_scores: Update scores from completed games
 - lock_picks: Lock all picks for games that have started
 - send_reminders: Send weekly reminder emails to users with incomplete picks
+
+Each job function is a thin async wrapper around the equivalent synchronous
+implementation in `app.jobs.nfl_schedule` — the same code the scheduler's
+cron triggers call directly. Keeping a single implementation per job means
+a manual admin trigger and a scheduled run can never disagree on behavior,
+and combining that with the advisory lock here means they can never race
+each other either.
 """
 
+import asyncio
 import logging
 import uuid
 from collections.abc import Awaitable, Callable
@@ -170,227 +178,56 @@ async def run_job(
 
 
 async def import_games(db: Session) -> None:
-    """Import upcoming and live NFL games from external API.
+    """Import the next unimported week for the active league.
 
-    Fetches current week's schedule from ESPN and stores it in the database.
-    Skips if no active league is configured (single-league v1).
+    Delegates to `nfl_schedule.run_next_week_import`, the same implementation
+    the scheduler's cron trigger uses, so a manual admin trigger cannot drift
+    from (or race against) the scheduled behavior. Runs in a thread since the
+    underlying call is synchronous and does network I/O.
     """
-    from app.integrations.espn import fetch_schedule
-    from app.services import league_service, weeks_service
-    from app.services.nfl_schedule_service import import_games as import_games_service
+    from app.jobs import nfl_schedule
 
     logger.info("Starting import_games job")
-
-    try:
-        league = league_service.get_active_league(db)
-        logger.info(f"Active league: {league.name} (season {league.season})")
-    except Exception as e:
-        logger.info(f"No active league configured: {e}")
-        return
-
-    try:
-        current_week = weeks_service.get_current_week(db)
-        logger.info(f"Current week: {current_week.week_number}")
-    except Exception as e:
-        logger.error(f"Failed to get current week: {e}")
-        return
-
-    try:
-        # Fetch this week's schedule from ESPN
-        espn_games = fetch_schedule(league.season, current_week.week_number)
-        logger.info(f"Fetched {len(espn_games)} games from ESPN")
-
-        # Import into database
-        imported = import_games_service(db, espn_games)
-        logger.info(f"Successfully imported {imported} games")
-    except Exception as e:
-        logger.error(f"Failed to import games: {e}", exc_info=True)
-        raise
+    imported = await asyncio.to_thread(nfl_schedule.run_next_week_import)
+    logger.info(f"import_games job complete: {imported} games imported")
 
 
 async def sync_scores(db: Session) -> None:
-    """Update scores from completed games.
+    """Import the active week's games and recompute finalized scores.
 
-    Fetches current week's game scores from ESPN and updates the database,
-    then recomputes all league standings for the week.
+    Delegates to `nfl_schedule.run_current_week_sync`, the same implementation
+    the scheduler's cron triggers use.
     """
-    from app.integrations.espn import fetch_schedule
-    from app.services import league_service, scoring_service, weeks_service
-    from app.services.nfl_schedule_service import import_games as import_games_service
+    from app.jobs import nfl_schedule
 
     logger.info("Starting sync_scores job")
-
-    try:
-        league = league_service.get_active_league(db)
-        logger.info(f"Active league: {league.name} (season {league.season})")
-    except Exception as e:
-        logger.info(f"No active league configured: {e}")
-        return
-
-    try:
-        current_week = weeks_service.get_current_week(db)
-        logger.info(f"Current week: {current_week.week_number}")
-    except Exception as e:
-        logger.error(f"Failed to get current week: {e}")
-        return
-
-    try:
-        # Fetch current scores from ESPN
-        espn_games = fetch_schedule(league.season, current_week.week_number)
-        logger.info(f"Fetched {len(espn_games)} games from ESPN")
-
-        # Update database with latest scores
-        updated = import_games_service(db, espn_games)
-        logger.info(f"Updated {updated} games with latest scores")
-
-        # Recompute standings for this week
-        final_count = scoring_service.score_week(db, league=league, week_id=current_week.id)
-        logger.info(f"Scored week {current_week.week_number}, {final_count} finalized games")
-
-    except Exception as e:
-        logger.error(f"Failed to sync scores: {e}", exc_info=True)
-        raise
+    imported = await asyncio.to_thread(nfl_schedule.run_current_week_sync)
+    logger.info(f"sync_scores job complete: {imported} games imported")
 
 
 async def lock_picks(db: Session) -> None:
-    """Lock picks for games that have started.
+    """Lock the active week's picks once its earliest kickoff has passed.
 
-    Finds all games with kickoff_time <= now and marks their picks as locked.
-    Locks are idempotent - setting locked_at multiple times is safe.
+    Delegates to `nfl_schedule.lock_expired_picks`, the same week-level lock
+    semantics the scheduler applies every minute, instead of the previous
+    per-game locking logic that disagreed with the documented design.
     """
-    from datetime import timezone
-
-    from sqlalchemy import select, update
+    from app.jobs import nfl_schedule
 
     logger.info("Starting lock_picks job")
-
-    try:
-        from app.models.nfl_game import NflGame
-        from app.models.pick import Pick
-
-        now = datetime.now(timezone.utc)
-
-        # Find all games that have started
-        started_games = (
-            db.execute(select(NflGame).where(NflGame.kickoff_time <= now)).scalars().all()
-        )
-
-        if not started_games:
-            logger.info("No games have started yet")
-            return
-
-        logger.info(f"Found {len(started_games)} games that have started")
-
-        # Lock all picks for these games (set locked_at if not already set)
-        game_ids = [game.id for game in started_games]
-        stmt = (
-            update(Pick)
-            .where(
-                Pick.game_id.in_(game_ids),
-                Pick.locked_at.is_(None),  # Only lock if not already locked
-            )
-            .values(locked_at=now)
-        )
-        result = db.execute(stmt)
-        db.commit()
-
-        locked_count = result.rowcount
-        logger.info(f"Locked {locked_count} picks")
-
-    except Exception as e:
-        logger.error(f"Failed to lock picks: {e}", exc_info=True)
-        raise
+    locked = await asyncio.to_thread(nfl_schedule.lock_expired_picks)
+    logger.info(f"lock_picks job complete: {locked} picks locked")
 
 
 async def send_reminders(db: Session) -> None:
     """Send weekly reminder emails for incomplete picks.
 
-    Sends reminders to league members who have not submitted all their picks
-    for the current week. Only sends during the week (not after all games complete).
+    Delegates to `nfl_schedule.send_weekly_reminders`, which records each
+    delivery in `NotificationDelivery` so repeated or concurrent runs cannot
+    re-send to a member who was already reminded for the week.
     """
-    from sqlalchemy import func, select
+    from app.jobs import nfl_schedule
 
     logger.info("Starting send_reminders job")
-
-    try:
-        from app.models.league_member import LeagueMember
-        from app.models.nfl_game import NflGame
-        from app.models.pick import Pick
-        from app.services import email_service, league_service, weeks_service
-
-        league = league_service.get_active_league(db)
-        logger.info(f"Active league: {league.name}")
-
-    except Exception as e:
-        logger.info(f"No active league configured: {e}")
-        return
-
-    try:
-        current_week = weeks_service.get_current_week(db)
-        logger.info(f"Current week: {current_week.week_number}")
-    except Exception as e:
-        logger.error(f"Failed to get current week: {e}")
-        return
-
-    try:
-        # Get all league members
-        members = (
-            db.execute(select(LeagueMember).where(LeagueMember.league_id == league.id))
-            .scalars()
-            .all()
-        )
-
-        # Count total games in the week
-        total_games = (
-            db.execute(
-                select(func.count(NflGame.id)).where(NflGame.week_id == current_week.id)
-            ).scalar()
-            or 0
-        )
-
-        logger.info(f"Week has {total_games} games, {len(members)} league members")
-
-        sent_count = 0
-        for member in members:
-            # Count submitted picks for this member
-            submitted_picks = (
-                db.execute(
-                    select(func.count(Pick.id))
-                    .join(NflGame, Pick.game_id == NflGame.id)
-                    .where(NflGame.week_id == current_week.id, Pick.user_id == member.user_id)
-                ).scalar()
-                or 0
-            )
-
-            remaining_picks = total_games - submitted_picks
-
-            if remaining_picks > 0:
-                # Send reminder email
-                try:
-                    deadline = current_week.start_date.strftime("%I:%M %p ET")
-                    from app.core.config import get_settings
-
-                    picks_link = f"{get_settings().app_url}/#/picks"
-
-                    email_service.send_weekly_reminder(
-                        to=member.user.email,
-                        season=league.season,
-                        week_number=current_week.week_number,
-                        remaining_picks=remaining_picks,
-                        deadline=deadline,
-                        picks_link=picks_link,
-                    )
-                    sent_count += 1
-                    logger.info(
-                        f"Sent reminder to {member.user.email}: {remaining_picks} picks remaining"
-                    )
-                except Exception as e:
-                    logger.error(
-                        f"Failed to send reminder to {member.user.email}: {e}", exc_info=True
-                    )
-
-        logger.info(f"Sent {sent_count} weekly reminders")
-
-    except Exception as e:
-        logger.error(f"Failed to send reminders: {e}", exc_info=True)
-        raise
+    sent = await asyncio.to_thread(nfl_schedule.send_weekly_reminders)
+    logger.info(f"send_reminders job complete: {sent} reminders sent")

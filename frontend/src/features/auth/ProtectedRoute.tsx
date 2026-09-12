@@ -1,6 +1,7 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { fetchSessionBootstrap } from '@/api/session'
+import { PageLoader } from '@/components/ui/PageLoader'
 import { useAuth } from './AuthContext'
 
 /** Route guard: redirects unauthenticated visitors to /login, preserving their target. */
@@ -9,7 +10,7 @@ export function ProtectedRoute() {
   const location = useLocation()
 
   if (isLoading) {
-    return null
+    return <PageLoader />
   }
 
   if (!isAuthenticated) {
@@ -29,7 +30,7 @@ export function LeagueMemberRoute() {
   })
 
   if (isLoading) {
-    return null
+    return <PageLoader />
   }
 
   if (error || data?.membership.status !== 'member') {

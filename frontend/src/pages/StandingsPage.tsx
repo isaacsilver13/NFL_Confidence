@@ -3,11 +3,12 @@ import { BarChart3 } from 'lucide-react'
 import { ApiError } from '@/api/client'
 import { fetchPickBreakdown, fetchSeasonStandings } from '@/api/leaderboard'
 import { WeeklyPickBreakdown } from '@/components/leaderboard/WeeklyPickBreakdown'
+import { ScrollableTable } from '@/components/ui/ScrollableTable'
 import type { LeaderboardMember } from '@/types/leaderboard'
 
 function StandingsTable({ standings }: { standings: LeaderboardMember[] }) {
   return (
-    <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-surface shadow-sm dark:border-slate-800 dark:bg-slate-900">
+    <ScrollableTable>
       <table className="w-full min-w-[760px] text-left text-sm">
         <caption className="sr-only">Season standings</caption>
         <thead className="bg-surface-muted text-xs uppercase tracking-[0.14em] text-ink-muted dark:bg-slate-950 dark:text-slate-400">
@@ -23,7 +24,7 @@ function StandingsTable({ standings }: { standings: LeaderboardMember[] }) {
           {standings.map((member) => (
             <tr
               key={member.memberId}
-              className="transition-colors hover:bg-surface-muted/60 dark:hover:bg-slate-950/60"
+              className="odd:bg-surface-muted/40 transition-colors hover:bg-surface-muted/60 dark:odd:bg-slate-950/40 dark:hover:bg-slate-950/60"
             >
               <th scope="row" className="px-5 py-4 font-black text-primary dark:text-white">
                 {member.rank}
@@ -38,7 +39,7 @@ function StandingsTable({ standings }: { standings: LeaderboardMember[] }) {
           ))}
         </tbody>
       </table>
-    </div>
+    </ScrollableTable>
   )
 }
 

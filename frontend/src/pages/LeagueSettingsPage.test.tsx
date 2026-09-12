@@ -169,11 +169,11 @@ describe('LeagueSettingsPage', () => {
 
   it('removes a member without showing an error after a successful response', async () => {
     const user = userEvent.setup()
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
     renderPage()
 
     expect((await screen.findAllByText('member@example.com')).length).toBeGreaterThan(0)
     await user.click(screen.getByRole('button', { name: 'Remove Member' }))
+    await user.click(await screen.findByRole('button', { name: 'Remove' }))
 
     await waitFor(() => expect(mockedRemoveLeagueMember).toHaveBeenCalledWith('member-1'))
     expect(screen.queryByText('Could not remove Member. Please try again.')).not.toBeInTheDocument()
@@ -181,12 +181,12 @@ describe('LeagueSettingsPage', () => {
 
   it('shows an error when member removal fails', async () => {
     const user = userEvent.setup()
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
     mockedRemoveLeagueMember.mockRejectedValueOnce(new Error('request failed'))
     renderPage()
 
     expect((await screen.findAllByText('member@example.com')).length).toBeGreaterThan(0)
     await user.click(screen.getByRole('button', { name: 'Remove Member' }))
+    await user.click(await screen.findByRole('button', { name: 'Remove' }))
 
     expect(
       await screen.findByText('Could not remove Member. Please try again.'),
@@ -202,7 +202,6 @@ describe('LeagueSettingsPage', () => {
 
   it('lets a commissioner mark payment and void unpaid picks', async () => {
     const user = userEvent.setup()
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
     renderPage()
 
     expect(await screen.findByText('Weekly payments')).toBeInTheDocument()
@@ -211,6 +210,7 @@ describe('LeagueSettingsPage', () => {
 
     await waitFor(() => expect(mockedUpdateMemberPayment).toHaveBeenCalledWith('member-1', 1, true))
     await user.click(screen.getByRole('button', { name: 'Void unpaid picks' }))
+    await user.click(await screen.findByRole('button', { name: 'Void picks' }))
 
     await waitFor(() => expect(mockedVoidUnpaidPicks).toHaveBeenCalledWith(1))
   })

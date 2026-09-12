@@ -215,13 +215,18 @@ async def trigger_job(
 def _verify_admin(current_user: User, db: Session) -> None:
     """Verify that the current user is an admin (league owner).
 
-    In v1 single-league mode, the league owner is the only admin.
+    In v1 single-league mode, the league owner is the only admin. Only the
+    expected "no league configured yet" case is translated into a 403 here;
+    any other failure (e.g. a database error) should surface as itself
+    rather than being disguised as an authorization failure.
     """
+    from app.core.exceptions import NotFoundError
     from app.services import league_service
 
     try:
         league = league_service.get_active_league(db)
-        if league.owner_id != current_user.id:
-            raise ForbiddenError("Only the league owner can access admin endpoints")
-    except Exception as e:
+    except NotFoundError as e:
         raise ForbiddenError(f"Admin access denied: {e}") from e
+
+    if league.owner_id != current_user.id:
+        raise ForbiddenError("Only the league owner can access admin endpoints")
