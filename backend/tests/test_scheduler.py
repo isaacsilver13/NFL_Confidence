@@ -25,6 +25,7 @@ def test_scheduler_registers_single_instance_of_each_launch_job() -> None:
         "lock_expired_picks",
         "sunday_score_sync",
         "monday_thursday_score_sync",
+        "overnight_score_sync",
         "weekly_picks_reminder",
     }
 

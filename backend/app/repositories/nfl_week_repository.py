@@ -5,6 +5,7 @@ from datetime import datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
+from app.models.enums import WeekStatus
 from app.models.nfl_week import NflWeek
 
 
@@ -25,6 +26,29 @@ def get_current(db: Session, *, season: int, at: datetime) -> NflWeek | None:
                 NflWeek.season == season,
                 NflWeek.start_date <= at,
                 NflWeek.end_date >= at,
+            )
+            .order_by(NflWeek.week_number)
+        )
+        .scalars()
+        .first()
+    )
+
+
+def get_earliest_incomplete(db: Session, *, season: int) -> NflWeek | None:
+    """Fallback for `get_current` when no week's date range covers `at`.
+
+    A week's `end_date` is derived from its last game's kickoff time, so it
+    can pass before that game (or the week's scoring) actually finishes.
+    Falling back to the earliest not-yet-`COMPLETE` week keeps that week
+    eligible for re-sync until every game in it truly finalizes, instead of
+    permanently orphaning it once its date window closes.
+    """
+    return (
+        db.execute(
+            select(NflWeek)
+            .where(
+                NflWeek.season == season,
+                NflWeek.status != WeekStatus.COMPLETE,
             )
             .order_by(NflWeek.week_number)
         )

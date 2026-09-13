@@ -113,8 +113,18 @@ def create_scheduler() -> BackgroundScheduler:
     )
     scheduler.add_job(
         lambda: _run_logged("monday_thursday_score_sync", run_current_week_sync),
-        CronTrigger(day_of_week="mon,thu", hour="20-22", minute=0, timezone=EASTERN),
+        CronTrigger(day_of_week="mon,thu", hour="20-23", minute=0, timezone=EASTERN),
         id="monday_thursday_score_sync",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        lambda: _run_logged("overnight_score_sync", run_current_week_sync),
+        # Primetime games (SNF/MNF/TNF) often finish after the day-specific
+        # sync windows above have ended for the night. A single early-morning
+        # pass, every day, catches whichever game finished late without
+        # needing a separate cron entry per day it could happen on.
+        CronTrigger(hour=3, minute=0, timezone=EASTERN),
+        id="overnight_score_sync",
         replace_existing=True,
     )
     scheduler.add_job(

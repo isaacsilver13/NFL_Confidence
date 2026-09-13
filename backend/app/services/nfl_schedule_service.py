@@ -1,6 +1,6 @@
 """Import normalized ESPN schedule data into NFL game records."""
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
 
@@ -9,6 +9,14 @@ from app.models.enums import GameStatus, WeekStatus
 from app.repositories import nfl_game_repository, nfl_week_repository
 
 _STATUS_MAP = {status.value: status for status in GameStatus}
+
+# Games rarely run past ~4 hours even with overtime; padding the last
+# kickoff by this much keeps the week's date window open long enough for
+# that game to actually finish (and get synced) instead of closing at the
+# moment it merely starts. `weeks_service.get_current_week` also falls back
+# to the earliest non-complete week when this window closes too early, so
+# this buffer is a second layer of defense, not the only guard.
+_END_OF_WEEK_BUFFER = timedelta(hours=6)
 
 
 def import_games(db: Session, games: list[EspnGame]) -> int:
@@ -21,7 +29,7 @@ def import_games(db: Session, games: list[EspnGame]) -> int:
     imported = 0
     for (season, week_number), week_games in grouped.items():
         first_kickoff = min(game.kickoff_time for game in week_games)
-        end_date = max(game.kickoff_time for game in week_games)
+        end_date = max(game.kickoff_time for game in week_games) + _END_OF_WEEK_BUFFER
         week = nfl_week_repository.get_by_season_and_week(
             db, season=season, week_number=week_number
         )

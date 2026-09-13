@@ -21,6 +21,7 @@ from app.jobs.job_runner import (
     sync_scores,
 )
 from app.models.enums import JobStatus
+from app.models.job_execution import JobExecution
 from app.models.job_run import JobRun
 from app.models.user import User
 
@@ -33,6 +34,22 @@ JOB_FUNCTIONS = {
     "sync_scores": sync_scores,
     "lock_picks": lock_picks,
     "send_reminders": send_reminders,
+}
+
+# The scheduler (app.jobs.scheduler) is what actually runs in production, and
+# it logs each run to `JobExecution` under these job ids — distinct from the
+# `JOB_LOCK_IDS` names used by the manual admin-trigger path (`JobRun`).
+# `is_overdue` is only meaningful for jobs with a tight, predictable cadence;
+# jobs that only run on specific days of the week are reported without one
+# rather than guessing a threshold that would false-positive on every other
+# day.
+_SCHEDULER_JOBS: dict[str, timedelta | None] = {
+    "schedule_import": None,
+    "lock_expired_picks": timedelta(minutes=10),
+    "sunday_score_sync": None,
+    "monday_thursday_score_sync": None,
+    "overnight_score_sync": timedelta(hours=36),
+    "weekly_picks_reminder": None,
 }
 
 
@@ -54,20 +71,21 @@ def get_job_status(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> dict:
-    """Get status of all background jobs - recent runs and health.
+    """Get status of all scheduled background jobs - recent runs and health.
 
-    Returns the last run status for each job and alerts if any are stuck.
-    Admin-only endpoint.
+    Reads from `JobExecution`, the table the production scheduler
+    (app.jobs.scheduler) actually writes to on every cron run. This is
+    distinct from `/admin/jobs/runs`, which tracks manually-triggered runs
+    recorded in `JobRun`.
     """
     _verify_admin(current_user, db)
 
-    # Get the last run for each job
     job_status: dict[str, Any] = {}
-    for job_name in JOB_LOCK_IDS.keys():
+    for job_name, overdue_after in _SCHEDULER_JOBS.items():
         last_run = db.execute(
-            select(JobRun)
-            .where(JobRun.job_name == job_name)
-            .order_by(JobRun.created_at.desc())
+            select(JobExecution)
+            .where(JobExecution.job_name == job_name)
+            .order_by(JobExecution.created_at.desc())
             .limit(1)
         ).scalar_one_or_none()
 
@@ -77,26 +95,34 @@ def get_job_status(
                 "status": "never_run",
                 "is_overdue": True,
             }
-        else:
-            is_running = last_run.status == JobStatus.RUNNING
-            last_run_time = last_run.completed_at or last_run.started_at
-            elapsed = datetime.now(timezone.utc) - last_run_time if last_run_time else None
+            continue
 
-            # Alert if job is stuck (running for >1 hour) or hasn't completed in expected time
-            is_overdue = False
-            if is_running and elapsed and elapsed > timedelta(hours=1):
-                is_overdue = True
-            elif (
-                last_run.status == JobStatus.COMPLETED and elapsed and elapsed > timedelta(hours=4)
-            ):
-                is_overdue = True
+        is_running = last_run.status == "running"
+        last_run_time = last_run.completed_at or last_run.started_at
+        elapsed = datetime.now(timezone.utc) - last_run_time if last_run_time else None
 
-            job_status[job_name] = {
-                "last_run": JobRunResponse(last_run).__dict__,
-                "status": last_run.status.value,
-                "is_overdue": is_overdue,
-                "elapsed_minutes": int(elapsed.total_seconds() / 60) if elapsed else None,
-            }
+        is_overdue = False
+        if is_running and elapsed and elapsed > timedelta(hours=1):
+            is_overdue = True
+        elif overdue_after is not None and elapsed and elapsed > overdue_after:
+            is_overdue = True
+
+        job_status[job_name] = {
+            "last_run": {
+                "id": str(last_run.id),
+                "job_name": last_run.job_name,
+                "status": last_run.status,
+                "started_at": last_run.started_at.isoformat() if last_run.started_at else None,
+                "completed_at": (
+                    last_run.completed_at.isoformat() if last_run.completed_at else None
+                ),
+                "result_count": last_run.result_count,
+                "error_message": last_run.error_message,
+            },
+            "status": last_run.status,
+            "is_overdue": is_overdue,
+            "elapsed_minutes": int(elapsed.total_seconds() / 60) if elapsed else None,
+        }
 
     return success(job_status)
 
