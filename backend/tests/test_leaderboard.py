@@ -124,6 +124,96 @@ def test_weekly_leaderboard_returns_ranked_members(db_session: Session) -> None:
     assert [member.total_points for member in result.standings] == [17, 8]
 
 
+def test_weekly_leaderboard_reports_points_remaining_on_unfinished_games(
+    db_session: Session,
+) -> None:
+    owner = _user(db_session, "Owner")
+    league = _league(db_session, owner)
+    owner, challenger = _members(db_session, league)
+    week = NflWeek(
+        season=league.season,
+        week_number=5,
+        start_date=datetime(2026, 10, 1, tzinfo=timezone.utc),
+        end_date=datetime(2026, 10, 8, tzinfo=timezone.utc),
+        status=WeekStatus.REGULAR,
+    )
+    db_session.add(week)
+    db_session.flush()
+    decided_game = NflGame(
+        week_id=week.id,
+        espn_game_id=f"leaderboard-test-{uuid.uuid4().hex}",
+        kickoff_time=week.start_date,
+        away_team="BUF",
+        home_team="KC",
+        away_score=14,
+        home_score=21,
+        winning_team="KC",
+        game_status=GameStatus.FINAL,
+        is_tie=False,
+    )
+    live_game = NflGame(
+        week_id=week.id,
+        espn_game_id=f"leaderboard-test-{uuid.uuid4().hex}",
+        kickoff_time=week.start_date + timedelta(hours=1),
+        away_team="GB",
+        home_team="CHI",
+        game_status=GameStatus.LIVE,
+    )
+    voided_game = NflGame(
+        week_id=week.id,
+        espn_game_id=f"leaderboard-test-{uuid.uuid4().hex}",
+        kickoff_time=week.start_date + timedelta(hours=2),
+        away_team="DAL",
+        home_team="NYG",
+        game_status=GameStatus.SCHEDULED,
+    )
+    db_session.add_all([decided_game, live_game, voided_game])
+    db_session.flush()
+    db_session.add_all(
+        [
+            WeeklyResult(
+                league_id=league.id,
+                week_id=week.id,
+                user_id=owner.id,
+                total_points=10,
+                correct_picks=1,
+                incorrect_picks=0,
+                weekly_rank=1,
+            ),
+            Pick(
+                user_id=owner.id,
+                game_id=decided_game.id,
+                picked_team="KC",
+                confidence_value=10,
+                locked_at=decided_game.kickoff_time,
+                points_earned=10,
+            ),
+            Pick(
+                user_id=owner.id,
+                game_id=live_game.id,
+                picked_team="GB",
+                confidence_value=5,
+                locked_at=live_game.kickoff_time,
+            ),
+            Pick(
+                user_id=owner.id,
+                game_id=voided_game.id,
+                picked_team="DAL",
+                confidence_value=7,
+                locked_at=voided_game.kickoff_time,
+                voided_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
+                voided_by_user_id=owner.id,
+            ),
+        ]
+    )
+    db_session.flush()
+
+    result = leaderboard_service.get_weekly_leaderboard(db_session, league=league, week_number=5)
+
+    owner_row = next(member for member in result.standings if member.member_name == "Owner")
+    assert owner_row.points_remaining == 5
+
+
 def test_season_standings_returns_aggregate_rows(db_session: Session) -> None:
     owner = _user(db_session, "Owner")
     league = _league(db_session, owner)

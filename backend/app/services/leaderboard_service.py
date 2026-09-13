@@ -7,7 +7,7 @@ from sqlalchemy import desc, distinct, func, select
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import NotFoundError
-from app.models.enums import WeekStatus
+from app.models.enums import GameStatus, WeekStatus
 from app.models.league import League
 from app.models.league_member import LeagueMember
 from app.models.nfl_game import NflGame
@@ -44,9 +44,30 @@ def _weekly_payout_cents(*, rank: int, member_count: int) -> int:
     return 0
 
 
+def _points_remaining_by_user(db: Session, *, week_id: uuid.UUID) -> dict[uuid.UUID, int]:
+    """Sum confidence values on each user's not-yet-final, non-voided picks for a week."""
+    unresolved_statuses = {GameStatus.SCHEDULED, GameStatus.LIVE, GameStatus.POSTPONED}
+    rows = db.execute(
+        select(Pick.user_id, func.sum(Pick.confidence_value))
+        .join(NflGame, Pick.game_id == NflGame.id)
+        .where(
+            NflGame.week_id == week_id,
+            NflGame.game_status.in_(unresolved_statuses),
+            Pick.voided_at.is_(None),
+        )
+        .group_by(Pick.user_id)
+    ).all()
+    return {user_id: int(total) for user_id, total in rows}
+
+
 def _ranked_members(
-    results: list, *, season: bool = False, member_count: int = 0
+    results: list,
+    *,
+    season: bool = False,
+    member_count: int = 0,
+    points_remaining_by_user: dict[uuid.UUID, int] | None = None,
 ) -> list[LeaderboardMemberRead]:
+    points_remaining_by_user = points_remaining_by_user or {}
     usable_results = [result for result in results if result.user is not None]
     ordered = sorted(
         usable_results,
@@ -94,6 +115,7 @@ def _ranked_members(
                     if not season
                     else 0
                 ),
+                points_remaining=points_remaining_by_user.get(result.user_id, 0),
             )
         )
     return members
@@ -137,6 +159,7 @@ def get_weekly_leaderboard(
     standings = _ranked_members(
         results,
         member_count=league_repository.count_members(db, league.id),
+        points_remaining_by_user=_points_remaining_by_user(db, week_id=week.id),
     )
     if not standings:
         raise NotFoundError(f"Week {week.week_number} has no leaderboard data.")

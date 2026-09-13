@@ -10,6 +10,7 @@ export interface LeaderboardMember {
   secondPlaceFinishes: number
   thirdPlaceFinishes: number
   payoutCents: number
+  pointsRemaining: number
 }
 
 export interface CompletedWeek {

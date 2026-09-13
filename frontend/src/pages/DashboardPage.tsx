@@ -58,7 +58,13 @@ function sectionSummary(value: string | undefined, fallback: string): string {
   return value ?? fallback
 }
 
-function DashboardSections({ userId }: { userId: string }) {
+function DashboardSections({
+  userId,
+  currentWeekNumber,
+}: {
+  userId: string
+  currentWeekNumber: number | undefined
+}) {
   const [openSections, setOpenSections] = useState<SectionId[]>(() => initialOpenSections(userId))
   const isOpen = (section: SectionId) => openSections.includes(section)
 
@@ -104,10 +110,11 @@ function DashboardSections({ userId }: { userId: string }) {
     staleTime: 10 * 60_000,
   })
   const latestCompletedWeek = leaderboardWeeksQuery.data?.at(-1)?.weekNumber
+  const summaryWeek = latestCompletedWeek ?? currentWeekNumber
   const leaderboardQuery = useQuery({
-    queryKey: ['leaderboard', 'week', latestCompletedWeek],
-    queryFn: () => fetchWeeklyLeaderboard(latestCompletedWeek as number),
-    enabled: isOpen('leaderboard') && latestCompletedWeek !== undefined,
+    queryKey: ['leaderboard', 'week', summaryWeek],
+    queryFn: () => fetchWeeklyLeaderboard(summaryWeek as number),
+    enabled: isOpen('leaderboard') && summaryWeek !== undefined,
     staleTime: 10 * 60_000,
   })
   const standingsQuery = useQuery({
@@ -413,7 +420,7 @@ export function DashboardPage() {
           {currentWeek ? `Week ${currentWeek.weekNumber}` : 'Unavailable'}
         </p>
       </div>
-      <DashboardSections userId={user.id} />
+      <DashboardSections userId={user.id} currentWeekNumber={currentWeek?.weekNumber} />
     </div>
   )
 }
