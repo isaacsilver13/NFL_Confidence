@@ -3,8 +3,24 @@ import { useQuery } from '@tanstack/react-query'
 import { Trophy } from 'lucide-react'
 import { ApiError } from '@/api/client'
 import { fetchWeeklyLeaderboard } from '@/api/leaderboard'
-import { fetchCompletedWeeks } from '@/api/nfl'
+import { fetchCompletedWeeks, fetchCurrentWeek } from '@/api/nfl'
 import type { LeaderboardMember } from '@/types/leaderboard'
+
+interface WeekOption {
+  weekNumber: number
+  isCurrent: boolean
+}
+
+function buildWeekOptions(
+  completedWeeks: { weekNumber: number }[],
+  currentWeekNumber: number | undefined,
+): WeekOption[] {
+  const options = completedWeeks.map((week) => ({ weekNumber: week.weekNumber, isCurrent: false }))
+  if (currentWeekNumber !== undefined && !options.some((o) => o.weekNumber === currentWeekNumber)) {
+    options.push({ weekNumber: currentWeekNumber, isCurrent: true })
+  }
+  return options.sort((a, b) => a.weekNumber - b.weekNumber)
+}
 
 function LeaderboardTable({ standings }: { standings: LeaderboardMember[] }) {
   return (
@@ -18,6 +34,7 @@ function LeaderboardTable({ standings }: { standings: LeaderboardMember[] }) {
             <th className="px-5 py-4 text-right">Points</th>
             <th className="px-5 py-4 text-right">Correct</th>
             <th className="px-5 py-4 text-right">Missed</th>
+            <th className="px-5 py-4 text-right">Points Left</th>
             <th className="px-5 py-4 text-right">Wins</th>
             <th className="px-5 py-4 text-right">Payout</th>
           </tr>
@@ -35,6 +52,7 @@ function LeaderboardTable({ standings }: { standings: LeaderboardMember[] }) {
               <td className="px-5 py-4 text-right font-black text-accent">{member.totalPoints}</td>
               <td className="px-5 py-4 text-right">{member.correctPicks}</td>
               <td className="px-5 py-4 text-right">{member.incorrectPicks}</td>
+              <td className="px-5 py-4 text-right">{member.pointsRemaining}</td>
               <td className="px-5 py-4 text-right">{member.weeklyWins}</td>
               <td className="px-5 py-4 text-right font-semibold">
                 ${(member.payoutCents / 100).toFixed(2)}
@@ -54,8 +72,14 @@ export function LeaderboardPage() {
     queryFn: fetchCompletedWeeks,
     staleTime: 10 * 60_000,
   })
+  const currentWeekQuery = useQuery({
+    queryKey: ['weeks', 'current'],
+    queryFn: fetchCurrentWeek,
+    staleTime: 60_000,
+  })
   const completedWeeks = weeksQuery.data ?? []
-  const selectedWeek = week ?? completedWeeks[completedWeeks.length - 1]?.weekNumber
+  const weekOptions = buildWeekOptions(completedWeeks, currentWeekQuery.data?.weekNumber)
+  const selectedWeek = week ?? currentWeekQuery.data?.weekNumber ?? weekOptions.at(-1)?.weekNumber
   const query = useQuery({
     queryKey: ['leaderboard', 'week', selectedWeek],
     queryFn: () => fetchWeeklyLeaderboard(selectedWeek as number),
@@ -79,16 +103,20 @@ export function LeaderboardPage() {
             onChange={(event) => setWeek(Number(event.target.value))}
             className="min-h-11 rounded-xl border border-slate-300 bg-surface px-3 text-ink shadow-sm dark:border-slate-700 dark:bg-slate-900"
           >
-            {completedWeeks.map(({ weekNumber }) => (
+            {weekOptions.map(({ weekNumber, isCurrent }) => (
               <option key={weekNumber} value={weekNumber}>
                 Week {weekNumber}
+                {isCurrent ? ' — Live' : ''}
               </option>
             ))}
           </select>
         </label>
       </div>
 
-      {query.isPending && (
+      {selectedWeek === undefined && !weeksQuery.isPending && !currentWeekQuery.isPending && (
+        <p className="text-slate-600 dark:text-slate-300">No weeks available yet.</p>
+      )}
+      {selectedWeek !== undefined && query.isPending && (
         <p className="text-slate-600 dark:text-slate-300" aria-live="polite">
           Loading weekly results...
         </p>

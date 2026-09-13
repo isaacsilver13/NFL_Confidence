@@ -7,7 +7,7 @@ import { ApiError } from '@/api/client'
 import { joinLeagueWithCode } from '@/api/league'
 import { fetchCurrentPicksCard, fetchSessionBootstrap, type SessionBootstrap } from '@/api/session'
 import { fetchCompletedWeeks } from '@/api/nfl'
-import { fetchSeasonStandings } from '@/api/leaderboard'
+import { fetchSeasonStandings, fetchWeeklyLeaderboard } from '@/api/leaderboard'
 import { DashboardPage } from './DashboardPage'
 
 vi.mock('./PicksPage', () => ({
@@ -51,6 +51,7 @@ const mockedFetchSessionBootstrap = vi.mocked(fetchSessionBootstrap)
 const mockedFetchCurrentPicksCard = vi.mocked(fetchCurrentPicksCard)
 const mockedFetchCompletedWeeks = vi.mocked(fetchCompletedWeeks)
 const mockedFetchSeasonStandings = vi.mocked(fetchSeasonStandings)
+const mockedFetchWeeklyLeaderboard = vi.mocked(fetchWeeklyLeaderboard)
 
 const nonMemberSession: SessionBootstrap = {
   user: {
@@ -177,6 +178,37 @@ describe('DashboardPage league access', () => {
     expect(leaderboardSection).toHaveAttribute('aria-expanded', 'true')
     await screen.findByText('Leaderboard section body')
     expect(mockedFetchCompletedWeeks).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows the live current week rank in the summary before any week completes', async () => {
+    const user = userEvent.setup()
+    mockedFetchSessionBootstrap.mockResolvedValueOnce(memberSession)
+    mockedFetchCompletedWeeks.mockResolvedValue([])
+    mockedFetchWeeklyLeaderboard.mockResolvedValue({
+      week: { weekNumber: 1, seasonNumber: 2026 },
+      standings: [
+        {
+          rank: 2,
+          memberId: 'user-1',
+          memberName: 'New User',
+          totalPoints: 5,
+          correctPicks: 1,
+          incorrectPicks: 0,
+          weeklyWins: 0,
+          firstPlaceFinishes: 0,
+          secondPlaceFinishes: 0,
+          thirdPlaceFinishes: 0,
+          payoutCents: 0,
+          pointsRemaining: 10,
+        },
+      ],
+    })
+    renderPage()
+
+    const leaderboardSection = await screen.findByRole('button', { name: /^Leaderboard/ })
+    await user.click(leaderboardSection)
+
+    expect(await screen.findByText('Your current rank is #2')).toBeInTheDocument()
   })
 
   it('opens a section named by the URL hash and keeps Picks open for multiple panes', async () => {
