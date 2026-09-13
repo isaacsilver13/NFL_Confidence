@@ -10,7 +10,7 @@ from app.integrations.espn import EspnGame, fetch_schedule
 from app.models.enums import WeekStatus
 from app.models.nfl_game import NflGame
 from app.models.nfl_week import NflWeek
-from app.services.nfl_schedule_service import import_games
+from app.services.nfl_schedule_service import _END_OF_WEEK_BUFFER, import_games
 
 
 def _espn_game(
@@ -65,7 +65,9 @@ def test_import_games_releases_new_week_and_marks_it_regular(db_session: Session
     assert week is not None
     assert week.status == WeekStatus.REGULAR
     assert week.start_date < kickoff_time
-    assert week.end_date == kickoff_time
+    # end_date is padded past the last kickoff so the week's date window
+    # stays open long enough for that game to actually finish and sync.
+    assert week.end_date == kickoff_time + _END_OF_WEEK_BUFFER
 
 
 def test_fetch_schedule_normalizes_espn_venue_and_favorite_spread() -> None:
