@@ -70,6 +70,10 @@ export const TEAM_LOGOS: Record<string, TeamLogoConfig> = {
 
 export type TeamCode = keyof typeof TEAM_LOGOS
 
+const TEAM_CODE_ALIASES: Record<string, TeamCode> = {
+  WSH: 'WAS',
+}
+
 /**
  * Get team logo configuration by ESPN abbreviation.
  * Returns the config if found, or undefined for unknown codes.
@@ -79,7 +83,8 @@ export type TeamCode = keyof typeof TEAM_LOGOS
  */
 export function getTeamLogoConfig(espnCode: string): TeamLogoConfig | undefined {
   const normalized = espnCode.trim().toUpperCase()
-  return TEAM_LOGOS[normalized as TeamCode]
+  const teamCode = TEAM_CODE_ALIASES[normalized] ?? normalized
+  return TEAM_LOGOS[teamCode as TeamCode]
 }
 
 /**
@@ -101,5 +106,5 @@ export const ALL_TEAM_CODES = Object.keys(TEAM_LOGOS) as TeamCode[]
  * Verify if a team code is valid.
  */
 export function isValidTeamCode(code: string): code is TeamCode {
-  return code.trim().toUpperCase() in TEAM_LOGOS
+  return getTeamLogoConfig(code) !== undefined
 }

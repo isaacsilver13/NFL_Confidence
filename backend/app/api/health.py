@@ -9,6 +9,7 @@ from sqlalchemy import desc, select, text
 from sqlalchemy.orm import Session
 
 from app.core.responses import error, success
+from app.db.schema_validator import validate_schema
 from app.db.session import get_db
 from app.models.job_execution import JobExecution
 
@@ -34,6 +35,25 @@ def readiness_check(request: Request, db: Session = Depends(get_db)) -> dict | J
             content=error("SERVICE_UNAVAILABLE", "The application is not ready."),
         )
 
+    try:
+        schema_issues = validate_schema(db)
+    except Exception:
+        logger.exception("Readiness check failed because schema validation could not run")
+        return JSONResponse(
+            status_code=503,
+            content=error("SERVICE_UNAVAILABLE", "The application is not ready."),
+        )
+    if schema_issues:
+        logger.error("Readiness check detected database schema drift: %s", schema_issues)
+        return JSONResponse(
+            status_code=503,
+            content=error(
+                "SCHEMA_DRIFT",
+                "The database schema does not match the application.",
+                schema_issues,
+            ),
+        )
+
     scheduler_enabled = getattr(request.app.state, "scheduler_enabled", True)
     scheduler = getattr(request.app.state, "scheduler", None)
     if scheduler_enabled and (scheduler is None or not scheduler.running):
@@ -43,7 +63,14 @@ def readiness_check(request: Request, db: Session = Depends(get_db)) -> dict | J
         )
 
     scheduler_status = "running" if scheduler_enabled else "disabled"
-    return success({"status": "ready", "database": "healthy", "scheduler": scheduler_status})
+    return success(
+        {
+            "status": "ready",
+            "database": "healthy",
+            "schema": "valid",
+            "scheduler": scheduler_status,
+        }
+    )
 
 
 @router.get("/health/jobs")

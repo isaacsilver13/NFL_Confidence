@@ -17,13 +17,27 @@ from app.models.enums import LeagueRole
 from app.models.invite import Invite
 from app.models.league import League
 from app.models.league_member import LeagueMember
+from app.models.season_result import SeasonResult
 from app.models.user import User
-from app.repositories import invite_repository, league_member_repository, league_repository
+from app.repositories import (
+    invite_repository,
+    league_member_repository,
+    league_repository,
+    season_result_repository,
+)
 from app.services.email_service import send_league_invitation
 
 settings = get_settings()
 
 INVITE_EXPIRY_DAYS = 7
+
+
+def _ensure_season_result(db: Session, *, league: League, user_id: uuid.UUID) -> None:
+    result = season_result_repository.get_by_league_user_season(
+        db, league_id=league.id, user_id=user_id, season=league.season
+    )
+    if result is None:
+        db.add(SeasonResult(league_id=league.id, user_id=user_id, season=league.season))
 
 
 def create_league(db: Session, *, owner: User, name: str, season: int) -> League:
@@ -39,6 +53,7 @@ def create_league(db: Session, *, owner: User, name: str, season: int) -> League
         league_member_repository.create(
             db, league_id=league.id, user_id=owner.id, role=LeagueRole.OWNER
         )
+        _ensure_season_result(db, league=league, user_id=owner.id)
         db.commit()
     except IntegrityError as exc:
         db.rollback()
@@ -131,6 +146,10 @@ def join_league(db: Session, *, user: User, token: str) -> LeagueMember:
         membership = league_member_repository.create(
             db, league_id=invite.league_id, user_id=user.id, role=LeagueRole.MEMBER
         )
+        league = db.get(League, invite.league_id)
+        if league is None:
+            raise NotFoundError("League not found.")
+        _ensure_season_result(db, league=league, user_id=user.id)
         invite_repository.mark_accepted(db, invite)
         db.commit()
     except IntegrityError as exc:
@@ -154,6 +173,7 @@ def join_league_with_code(db: Session, *, user: User, code: str) -> LeagueMember
         membership = league_member_repository.create(
             db, league_id=league.id, user_id=user.id, role=LeagueRole.MEMBER
         )
+        _ensure_season_result(db, league=league, user_id=user.id)
         db.commit()
     except IntegrityError as exc:
         db.rollback()

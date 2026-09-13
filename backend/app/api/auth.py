@@ -40,6 +40,21 @@ _GoogleResult = TypeVar("_GoogleResult")
 logger = logging.getLogger(__name__)
 
 
+def _database_error_details(
+    exc: SQLAlchemyError,
+) -> tuple[str, str, str | None, str | None, str | None, str | None]:
+    original = getattr(exc, "orig", None)
+    diagnostic = getattr(original, "diag", None)
+    return (
+        type(exc).__name__,
+        type(original).__name__ if original is not None else "",
+        getattr(original, "sqlstate", None),
+        getattr(diagnostic, "table_name", None),
+        getattr(diagnostic, "column_name", None),
+        getattr(diagnostic, "constraint_name", None),
+    )
+
+
 def _extract_google_userinfo(token: object) -> tuple[str, str, str, str | None]:
     if not isinstance(token, Mapping):
         raise UnauthorizedError("Google sign-in returned an invalid response. Please try again.")
@@ -139,7 +154,24 @@ async def google_callback(request: Request, db: Session = Depends(get_db)) -> Re
         issued = auth_service.issue_tokens(db, user)
     except SQLAlchemyError as exc:
         db.rollback()
-        logger.error("Google OAuth callback database operation failed: %s", type(exc).__name__)
+        (
+            error_type,
+            driver_error_type,
+            sqlstate,
+            table,
+            column,
+            constraint,
+        ) = _database_error_details(exc)
+        logger.error(
+            "Google OAuth callback database operation failed: "
+            "error_type=%s driver_error_type=%s sqlstate=%s table=%s column=%s constraint=%s",
+            error_type,
+            driver_error_type,
+            sqlstate,
+            table,
+            column,
+            constraint,
+        )
         raise UnauthorizedError("Google sign-in could not be completed. Please try again.") from exc
 
     redirect = RedirectResponse(url=settings.app_url, status_code=303)

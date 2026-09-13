@@ -149,6 +149,13 @@ def test_invite_and_join_flow(client, db_session: Session) -> None:
     display_names = {m["displayName"] for m in members_response.json()["data"]}
     assert display_names == {"Owner5", "Joiner"}
 
+    standings_response = client.get("/api/v1/leaderboard/season", headers=_auth_header(owner))
+    assert standings_response.status_code == 200
+    standings_names = {
+        member["memberName"] for member in standings_response.json()["data"]["standings"]
+    }
+    assert standings_names == {"Owner5", "Joiner"}
+
 
 def test_join_with_unknown_token_returns_404(client, db_session: Session) -> None:
     owner = _make_user(

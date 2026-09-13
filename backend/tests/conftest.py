@@ -10,6 +10,7 @@ from sqlalchemy import create_engine, event, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
+from app import main as app_main
 from app.core.config import get_settings
 from app.db.session import Base, get_db
 from app.main import app
@@ -86,7 +87,10 @@ def db_session(db_engine: Engine) -> Generator[Session, None, None]:
 
 
 @pytest.fixture()
-def client(db_session: Session) -> Generator[TestClient, None, None]:
+def client(
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> Generator[TestClient, None, None]:
     """TestClient whose `get_db` dependency is overridden to use the rollback-wrapped
     `db_session`, so requests made through it participate in the same per-test transaction
     as direct ORM calls and are rolled back automatically.
@@ -95,6 +99,11 @@ def client(db_session: Session) -> Generator[TestClient, None, None]:
     def override_get_db() -> Generator[Session, None, None]:
         yield db_session
 
+    monkeypatch.setattr(
+        app_main,
+        "SessionLocal",
+        lambda: Session(bind=db_session.get_bind()),
+    )
     app.dependency_overrides[get_db] = override_get_db
     try:
         with TestClient(app) as test_client:

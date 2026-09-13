@@ -13,7 +13,7 @@ from app.repositories import league_member_repository, nfl_game_repository, nfl_
 from app.services import league_service
 from app.services.auth_service import get_or_create_dev_user
 
-TEST_LEAGUE_NAME = "Local NFL Confidence Test League"
+TEST_LEAGUE_NAME = "2026 NFL Confidence League"
 TEST_TEAMS = (
     ("BUF", "KC"),
     ("GB", "CHI"),

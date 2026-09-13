@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ApiError } from '@/api/client'
 import { savePicks } from '@/api/nfl'
@@ -37,7 +37,7 @@ const games: NflGame[] = [
     id: 'game-1',
     awayTeam: 'BUF',
     homeTeam: 'KC',
-    kickoff: '2026-08-25T20:00:00Z',
+    kickoff: '2099-08-25T20:00:00Z',
     status: 'scheduled',
     venueName: 'Highmark Stadium',
     venueLocation: 'Orchard Park, NY',
@@ -52,7 +52,7 @@ const games: NflGame[] = [
     id: 'game-2',
     awayTeam: 'GB',
     homeTeam: 'CHI',
-    kickoff: '2026-08-26T20:00:00Z',
+    kickoff: '2099-08-26T20:00:00Z',
     status: 'scheduled',
     venueName: null,
     venueLocation: null,
@@ -93,6 +93,10 @@ describe('PicksPage', () => {
     renderPage()
 
     expect(await screen.findByRole('button', { name: 'BUF' })).toBeInTheDocument()
+    expect(screen.getByTestId('picks-scroll-pane')).toHaveClass(
+      'overflow-y-auto',
+      'sm:overflow-visible',
+    )
     expect(screen.getByRole('button', { name: 'GB' })).toBeInTheDocument()
     expect(screen.getByText('Highmark Stadium')).toBeInTheDocument()
     expect(screen.getByText(/Line: KC -3.5/)).toBeInTheDocument()
@@ -115,6 +119,25 @@ describe('PicksPage', () => {
     expect(await screen.findByText('Picks saved.')).toBeInTheDocument()
   })
 
+  it('makes picks read-only after the earliest kickoff', async () => {
+    const user = userEvent.setup()
+    mockedFetchCurrentPicksCard.mockResolvedValueOnce({
+      week,
+      games: [{ ...games[0], kickoff: '2026-08-25T19:00:00Z' }, games[1]],
+      picks: [],
+    })
+    renderPage()
+
+    expect(await screen.findByText('Picks locked')).toBeInTheDocument()
+    expect(screen.getByText(/This week's picks are read-only/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'BUF' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'KC' })).toBeDisabled()
+    expect(screen.getAllByRole('button', { name: '1' })[0]).toBeDisabled()
+
+    await user.click(screen.getByRole('button', { name: 'KC' }))
+    expect(mockedSavePicks).not.toHaveBeenCalled()
+  })
+
   it('voids incomplete and conflicting drafts while keeping the save flow live', async () => {
     const user = userEvent.setup()
     renderPage()
@@ -134,13 +157,26 @@ describe('PicksPage', () => {
     ).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'GB' }))
-    await user.click(screen.getAllByRole('button', { name: '1' })[1])
+    const secondConfidenceGroup = screen.getByRole('group', {
+      name: 'Confidence for GB at CHI',
+    })
+    await user.click(within(secondConfidenceGroup).getByRole('button', { name: /1/ }))
+
+    expect(await screen.findByText('Conflicting picks')).toBeInTheDocument()
+    expect(screen.getByText(/1 point: BUF at KC, GB at CHI/)).toBeInTheDocument()
+    expect(screen.getByText(/These picks will be voided unless fixed/)).toBeInTheDocument()
+    expect(screen.getByTestId('pick-card-game-1')).toHaveClass('border-danger')
+    expect(screen.getByTestId('pick-card-game-2')).toHaveClass('border-danger')
+    expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '2')
+    expect(
+      screen.getByRole('listitem', { name: 'Confidence 1 used, conflict' }),
+    ).toBeInTheDocument()
 
     await waitFor(() => expect(mockedSavePicks).toHaveBeenCalledTimes(2))
     expect(mockedSavePicks.mock.calls[1][0]).toEqual({
       week: 1,
-      picks: [{ gameId: 'game-1', team: 'BUF', confidence: 1 }],
-      voidedGameIds: ['game-2'],
+      picks: [],
+      voidedGameIds: ['game-1', 'game-2'],
     })
   })
 
@@ -176,6 +212,7 @@ describe('PicksPage', () => {
     const winner = screen.getByRole('button', { name: 'BUF' })
     const confidence = screen.getAllByRole('button', { name: '2' })[0]
     expect(winner).toHaveAttribute('aria-pressed', 'true')
+    expect(winner).toHaveClass('dark:border-sky', 'dark:bg-sky/20', 'dark:text-sky')
     expect(confidence).toHaveAttribute('aria-pressed', 'true')
 
     await user.click(winner)

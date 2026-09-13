@@ -250,8 +250,13 @@ Invoke-RestMethod https://nfl-confidence-api.fly.dev/api/v1/health
 Invoke-RestMethod https://nfl-confidence-api.fly.dev/api/v1/health/ready
 ```
 
-The readiness response must report `database: healthy`. For the selected $0
-pilot, it should report `scheduler: disabled`; it should report
+The readiness response must report `database: healthy` and `schema: valid`.
+The schema check is read-only and compares the physical database objects with
+the registered ORM models; it does not repair drift. A schema mismatch returns
+`503` with error code `SCHEMA_DRIFT`, and the machine must not receive traffic
+until the appropriate Alembic migration has been applied.
+
+For the selected $0 pilot, it should report `scheduler: disabled`; it should report
 `scheduler: running` only when automated jobs are intentionally enabled on a
 single API machine. A 503 means the machine must not receive traffic; inspect
 `fly logs` before proceeding. The deployment release command is safe to rerun
