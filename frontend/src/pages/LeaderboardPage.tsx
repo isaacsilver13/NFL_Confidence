@@ -31,12 +31,9 @@ function LeaderboardTable({ standings }: { standings: LeaderboardMember[] }) {
           <tr>
             <th className="px-5 py-4">Rank</th>
             <th className="px-5 py-4">Member</th>
-            <th className="px-5 py-4 text-right">Points</th>
             <th className="px-5 py-4 text-right">Correct</th>
-            <th className="px-5 py-4 text-right">Missed</th>
+            <th className="px-5 py-4 text-right">Points</th>
             <th className="px-5 py-4 text-right">Points Left</th>
-            <th className="px-5 py-4 text-right">Wins</th>
-            <th className="px-5 py-4 text-right">Payout</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
@@ -49,14 +46,9 @@ function LeaderboardTable({ standings }: { standings: LeaderboardMember[] }) {
                 {member.rank}
               </th>
               <td className="px-5 py-4 font-bold">{member.memberName}</td>
-              <td className="px-5 py-4 text-right font-black text-accent">{member.totalPoints}</td>
               <td className="px-5 py-4 text-right">{member.correctPicks}</td>
-              <td className="px-5 py-4 text-right">{member.incorrectPicks}</td>
+              <td className="px-5 py-4 text-right font-black text-accent">{member.totalPoints}</td>
               <td className="px-5 py-4 text-right">{member.pointsRemaining}</td>
-              <td className="px-5 py-4 text-right">{member.weeklyWins}</td>
-              <td className="px-5 py-4 text-right font-semibold">
-                ${(member.payoutCents / 100).toFixed(2)}
-              </td>
             </tr>
           ))}
         </tbody>
@@ -101,7 +93,7 @@ export function LeaderboardPage() {
           <select
             value={selectedWeek ?? ''}
             onChange={(event) => setWeek(Number(event.target.value))}
-            className="min-h-11 rounded-xl border border-slate-300 bg-surface px-3 text-ink shadow-sm dark:border-slate-700 dark:bg-slate-900"
+            className="min-h-11 rounded-xl border border-slate-300 bg-surface px-3 text-ink shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
           >
             {weekOptions.map(({ weekNumber, isCurrent }) => (
               <option key={weekNumber} value={weekNumber}>
