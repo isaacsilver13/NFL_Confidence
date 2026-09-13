@@ -100,4 +100,48 @@ describe('LeaderboardPage', () => {
     expect(await screen.findByText('No weeks available yet.')).toBeInTheDocument()
     expect(mockedFetchWeeklyLeaderboard).not.toHaveBeenCalled()
   })
+
+  it('shows only Rank, Member, Correct, Points, and Points Left columns in that order', async () => {
+    mockedFetchCompletedWeeks.mockResolvedValue([])
+    mockedFetchCurrentWeek.mockResolvedValue(currentWeek)
+    mockedFetchWeeklyLeaderboard.mockResolvedValue({
+      week: { weekNumber: 3, seasonNumber: 2026 },
+      standings: [
+        {
+          rank: 1,
+          memberId: 'user-1',
+          memberName: 'Owner',
+          totalPoints: 10,
+          correctPicks: 1,
+          incorrectPicks: 0,
+          weeklyWins: 0,
+          firstPlaceFinishes: 0,
+          secondPlaceFinishes: 0,
+          thirdPlaceFinishes: 0,
+          payoutCents: 0,
+          pointsRemaining: 5,
+        },
+      ],
+    })
+
+    renderPage()
+
+    await screen.findByText('Owner')
+    const headers = screen.getAllByRole('columnheader').map((header) => header.textContent)
+    expect(headers).toEqual(['Rank', 'Member', 'Correct', 'Points', 'Points Left'])
+  })
+
+  it('gives the week select readable text color in dark mode', async () => {
+    mockedFetchCompletedWeeks.mockResolvedValue([])
+    mockedFetchCurrentWeek.mockResolvedValue(currentWeek)
+    mockedFetchWeeklyLeaderboard.mockResolvedValue({
+      week: { weekNumber: 3, seasonNumber: 2026 },
+      standings: [],
+    })
+
+    renderPage()
+
+    const select = await screen.findByRole('combobox', { name: 'Week' })
+    expect(select).toHaveClass('dark:text-slate-100')
+  })
 })
