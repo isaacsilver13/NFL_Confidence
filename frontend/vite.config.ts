@@ -32,6 +32,15 @@ export default defineConfig(({ mode }) => {
       setupFiles: ['./src/test/setup.ts'],
       globals: true,
       css: true,
+      coverage: {
+        provider: 'v8',
+        thresholds: {
+          statements: 77,
+          branches: 68,
+          functions: 75,
+          lines: 78,
+        },
+      },
     },
   }
 })

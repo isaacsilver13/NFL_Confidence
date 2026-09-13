@@ -2,6 +2,8 @@
 
 Version: 1.0
 
+Last verified: 2026-09-04
+
 ---
 
 # Purpose
@@ -102,7 +104,7 @@ FastAPI
 
 Language
 
-Python 3.13
+Python 3.10
 
 ORM
 

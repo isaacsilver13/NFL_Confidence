@@ -2,6 +2,28 @@
 
 A modern web application for running private NFL Confidence Pick'em leagues.
 
+## Current-State Documentation
+
+- [Product requirements](01-product-requirements.md)
+- [Technical architecture](technical-architecture.md)
+- [API specification](api-specification.md)
+- [Database design](database-design.md)
+- [Security](security.md)
+- [Deployment](deployment.md)
+- [Testing strategy](testing-strategy.md)
+- [User flows](user-flows.md)
+- [UI design system](ui-design-system.md)
+- [Frontend specification](frontend-specification.md)
+- [NFL data integration](nfl-data-integration.md)
+- [Background jobs](background-jobs.md)
+- [Email notifications](email-notifications.md)
+
+## Development History
+
+The [development log](dev-log/README.md) contains dated AI-assisted development and
+review records. It may describe superseded designs and should not be used as the
+current product or implementation specification.
+
 ## Overview
 
 NFL Confidence Pool allows commissioners to create private leagues where members assign a unique confidence value to every NFL game each week.
