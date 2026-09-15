@@ -34,24 +34,34 @@ def run_schedule_import(*, season: int, week_number: int) -> int:
 
 
 def run_current_week_sync() -> int:
-    """Import the active league week and recompute any finalized outcomes."""
+    """Import and recompute outcomes for every week that hasn't finished scoring yet.
+
+    Syncing only the current week let a week get permanently orphaned if one
+    game's final result didn't land before the calendar rolled into the next
+    week (see `weeks_service.list_incomplete_weeks`). Looping over every
+    incomplete week instead means a stuck week keeps getting re-checked on
+    every run until it actually completes.
+    """
 
     with SessionLocal() as db:
         league = league_repository.get_active(db)
         if league is None:
             logger.info("Skipping NFL sync because no active league exists")
             return 0
-        week = weeks_service.get_current_week(db)
-        imported_games = import_games(db, fetch_schedule(league.season, week.week_number))
-        finalized_games = scoring_service.score_week(db, league=league, week_id=week.id)
-        logger.info(
-            "NFL sync complete season=%s week=%s imported_games=%s finalized_games=%s",
-            league.season,
-            week.week_number,
-            imported_games,
-            finalized_games,
-        )
-        return imported_games
+        weeks = weeks_service.list_incomplete_weeks(db, league=league)
+        total_imported_games = 0
+        for week in weeks:
+            imported_games = import_games(db, fetch_schedule(league.season, week.week_number))
+            finalized_games = scoring_service.score_week(db, league=league, week_id=week.id)
+            total_imported_games += imported_games
+            logger.info(
+                "NFL sync complete season=%s week=%s imported_games=%s finalized_games=%s",
+                league.season,
+                week.week_number,
+                imported_games,
+                finalized_games,
+            )
+        return total_imported_games
 
 
 def run_next_week_import() -> int:

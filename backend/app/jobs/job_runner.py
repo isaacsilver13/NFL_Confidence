@@ -211,8 +211,11 @@ async def import_games(db: Session) -> None:
 async def sync_scores(db: Session) -> None:
     """Update scores from completed games.
 
-    Fetches current week's game scores from ESPN and updates the database,
-    then recomputes all league standings for the week.
+    Fetches game scores from ESPN and updates the database, then recomputes
+    standings, for every week that hasn't finished scoring yet — not just the
+    current week. Syncing only the current week let a week get permanently
+    orphaned if one game's final result didn't land before the calendar
+    rolled into the next week (see `weeks_service.list_incomplete_weeks`).
     """
     from app.integrations.espn import fetch_schedule
     from app.services import league_service, scoring_service, weeks_service
@@ -227,25 +230,24 @@ async def sync_scores(db: Session) -> None:
         logger.info(f"No active league configured: {e}")
         return
 
-    try:
-        current_week = weeks_service.get_current_week(db)
-        logger.info(f"Current week: {current_week.week_number}")
-    except Exception as e:
-        logger.error(f"Failed to get current week: {e}")
+    weeks = weeks_service.list_incomplete_weeks(db, league=league)
+    if not weeks:
+        logger.info("No incomplete weeks to sync")
         return
 
     try:
-        # Fetch current scores from ESPN
-        espn_games = fetch_schedule(league.season, current_week.week_number)
-        logger.info(f"Fetched {len(espn_games)} games from ESPN")
+        for week in weeks:
+            # Fetch latest scores from ESPN
+            espn_games = fetch_schedule(league.season, week.week_number)
+            logger.info(f"Fetched {len(espn_games)} games from ESPN for week {week.week_number}")
 
-        # Update database with latest scores
-        updated = import_games_service(db, espn_games)
-        logger.info(f"Updated {updated} games with latest scores")
+            # Update database with latest scores
+            updated = import_games_service(db, espn_games)
+            logger.info(f"Updated {updated} games with latest scores")
 
-        # Recompute standings for this week
-        final_count = scoring_service.score_week(db, league=league, week_id=current_week.id)
-        logger.info(f"Scored week {current_week.week_number}, {final_count} finalized games")
+            # Recompute standings for this week
+            final_count = scoring_service.score_week(db, league=league, week_id=week.id)
+            logger.info(f"Scored week {week.week_number}, {final_count} finalized games")
 
     except Exception as e:
         logger.error(f"Failed to sync scores: {e}", exc_info=True)

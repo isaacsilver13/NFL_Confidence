@@ -1,6 +1,8 @@
 """Tests for Phase 1C: Job runner with advisory lock."""
 
 import asyncio
+import uuid
+from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 import pytest
@@ -12,9 +14,12 @@ from app.jobs.job_runner import (
     acquire_advisory_lock,
     release_advisory_lock,
     run_job,
+    sync_scores,
 )
-from app.models.enums import JobStatus
+from app.models import NflGame, NflWeek, User
+from app.models.enums import GameStatus, JobStatus, WeekStatus
 from app.models.job_run import JobRun
+from app.services import league_service
 
 
 class TestAdvisoryLock:
@@ -209,3 +214,78 @@ class TestJobIdempotency:
         # Clean up
         release_advisory_lock(db_session, lock_id_1)
         release_advisory_lock(db_session, lock_id_2)
+
+
+class TestSyncScoresOrphanedWeeks:
+    """Regression coverage: `sync_scores` used to only ever resync whatever
+    `get_current_week` returned, so a week whose games all finished after the
+    calendar rolled into the next week never got a chance to complete again.
+    """
+
+    @staticmethod
+    def _user(db: Session) -> User:
+        suffix = uuid.uuid4().hex
+        user = User(
+            google_id=f"sync-scores-test-{suffix}",
+            email=f"sync-scores-test-{suffix}@example.com",
+            display_name="Sync Scores Test User",
+        )
+        db.add(user)
+        db.flush()
+        return user
+
+    @pytest.mark.asyncio
+    async def test_sync_scores_completes_a_week_that_is_no_longer_current(
+        self, db_session: Session
+    ) -> None:
+        owner = self._user(db_session)
+        league = league_service.create_league(
+            db_session, owner=owner, name="Sync Scores Test League", season=2026
+        )
+        now = datetime.now(timezone.utc)
+
+        # This week's date range has already closed and the calendar has
+        # moved on to `current_week` below, but its one game only just went
+        # final -- exactly the case that used to be permanently orphaned.
+        orphaned_week = NflWeek(
+            season=league.season,
+            week_number=1,
+            start_date=now - timedelta(days=15),
+            end_date=now - timedelta(days=8),
+            status=WeekStatus.REGULAR,
+        )
+        db_session.add(orphaned_week)
+        db_session.flush()
+        db_session.add(
+            NflGame(
+                week_id=orphaned_week.id,
+                espn_game_id=f"sync-scores-game-{uuid.uuid4().hex}",
+                kickoff_time=orphaned_week.start_date,
+                away_team="BUF",
+                home_team="KC",
+                home_score=24,
+                away_score=17,
+                winning_team="KC",
+                game_status=GameStatus.FINAL,
+                is_tie=False,
+            )
+        )
+
+        current_week = NflWeek(
+            season=league.season,
+            week_number=2,
+            start_date=now - timedelta(hours=1),
+            end_date=now + timedelta(days=6),
+            status=WeekStatus.REGULAR,
+        )
+        db_session.add(current_week)
+        db_session.commit()
+
+        with (
+            patch("app.integrations.espn.fetch_schedule", return_value=[]),
+            patch("app.services.nfl_schedule_service.import_games", return_value=0),
+        ):
+            await sync_scores(db_session)
+
+        db_session.refresh(orphaned_week)
+        assert orphaned_week.status == WeekStatus.COMPLETE

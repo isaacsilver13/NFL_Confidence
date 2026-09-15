@@ -145,6 +145,52 @@ def test_get_current_week_falls_back_to_earliest_incomplete_week(db_session: Ses
         weeks_service.get_current_week(db_session)
 
 
+def test_list_incomplete_weeks_excludes_complete_weeks_regardless_of_current(
+    db_session: Session,
+) -> None:
+    """Unlike `get_current_week`, this must surface every unfinished week --
+    including one the calendar has already rolled past -- so sync jobs can
+    keep re-checking it instead of only ever looking at "current".
+    """
+    user = _make_user(db_session)
+    league = league_service.create_league(
+        db_session, owner=user, name="Incomplete Weeks Test League", season=2026
+    )
+    now = datetime.now(timezone.utc)
+
+    orphaned_week = nfl_week_repository.create(
+        db_session,
+        season=league.season,
+        week_number=1,
+        start_date=now - timedelta(days=15),
+        end_date=now - timedelta(days=8),
+    )
+    orphaned_week.status = WeekStatus.REGULAR
+
+    finished_week = nfl_week_repository.create(
+        db_session,
+        season=league.season,
+        week_number=2,
+        start_date=now - timedelta(days=7),
+        end_date=now - timedelta(days=1),
+    )
+    finished_week.status = WeekStatus.COMPLETE
+
+    current_week = nfl_week_repository.create(
+        db_session,
+        season=league.season,
+        week_number=3,
+        start_date=now - timedelta(hours=1),
+        end_date=now + timedelta(days=6),
+    )
+    current_week.status = WeekStatus.REGULAR
+    db_session.commit()
+
+    incomplete = weeks_service.list_incomplete_weeks(db_session, league=league)
+
+    assert [week.id for week in incomplete] == [orphaned_week.id, current_week.id]
+
+
 def test_picks_reject_duplicate_confidence_values(client, db_session: Session) -> None:
     user = _make_user(db_session)
     _, games = _ensure_current_fixture(db_session, user)
