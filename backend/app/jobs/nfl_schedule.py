@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import get_settings
+from app.core.exceptions import NotFoundError
 from app.db.session import SessionLocal
 from app.integrations.espn import fetch_schedule
 from app.models.nfl_game import NflGame
@@ -122,6 +123,35 @@ def lock_expired_picks() -> int:
                 locked,
             )
         return locked
+
+
+def get_next_lock_deadline(db: Session) -> datetime | None:
+    """Earliest kickoff of the current week's games, if any picks are still unlocked.
+
+    Used to arm a one-time scheduler job at the exact lock moment instead of
+    polling the database every minute forever (see `scheduler.schedule_next_lock`).
+    Returns None when there's nothing left to lock: no active league, no
+    current week, or every pick in the current week is already locked.
+    """
+
+    league = league_repository.get_active(db)
+    if league is None:
+        return None
+    try:
+        week = weeks_service.get_current_week(db)
+    except NotFoundError:
+        return None
+
+    games = list(
+        db.execute(
+            select(NflGame).where(NflGame.week_id == week.id).options(selectinload(NflGame.picks))
+        ).scalars()
+    )
+    if not games:
+        return None
+    if not any(pick.locked_at is None for game in games for pick in game.picks):
+        return None
+    return min(game.kickoff_time for game in games)
 
 
 def _send_weekly_reminders(db: Session) -> int:

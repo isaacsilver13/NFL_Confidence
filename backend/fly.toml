@@ -19,7 +19,7 @@ grace_period = "20s"
 interval = "30s"
 method = "GET"
 timeout = "30s"
-path = "/api/v1/health/ready"
+path = "/api/v1/health"
 
 [[vm]]
 memory = "512mb"
