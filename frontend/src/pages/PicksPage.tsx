@@ -17,16 +17,6 @@ interface PickDraft {
 
 type PickDrafts = Record<string, PickDraft>
 
-interface PendingSave {
-  drafts: PickDrafts
-  version: number
-}
-
-interface DraftSavePayload {
-  submissions: PickInput[]
-  voidedGameIds: string[]
-}
-
 function formatKickoff(kickoff: string): string {
   return new Intl.DateTimeFormat(undefined, {
     weekday: 'short',
@@ -84,39 +74,6 @@ function isValidConfidence(confidence: string | undefined, gameCount: number): b
   return Number.isInteger(value) && value >= 1 && value <= gameCount
 }
 
-function draftSavePayload(games: NflGame[], drafts: PickDrafts): DraftSavePayload {
-  const candidates = games.map((game) => {
-    const draft = drafts[game.id]
-    const confidence = Number(draft?.confidence ?? 0)
-    const isComplete = isCompleteDraft(game, draft, games.length)
-    return { game, team: draft?.team ?? '', confidence, isComplete }
-  })
-  const confidenceCounts = new Map<number, number>()
-  for (const candidate of candidates) {
-    if (candidate.isComplete) {
-      confidenceCounts.set(
-        candidate.confidence,
-        (confidenceCounts.get(candidate.confidence) ?? 0) + 1,
-      )
-    }
-  }
-
-  const submissions: PickInput[] = []
-  const voidedGameIds: string[] = []
-  for (const candidate of candidates) {
-    if (candidate.isComplete && confidenceCounts.get(candidate.confidence) === 1) {
-      submissions.push({
-        gameId: candidate.game.id,
-        team: candidate.team,
-        confidence: candidate.confidence,
-      })
-    } else {
-      voidedGameIds.push(candidate.game.id)
-    }
-  }
-  return { submissions, voidedGameIds }
-}
-
 function GamesForm({ week, games, picks }: { week: NflWeek; games: NflGame[]; picks: NflPick[] }) {
   const queryClient = useQueryClient()
   const [drafts, setDrafts] = useState<PickDrafts>(() => initialDrafts(games, picks))
@@ -131,11 +88,14 @@ function GamesForm({ week, games, picks }: { week: NflWeek; games: NflGame[]; pi
   const locksAt = week.locksAt ? Date.parse(week.locksAt) : earliestKickoff
   const isLocked = Boolean(week.isLocked || (locksAt !== null && locksAt <= now))
   const draftsRef = useRef(drafts)
-  const draftVersionRef = useRef(0)
   const isLockedRef = useRef(isLocked)
-  const saveTimerRef = useRef<number | null>(null)
-  const pendingSaveRef = useRef<PendingSave | null>(null)
-  const savingRef = useRef(false)
+  const savedGameIdsRef = useRef(
+    new Set(picks.filter((pick) => !pick.isVoided).map((pick) => pick.gameId)),
+  )
+  const gameVersionsRef = useRef(new Map<string, number>())
+  const gameTimersRef = useRef(new Map<string, number>())
+  const gameSavingRef = useRef(new Set<string>())
+  const pendingGameVersionRef = useRef(new Map<string, number>())
 
   useEffect(() => {
     if (locksAt === null || isLocked) return
@@ -146,6 +106,13 @@ function GamesForm({ week, games, picks }: { week: NflWeek; games: NflGame[]; pi
   useEffect(() => {
     isLockedRef.current = isLocked
   }, [isLocked])
+
+  useEffect(() => {
+    const timers = gameTimersRef.current
+    return () => {
+      for (const timer of timers.values()) window.clearTimeout(timer)
+    }
+  }, [])
 
   const confidenceValues = Array.from({ length: games.length }, (_, index) => index + 1)
   const confidenceUsageByValue = useMemo(() => {
@@ -176,14 +143,14 @@ function GamesForm({ week, games, picks }: { week: NflWeek; games: NflGame[]; pi
     mutationFn: savePicks,
   })
 
-  async function saveDraft(pendingSave: PendingSave) {
-    if (savingRef.current) {
-      pendingSaveRef.current = pendingSave
+  async function saveGame(gameId: string, version: number) {
+    if (gameSavingRef.current.has(gameId)) {
+      pendingGameVersionRef.current.set(gameId, version)
       return
     }
 
     if (isLockedRef.current) {
-      if (pendingSave.version === draftVersionRef.current) {
+      if (gameVersionsRef.current.get(gameId) === version) {
         setSaved(false)
         setVoided(false)
         setSubmitError('Picks are locked after the earliest game kickoff.')
@@ -191,52 +158,95 @@ function GamesForm({ week, games, picks }: { week: NflWeek; games: NflGame[]; pi
       return
     }
 
-    const { submissions, voidedGameIds } = draftSavePayload(games, pendingSave.drafts)
+    const game = games.find((candidate) => candidate.id === gameId)
+    const draft = draftsRef.current[gameId]
+    const isComplete = game !== undefined && isCompleteDraft(game, draft, games.length)
 
-    savingRef.current = true
+    let submissions: PickInput[]
+    let voidedGameIds: string[]
+    const conflictingDraftSnapshots = new Map<string, PickDraft | undefined>()
+    if (isComplete) {
+      const confidence = Number(draft?.confidence)
+      for (const other of games) {
+        if (
+          other.id !== gameId &&
+          isCompleteDraft(other, draftsRef.current[other.id], games.length) &&
+          Number(draftsRef.current[other.id]?.confidence) === confidence
+        ) {
+          conflictingDraftSnapshots.set(other.id, draftsRef.current[other.id])
+        }
+      }
+      voidedGameIds = Array.from(conflictingDraftSnapshots.keys())
+      submissions = [{ gameId, team: draft?.team ?? '', confidence }]
+    } else {
+      submissions = []
+      voidedGameIds = [gameId]
+    }
+
+    gameSavingRef.current.add(gameId)
     try {
-      await saveMutation.mutateAsync({
-        week: week.weekNumber,
-        picks: submissions,
-        voidedGameIds,
-      })
-      if (pendingSave.version === draftVersionRef.current) {
+      await saveMutation.mutateAsync({ week: week.weekNumber, picks: submissions, voidedGameIds })
+      if (gameVersionsRef.current.get(gameId) === version) {
         await queryClient.invalidateQueries({ queryKey: ['picks', 'card', 'current'] })
-        if (pendingSave.version === draftVersionRef.current) {
+        if (isComplete) {
+          savedGameIdsRef.current.add(gameId)
+        } else {
+          savedGameIdsRef.current.delete(gameId)
+        }
+        for (const voidedId of voidedGameIds) savedGameIdsRef.current.delete(voidedId)
+
+        // Displaced games were voided server-side; clear their local draft too
+        // (unless the user has since changed that game again) so the UI stops
+        // showing them as a live conflict the user still needs to fix.
+        let nextDrafts = draftsRef.current
+        let clearedAny = false
+        for (const [otherId, snapshot] of conflictingDraftSnapshots) {
+          const current = nextDrafts[otherId]
+          if (current?.team === snapshot?.team && current?.confidence === snapshot?.confidence) {
+            if (!clearedAny) {
+              nextDrafts = { ...nextDrafts }
+              clearedAny = true
+            }
+            nextDrafts[otherId] = { team: '', confidence: '' }
+          }
+        }
+        if (clearedAny) {
+          draftsRef.current = nextDrafts
+          setDrafts(nextDrafts)
+        }
+
+        if (gameVersionsRef.current.get(gameId) === version) {
           setSaved(true)
           setVoided(voidedGameIds.length > 0)
           setSubmitError(null)
         }
       }
     } catch (error) {
-      if (pendingSave.version === draftVersionRef.current) {
+      if (gameVersionsRef.current.get(gameId) === version) {
         setSaved(false)
-        setSubmitError(
-          error instanceof ApiError ? error.message : "Could not save this week's picks.",
-        )
+        setSubmitError(error instanceof ApiError ? error.message : 'Could not save this pick.')
       }
       setVoided(false)
     } finally {
-      savingRef.current = false
-      const queuedSave = pendingSaveRef.current
-      if (queuedSave && queuedSave.version > pendingSave.version) {
-        pendingSaveRef.current = null
-        scheduleSave(queuedSave, 0)
-      } else if (draftVersionRef.current > pendingSave.version) {
-        scheduleSave({ drafts: draftsRef.current, version: draftVersionRef.current }, 0)
+      gameSavingRef.current.delete(gameId)
+      const queuedVersion = pendingGameVersionRef.current.get(gameId)
+      if (queuedVersion !== undefined && queuedVersion > version) {
+        pendingGameVersionRef.current.delete(gameId)
+        void saveGame(gameId, queuedVersion)
       }
     }
   }
 
-  function scheduleSave(pendingSave: PendingSave, delay = AUTO_SAVE_DEBOUNCE_MS) {
-    pendingSaveRef.current = pendingSave
-    if (saveTimerRef.current !== null) window.clearTimeout(saveTimerRef.current)
-    saveTimerRef.current = window.setTimeout(() => {
-      saveTimerRef.current = null
-      const nextSave = pendingSaveRef.current
-      pendingSaveRef.current = null
-      if (nextSave) void saveDraft(nextSave)
+  function scheduleGameSave(gameId: string, delay = AUTO_SAVE_DEBOUNCE_MS) {
+    const nextVersion = (gameVersionsRef.current.get(gameId) ?? 0) + 1
+    gameVersionsRef.current.set(gameId, nextVersion)
+    const existingTimer = gameTimersRef.current.get(gameId)
+    if (existingTimer !== undefined) window.clearTimeout(existingTimer)
+    const timer = window.setTimeout(() => {
+      gameTimersRef.current.delete(gameId)
+      void saveGame(gameId, nextVersion)
     }, delay)
+    gameTimersRef.current.set(gameId, timer)
   }
 
   function updateDraft(gameId: string, update: Partial<PickDraft>) {
@@ -252,18 +262,25 @@ function GamesForm({ week, games, picks }: { week: NflWeek; games: NflGame[]; pi
       ...draftsRef.current,
       [gameId]: nextDraft,
     }
-    const nextVersion = draftVersionRef.current + 1
     draftsRef.current = nextDrafts
-    draftVersionRef.current = nextVersion
     setSaved(false)
     setSubmitError(null)
     setDrafts(nextDrafts)
-    scheduleSave({ drafts: nextDrafts, version: nextVersion })
+
+    const game = games.find((candidate) => candidate.id === gameId)
+    const isComplete = game !== undefined && isCompleteDraft(game, nextDraft, games.length)
+    if (isComplete || savedGameIdsRef.current.has(gameId)) {
+      scheduleGameSave(gameId)
+    }
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    scheduleSave({ drafts: draftsRef.current, version: draftVersionRef.current }, 0)
+    for (const [gameId, timer] of Array.from(gameTimersRef.current.entries())) {
+      window.clearTimeout(timer)
+      gameTimersRef.current.delete(gameId)
+      void saveGame(gameId, gameVersionsRef.current.get(gameId) ?? 0)
+    }
   }
 
   return (
@@ -606,10 +623,9 @@ export function PicksPage() {
       </div>
     )
 
-  const picksKey = picks.map((pick) => `${pick.gameId}:${pick.team}:${pick.confidence}`).join('|')
   return (
     <PicksScrollPane>
-      <GamesForm key={`${week.id}:${picksKey}`} week={week} games={games} picks={picks} />
+      <GamesForm key={week.id} week={week} games={games} picks={picks} />
     </PicksScrollPane>
   )
 }
