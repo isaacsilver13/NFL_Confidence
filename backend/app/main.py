@@ -57,8 +57,13 @@ async def lifespan(application: FastAPI):
     if scheduler is not None:
         scheduler.start()
         # Re-arm the lock job from current DB state; a redeploy loses any
-        # in-memory one-time job the previous process had scheduled.
-        schedule_next_lock(scheduler)
+        # in-memory one-time job the previous process had scheduled. Don't let
+        # a transient DB hiccup here take down app startup -- the 6-hour
+        # safety-net cron and every future sync/import re-arm this anyway.
+        try:
+            schedule_next_lock(scheduler)
+        except Exception:
+            logger.exception("Could not arm the pick-lock job at startup")
     application.state.scheduler = scheduler
     application.state.scheduler_enabled = settings.enable_scheduler
     try:
