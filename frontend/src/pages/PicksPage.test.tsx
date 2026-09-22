@@ -103,10 +103,7 @@ describe('PicksPage', () => {
     renderPage()
 
     expect(await screen.findByRole('button', { name: 'BUF' })).toBeInTheDocument()
-    expect(screen.getByTestId('picks-scroll-pane')).toHaveClass(
-      'overflow-y-auto',
-      'sm:overflow-visible',
-    )
+    expect(screen.getByTestId('picks-scroll-pane')).toHaveClass('pb-4', 'sm:pb-0')
     expect(screen.getByRole('button', { name: 'GB' })).toBeInTheDocument()
     expect(screen.getByText('Highmark Stadium')).toBeInTheDocument()
     expect(screen.getByText(/Line: KC -3.5/)).toBeInTheDocument()

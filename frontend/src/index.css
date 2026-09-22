@@ -13,7 +13,7 @@
   --color-accent: #c83803;
   --color-accent-hover: #a62e02;
   --color-success: #1f8f63;
-  --color-sky: #2f9fd0;
+  --color-sky: #3d5170;
   --color-gold: #d99a2b;
   --color-danger: #c83c4a;
   --color-background: #eef2f3;
@@ -40,7 +40,7 @@
     margin: 0;
     background-image:
       linear-gradient(135deg, rgb(255 255 255 / 0.62), transparent 42%),
-      linear-gradient(315deg, rgb(47 159 208 / 0.06), transparent 35%);
+      linear-gradient(315deg, rgb(61 81 112 / 0.06), transparent 35%);
   }
 
   button,

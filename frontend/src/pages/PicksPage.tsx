@@ -366,49 +366,36 @@ function GamesForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="sticky top-[70px] z-10 -mx-1 space-y-3 rounded-2xl border border-slate-200 bg-surface/95 px-4 py-3 shadow-sm backdrop-blur dark:border-slate-800 dark:bg-slate-900/95 sm:mx-0">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-ink-muted dark:text-slate-400">
-              Pick progress
-            </p>
-            <p className="mt-1 text-lg font-black text-primary dark:text-white">
-              {pickedCount} of {games.length} games picked
-            </p>
-          </div>
-          {hasConflicts ? (
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-danger/10 px-3 py-1.5 text-xs font-black uppercase tracking-[0.12em] text-danger">
-              <AlertTriangle size={14} aria-hidden="true" /> Resolve conflicts
-            </span>
-          ) : pickedCount === games.length ? (
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-accent/10 px-3 py-1.5 text-xs font-black uppercase tracking-[0.12em] text-accent">
-              <Check size={14} aria-hidden="true" /> Complete
-            </span>
-          ) : null}
-        </div>
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-3 dark:border-slate-800">
-          <p
-            role="status"
-            className={`text-sm font-semibold ${submission.submittedAt ? 'text-accent' : 'text-ink-muted dark:text-slate-400'}`}
-          >
-            {submission.submittedAt
-              ? `Submitted ${formatSubmittedAt(submission.submittedAt)}`
-              : 'Not yet submitted'}
+      <div className="-mx-1 space-y-2 rounded-2xl border border-slate-200 bg-surface/95 px-4 py-2 shadow-sm dark:border-slate-800 dark:bg-slate-900/95 sm:mx-0 sm:space-y-3 sm:py-3">
+        <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3">
+          <p className="text-sm font-black text-primary dark:text-white sm:text-lg">
+            {pickedCount} of {games.length} picked
           </p>
-          {!isLocked && (
-            <button
-              type="button"
-              onClick={handleSubmitPicks}
-              disabled={!canSubmit}
-              className="rounded-xl bg-primary px-4 py-2 text-sm font-black text-white transition-colors disabled:cursor-not-allowed disabled:opacity-40 dark:bg-sky dark:text-primary"
-            >
-              {submitMutation.isPending
-                ? 'Submitting…'
-                : submission.submittedAt
-                  ? 'Resubmit picks'
-                  : 'Submit picks'}
-            </button>
-          )}
+          <div className="flex items-center gap-2">
+            {hasConflicts ? (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-danger/10 px-2.5 py-1 text-xs font-black uppercase tracking-[0.1em] text-danger sm:px-3 sm:py-1.5 sm:tracking-[0.12em]">
+                <AlertTriangle size={14} aria-hidden="true" /> Resolve conflicts
+              </span>
+            ) : pickedCount === games.length ? (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-accent/10 px-2.5 py-1 text-xs font-black uppercase tracking-[0.1em] text-accent sm:px-3 sm:py-1.5 sm:tracking-[0.12em]">
+                <Check size={14} aria-hidden="true" /> Complete
+              </span>
+            ) : null}
+            {!isLocked && (
+              <button
+                type="button"
+                onClick={handleSubmitPicks}
+                disabled={!canSubmit}
+                className="rounded-xl bg-primary px-3 py-1.5 text-xs font-black text-white transition-colors disabled:cursor-not-allowed disabled:opacity-40 dark:bg-sky dark:text-primary sm:px-4 sm:py-2 sm:text-sm"
+              >
+                {submitMutation.isPending
+                  ? 'Submitting…'
+                  : submission.submittedAt
+                    ? 'Resubmit picks'
+                    : 'Submit picks'}
+              </button>
+            )}
+          </div>
         </div>
         <div
           role="progressbar"
@@ -416,34 +403,41 @@ function GamesForm({
           aria-valuemin={0}
           aria-valuemax={games.length}
           aria-valuenow={pickedCount}
-          className="h-2 overflow-hidden rounded-full bg-surface-muted dark:bg-slate-800"
+          className="h-1.5 overflow-hidden rounded-full bg-surface-muted dark:bg-slate-800 sm:h-2"
         >
           <div
             className={`h-full rounded-full transition-[width] ${hasConflicts ? 'bg-danger' : 'bg-accent'}`}
             style={{ width: `${games.length ? (pickedCount / games.length) * 100 : 0}%` }}
           />
         </div>
-        <div>
-          <p className="text-xs font-bold uppercase tracking-[0.14em] text-ink-muted dark:text-slate-400">
-            Confidence values
-          </p>
-          <div className="mt-2 flex flex-wrap gap-1.5" role="list" aria-label="Confidence values">
-            {confidenceValues.map((value) => {
-              const usedBy = confidenceUsageByValue.get(value) ?? []
-              const isConflict = usedBy.length > 1
-              return (
-                <span
-                  key={value}
-                  role="listitem"
-                  aria-label={`Confidence ${value}${usedBy.length ? ' used' : ' available'}${isConflict ? ', conflict' : ''}`}
-                  className={`inline-flex h-7 min-w-7 items-center justify-center gap-0.5 rounded-md border px-1.5 text-xs font-bold ${isConflict ? 'border-danger bg-danger/10 text-danger' : usedBy.length ? 'border-slate-300 bg-surface-muted text-ink-muted line-through dark:border-slate-700 dark:bg-slate-950 dark:text-slate-500' : 'border-accent/40 bg-accent/5 text-accent'}`}
-                >
-                  {usedBy.length > 0 && <Check size={11} aria-hidden="true" />}
-                  {value}
-                </span>
-              )
-            })}
-          </div>
+        <p
+          role="status"
+          className={`text-xs font-semibold sm:text-sm ${submission.submittedAt ? 'text-accent' : 'text-ink-muted dark:text-slate-400'}`}
+        >
+          {submission.submittedAt
+            ? `Submitted ${formatSubmittedAt(submission.submittedAt)}`
+            : 'Not yet submitted'}
+        </p>
+        <div
+          className="-mx-4 flex gap-1.5 overflow-x-auto px-4 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0"
+          role="list"
+          aria-label="Confidence values"
+        >
+          {confidenceValues.map((value) => {
+            const usedBy = confidenceUsageByValue.get(value) ?? []
+            const isConflict = usedBy.length > 1
+            return (
+              <span
+                key={value}
+                role="listitem"
+                aria-label={`Confidence ${value}${usedBy.length ? ' used' : ' available'}${isConflict ? ', conflict' : ''}`}
+                className={`inline-flex h-6 min-w-6 shrink-0 items-center justify-center gap-0.5 rounded-md border px-1 text-[11px] font-bold sm:h-7 sm:min-w-7 sm:px-1.5 sm:text-xs ${isConflict ? 'border-danger bg-danger/10 text-danger' : usedBy.length ? 'border-slate-300 bg-surface-muted text-ink-muted line-through dark:border-slate-700 dark:bg-slate-950 dark:text-slate-500' : 'border-accent/40 bg-accent/5 text-accent'}`}
+              >
+                {usedBy.length > 0 && <Check size={11} aria-hidden="true" />}
+                {value}
+              </span>
+            )
+          })}
         </div>
       </div>
       <div className="flex flex-wrap items-end justify-between gap-3 border-b border-slate-200 pb-5 dark:border-slate-800">
@@ -715,10 +709,7 @@ function GamesForm({
 
 function PicksScrollPane({ children }: { children: ReactNode }) {
   return (
-    <div
-      data-testid="picks-scroll-pane"
-      className="h-[calc(100dvh-8rem)] overflow-y-auto overscroll-contain px-1 pb-4 sm:h-auto sm:overflow-visible sm:px-0 sm:pb-0"
-    >
+    <div data-testid="picks-scroll-pane" className="pb-4 sm:pb-0">
       {children}
     </div>
   )
