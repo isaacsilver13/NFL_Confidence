@@ -1,4 +1,4 @@
-"""Callable Tuesday schedule import job."""
+"""Callable Monday schedule import job."""
 
 import argparse
 import logging
@@ -21,8 +21,8 @@ from app.repositories import (
     nfl_week_repository,
     pick_repository,
 )
-from app.services import scoring_service, weeks_service
-from app.services.email_service import send_weekly_reminder
+from app.services import report_service, scoring_service, weeks_service
+from app.services.email_service import send_email, send_weekly_reminder
 from app.services.nfl_schedule_service import import_games
 
 logger = logging.getLogger(__name__)
@@ -224,6 +224,60 @@ def send_weekly_reminders(db: Session | None = None) -> int:
         return _send_weekly_reminders(db)
     with SessionLocal() as session:
         return _send_weekly_reminders(session)
+
+
+def _send_weekly_report(db: Session) -> int:
+    league = league_repository.get_active(db)
+    if league is None:
+        return 0
+    try:
+        week = report_service.get_most_recently_completed_week(db, league=league)
+    except NotFoundError:
+        return 0
+
+    commissioners = report_service.commissioners(db, league=league)
+    if not commissioners:
+        return 0
+
+    already_sent = {
+        user_id
+        for user_id in db.execute(
+            select(NotificationDelivery.user_id).where(
+                NotificationDelivery.week_id == week.id,
+                NotificationDelivery.notification_type == "weekly_report",
+            )
+        ).scalars()
+    }
+    pending = [c for c in commissioners if c.user_id not in already_sent]
+    if not pending:
+        return 0
+
+    html = report_service.render_weekly_report_html(db, league=league, week_number=week.week_number)
+    subject = f"{league.name}: Week {week.week_number} Report"
+    for commissioner in pending:
+        send_email(to=commissioner.user.email, subject=subject, html=html)
+        db.add(
+            NotificationDelivery(
+                user_id=commissioner.user_id,
+                week_id=week.id,
+                notification_type="weekly_report",
+            )
+        )
+    db.commit()
+    logger.info(
+        "Weekly report run season=%s week=%s recipients=%s",
+        league.season,
+        week.week_number,
+        len(pending),
+    )
+    return len(pending)
+
+
+def send_weekly_report(db: Session | None = None) -> int:
+    if db is not None:
+        return _send_weekly_report(db)
+    with SessionLocal() as session:
+        return _send_weekly_report(session)
 
 
 def main() -> None:

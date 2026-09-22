@@ -14,7 +14,7 @@ Automate every repetitive task.
 
 Runs
 
-Tuesday
+Monday
 
 Imports
 
@@ -100,6 +100,23 @@ Sunday
 9 AM
 
 30 Minutes Before Kickoff
+
+---
+
+## Weekly Report
+
+Runs
+
+Tuesday, 9 AM Eastern
+
+Emails
+
+Commissioners only
+
+A live-data report (scoreboard, standings, payment status, every member's
+full pick grid) for the most recently completed week. Skips sending if no
+week is complete yet, and is idempotent per commissioner/week (won't resend
+on a redeploy or scheduler restart).
 
 ---
 
