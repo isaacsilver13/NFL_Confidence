@@ -190,6 +190,11 @@ def current_week_with_games(db_session: Session, league_with_owner):
     db_session.add(week)
     db_session.flush()
 
+    # Kickoffs hang off the current hour, not midnight UTC: anchoring them to
+    # `week_start` put the first kickoff at 20:00 UTC today, so any test run
+    # after that saw the week as already locked.
+    kickoff_base = now.replace(minute=0, second=0, microsecond=0)
+
     # Create 17 games spread throughout the week
     games = []
     for i in range(17):
@@ -197,17 +202,17 @@ def current_week_with_games(db_session: Session, league_with_owner):
         # Sunday games at hours 13, 16 (1pm, 4pm ET)
         # Monday game at hour 20 (8pm)
         if i == 0:  # Thursday
-            kickoff = week_start + timedelta(hours=20)
+            kickoff = kickoff_base + timedelta(hours=20)
         elif i < 8:  # Sunday afternoon (spread across 3 hours)
-            kickoff = week_start + timedelta(
+            kickoff = kickoff_base + timedelta(
                 days=2, hours=13 + (i - 1) // 4, minutes=30 * ((i - 1) % 4)
             )
         elif i < 14:  # Sunday/Monday night
-            kickoff = week_start + timedelta(
+            kickoff = kickoff_base + timedelta(
                 days=2, hours=20 + ((i - 8) // 3), minutes=15 * ((i - 8) % 3)
             )
         else:  # Monday night and late games
-            kickoff = week_start + timedelta(
+            kickoff = kickoff_base + timedelta(
                 days=3, hours=20 + ((i - 14) // 2), minutes=30 * ((i - 14) % 2)
             )
 
