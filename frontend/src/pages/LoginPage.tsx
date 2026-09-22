@@ -40,10 +40,10 @@ export function LoginPage() {
         <NflMark />
         <div className="mt-10">
           <p className="mb-2 text-xs font-bold uppercase tracking-[0.2em] text-accent">
-            Game day starts here
+            Never Let It Rest
           </p>
           <h1 className="mb-3 text-3xl font-black tracking-tight text-primary dark:text-white">
-            Good Better Best.
+            Good Better Best
           </h1>
         </div>
         <p className="mb-8 max-w-sm text-slate-600 dark:text-slate-300">
