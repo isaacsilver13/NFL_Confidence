@@ -45,15 +45,16 @@ The command requires the database configured by `DATABASE_URL` and prints the nu
 
 ## Local development
 
-Use the deterministic fixture when working without the ESPN API:
+Seed the active league with real weeks and fake players (requires ESPN API access):
 
 ```powershell
 cd backend
 .venv\Scripts\python.exe -m alembic upgrade head
-.venv\Scripts\python.exe -m scripts.seed_test_data
+.venv\Scripts\python.exe -m scripts.seed_test_data            # weeks 1-5 by default
+.venv\Scripts\python.exe -m scripts.seed_test_data --weeks 8  # or more weeks
 ```
 
-The fixture creates a current week and games suitable for API and frontend checks. The leaderboard fixture can be added separately with:
+The seed imports weeks 1 through `--weeks` from ESPN through the same `import_games` path the scheduler uses, then gives five fake demo users a deterministic, fully-slotted set of picks for each week and scores it. It also removes games left by the old `local-test-*` fixture, which used to add extra confidence slots to real weeks. On the dev Fly app, run it with `fly ssh console --app nfl-confidence-api-dev -C "python -m scripts.seed_test_data"`. The leaderboard fixture can be added separately with:
 
 ```powershell
 .venv\Scripts\python.exe -m scripts.seed_leaderboard_data --season 2026
