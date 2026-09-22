@@ -107,6 +107,26 @@ def test_current_nfl_endpoints_and_pick_update(client, db_session: Session) -> N
     assert db_session.query(Pick).filter_by(user_id=user.id).count() == len(games)
 
 
+def test_current_games_include_live_clock_and_period(client, db_session: Session) -> None:
+    user = _make_user(db_session)
+    week, games = _ensure_current_fixture(db_session, user)
+    games[0].clock = "8:42"
+    games[0].period = 2
+    db_session.commit()
+
+    games_response = client.get("/api/v1/games/current", headers=_auth_header(user))
+
+    assert games_response.status_code == 200
+    returned_games = {game["id"]: game for game in games_response.json()["data"]}
+    live_game = returned_games[str(games[0].id)]
+    assert live_game["clock"] == "8:42"
+    assert live_game["period"] == 2
+    # Games without a clock/period yet (e.g. still scheduled) report null rather
+    # than a default value.
+    assert returned_games[str(games[1].id)]["clock"] is None
+    assert returned_games[str(games[1].id)]["period"] is None
+
+
 def test_get_current_week_falls_back_to_earliest_incomplete_week(db_session: Session) -> None:
     """A week's `end_date` is derived from its last game's kickoff time, so the
     strict date-range lookup can stop matching before that game (or the
@@ -290,6 +310,142 @@ def test_picks_lock_for_entire_week_at_first_kickoff(client, db_session: Session
 
     assert response.status_code == 422
     assert "already kicked off" in response.json()["error"]["message"]
+
+
+def test_submit_picks_requires_complete_card(client, db_session: Session) -> None:
+    user = _make_user(db_session)
+    week, games = _ensure_current_fixture(db_session, user)
+    headers = _auth_header(user)
+
+    incomplete_response = client.post(
+        "/api/v1/picks/submit", json={"week": week.week_number}, headers=headers
+    )
+    assert incomplete_response.status_code == 422
+    assert incomplete_response.json()["error"]["code"] == "VALIDATION_ERROR"
+
+    client.post(
+        "/api/v1/picks",
+        json={
+            "week": week.week_number,
+            "picks": [
+                {"gameId": str(game.id), "team": game.home_team, "confidence": index}
+                for index, game in enumerate(games, start=1)
+            ],
+        },
+        headers=headers,
+    )
+
+    submit_response = client.post(
+        "/api/v1/picks/submit", json={"week": week.week_number}, headers=headers
+    )
+    assert submit_response.status_code == 200
+    assert submit_response.json()["data"]["submittedAt"] is not None
+
+    card_response = client.get("/api/v1/picks/card/current", headers=headers)
+    assert card_response.json()["data"]["submission"]["submittedAt"] is not None
+
+
+def test_submit_picks_can_be_resubmitted_before_lock(client, db_session: Session) -> None:
+    user = _make_user(db_session)
+    week, games = _ensure_current_fixture(db_session, user)
+    headers = _auth_header(user)
+
+    client.post(
+        "/api/v1/picks",
+        json={
+            "week": week.week_number,
+            "picks": [
+                {"gameId": str(game.id), "team": game.home_team, "confidence": index}
+                for index, game in enumerate(games, start=1)
+            ],
+        },
+        headers=headers,
+    )
+    first_submit = client.post(
+        "/api/v1/picks/submit", json={"week": week.week_number}, headers=headers
+    )
+    assert first_submit.status_code == 200
+
+    client.post(
+        "/api/v1/picks",
+        json={
+            "week": week.week_number,
+            "picks": [
+                {"gameId": str(games[0].id), "team": games[0].away_team, "confidence": 1},
+            ],
+        },
+        headers=headers,
+    )
+    second_submit = client.post(
+        "/api/v1/picks/submit", json={"week": week.week_number}, headers=headers
+    )
+    assert second_submit.status_code == 200
+    assert (
+        db_session.query(Pick).filter_by(user_id=user.id, game_id=games[0].id).one().picked_team
+        == games[0].away_team
+    )
+
+
+def test_submit_picks_rejects_after_lock(client, db_session: Session) -> None:
+    user = _make_user(db_session)
+    week, games = _ensure_current_fixture(db_session, user)
+    headers = _auth_header(user)
+
+    client.post(
+        "/api/v1/picks",
+        json={
+            "week": week.week_number,
+            "picks": [
+                {"gameId": str(game.id), "team": game.home_team, "confidence": index}
+                for index, game in enumerate(games, start=1)
+            ],
+        },
+        headers=headers,
+    )
+
+    games[0].kickoff_time = datetime.now(timezone.utc) - timedelta(minutes=1)
+    db_session.commit()
+
+    response = client.post("/api/v1/picks/submit", json={"week": week.week_number}, headers=headers)
+    assert response.status_code == 422
+    assert "already kicked off" in response.json()["error"]["message"]
+
+
+def test_all_picks_hidden_until_earliest_kickoff_then_reveals_everyone(
+    client, db_session: Session
+) -> None:
+    user_a = _make_user(db_session)
+    week, games = _ensure_current_fixture(db_session, user_a)
+    user_b = _make_user(db_session)
+    league = league_repository.get_active(db_session)
+    assert league is not None
+    db_session.add(LeagueMember(league_id=league.id, user_id=user_b.id, role=LeagueRole.MEMBER))
+    db_session.commit()
+
+    client.post(
+        "/api/v1/picks",
+        json={
+            "week": week.week_number,
+            "picks": [{"gameId": str(games[0].id), "team": games[0].home_team, "confidence": 1}],
+        },
+        headers=_auth_header(user_a),
+    )
+
+    before = client.get("/api/v1/picks/all/current", headers=_auth_header(user_b))
+    assert before.status_code == 422
+    assert "revealed" in before.json()["error"]["message"].lower()
+
+    games[0].kickoff_time = datetime.now(timezone.utc) - timedelta(minutes=1)
+    db_session.commit()
+
+    after = client.get("/api/v1/picks/all/current", headers=_auth_header(user_b))
+    assert after.status_code == 200
+    members = after.json()["data"]["members"]
+    user_a_entry = next(m for m in members if m["userId"] == str(user_a.id))
+    assert len(user_a_entry["picks"]) == 1
+    assert user_a_entry["picks"][0]["team"] == games[0].home_team
+    user_b_entry = next(m for m in members if m["userId"] == str(user_b.id))
+    assert user_b_entry["picks"] == []
 
 
 def test_pick_history_is_private_and_includes_current_week(db_session: Session) -> None:

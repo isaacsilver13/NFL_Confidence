@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen } from '@testing-library/react'
+import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -9,10 +9,6 @@ import { fetchCurrentPicksCard, fetchSessionBootstrap, type SessionBootstrap } f
 import { fetchCompletedWeeks } from '@/api/nfl'
 import { fetchSeasonStandings, fetchWeeklyLeaderboard } from '@/api/leaderboard'
 import { DashboardPage } from './DashboardPage'
-
-vi.mock('./PicksPage', () => ({
-  PicksPage: () => <div>Picks section body</div>,
-}))
 
 vi.mock('./LeaderboardPage', () => ({
   LeaderboardPage: () => <div>Leaderboard section body</div>,
@@ -113,6 +109,7 @@ describe('DashboardPage league access', () => {
       week: memberSession.currentWeek!,
       games: [],
       picks: [],
+      submission: { submittedAt: null },
     })
     mockedFetchCompletedWeeks.mockResolvedValue([])
     mockedFetchSeasonStandings.mockResolvedValue({ season: 2026, standings: [] })
@@ -161,27 +158,19 @@ describe('DashboardPage league access', () => {
     expect(await screen.findByText('You are already a member of this league.')).toBeInTheDocument()
   })
 
-  it('opens only Picks by default and fetches leaderboard data after expansion', async () => {
-    const user = userEvent.setup()
+  it('opens only Weekly Leaderboard by default and fetches its data', async () => {
     mockedFetchSessionBootstrap.mockResolvedValueOnce(memberSession)
     renderPage()
 
-    const picksSection = await screen.findByRole('button', { name: /^Picks/ })
-    const leaderboardSection = screen.getByRole('button', { name: /^Leaderboard/ })
-    expect(picksSection).toHaveAttribute('aria-expanded', 'true')
-    expect(leaderboardSection).toHaveAttribute('aria-expanded', 'false')
-    expect(await screen.findByText('Picks section body')).toBeInTheDocument()
-    expect(mockedFetchCompletedWeeks).not.toHaveBeenCalled()
-
-    await user.click(leaderboardSection)
-
+    const leaderboardSection = await screen.findByRole('button', { name: /^Weekly Leaderboard/ })
+    const standingsSection = screen.getByRole('button', { name: /^Season Standings/ })
     expect(leaderboardSection).toHaveAttribute('aria-expanded', 'true')
-    await screen.findByText('Leaderboard section body')
+    expect(standingsSection).toHaveAttribute('aria-expanded', 'false')
+    expect(await screen.findByText('Leaderboard section body')).toBeInTheDocument()
     expect(mockedFetchCompletedWeeks).toHaveBeenCalledTimes(1)
   })
 
   it('shows the live current week rank in the summary before any week completes', async () => {
-    const user = userEvent.setup()
     mockedFetchSessionBootstrap.mockResolvedValueOnce(memberSession)
     mockedFetchCompletedWeeks.mockResolvedValue([])
     mockedFetchWeeklyLeaderboard.mockResolvedValue({
@@ -205,21 +194,72 @@ describe('DashboardPage league access', () => {
     })
     renderPage()
 
-    const leaderboardSection = await screen.findByRole('button', { name: /^Leaderboard/ })
-    await user.click(leaderboardSection)
-
     expect(await screen.findByText('Your current rank is #2')).toBeInTheDocument()
   })
 
-  it('opens a section named by the URL hash and keeps Picks open for multiple panes', async () => {
+  it('opens a section named by the URL hash and keeps the persisted default open too', async () => {
     mockedFetchSessionBootstrap.mockResolvedValueOnce(memberSession)
     window.history.replaceState(null, '', '/#standings')
     renderPage()
 
-    expect(await screen.findByRole('button', { name: /^Standings/ })).toHaveAttribute(
+    expect(await screen.findByRole('button', { name: /^Season Standings/ })).toHaveAttribute(
       'aria-expanded',
       'true',
     )
-    expect(screen.getByRole('button', { name: /^Picks/ })).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('button', { name: /^Weekly Leaderboard/ })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    )
+  })
+
+  it('opens the newly-hashed section and closes the previous one on a later hash change', async () => {
+    mockedFetchSessionBootstrap.mockResolvedValueOnce(memberSession)
+    window.history.replaceState(null, '', '/#profile')
+    renderPage()
+
+    expect(await screen.findByRole('button', { name: /^My Picks/ })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    )
+
+    act(() => {
+      window.location.hash = 'standings'
+      window.dispatchEvent(new HashChangeEvent('hashchange'))
+    })
+
+    expect(await screen.findByRole('button', { name: /^Season Standings/ })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    )
+    expect(screen.getByRole('button', { name: /^My Picks/ })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    )
+    // Weekly Leaderboard was never explicitly toggled, but it's the persisted default — it stays open.
+    expect(screen.getByRole('button', { name: /^Weekly Leaderboard/ })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    )
+  })
+
+  it('keeps a manually-opened section open even after the hash moves elsewhere', async () => {
+    const user = userEvent.setup()
+    mockedFetchSessionBootstrap.mockResolvedValueOnce(memberSession)
+    renderPage()
+
+    const profileSection = await screen.findByRole('button', { name: /^My Picks/ })
+    await user.click(profileSection)
+    expect(profileSection).toHaveAttribute('aria-expanded', 'true')
+
+    act(() => {
+      window.location.hash = 'standings'
+      window.dispatchEvent(new HashChangeEvent('hashchange'))
+    })
+
+    expect(await screen.findByRole('button', { name: /^Season Standings/ })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    )
+    expect(profileSection).toHaveAttribute('aria-expanded', 'true')
   })
 })

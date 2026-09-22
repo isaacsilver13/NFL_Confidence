@@ -15,6 +15,7 @@ const JoinLeaguePage = lazy(() =>
 const LeagueSettingsPage = lazy(() =>
   import('./pages/LeagueSettingsPage').then((m) => ({ default: m.LeagueSettingsPage })),
 )
+const PicksPage = lazy(() => import('./pages/PicksPage').then((m) => ({ default: m.PicksPage })))
 
 function PageLoader() {
   return (
@@ -49,7 +50,14 @@ function App() {
               </Suspense>
             }
           />
-          <Route path="/picks" element={<Navigate to="/#picks" replace />} />
+          <Route
+            path="/picks"
+            element={
+              <Suspense fallback={<PageLoader />}>
+                <PicksPage />
+              </Suspense>
+            }
+          />
           <Route path="/leaderboard" element={<Navigate to="/#leaderboard" replace />} />
           <Route path="/standings" element={<Navigate to="/#standings" replace />} />
           <Route path="/profile" element={<Navigate to="/#profile" replace />} />

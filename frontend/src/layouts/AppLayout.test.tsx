@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fetchSessionBootstrap } from '@/api/session'
 import { AuthContext } from '@/features/auth/AuthContext'
+import { ThemeProvider } from '@/features/theme/ThemeProvider'
 import type { User } from '@/types/auth'
 import type { SessionBootstrap } from '@/api/session'
 import { AppLayout } from './AppLayout'
@@ -30,31 +31,35 @@ function renderLayout(membership: SessionBootstrap['membership']) {
     membership,
   })
   return render(
-    <AuthContext.Provider
-      value={{
-        user,
-        isLoading: false,
-        isAuthenticated: true,
-        setUser: vi.fn(),
-        signOut: vi.fn().mockResolvedValue(undefined),
-      }}
-    >
-      <QueryClientProvider client={queryClient}>
-        <MemoryRouter initialEntries={['/']}>
-          <Routes>
-            <Route element={<AppLayout />}>
-              <Route path="/" element={<p>Dashboard content</p>} />
-            </Route>
-          </Routes>
-        </MemoryRouter>
-      </QueryClientProvider>
-    </AuthContext.Provider>,
+    <ThemeProvider>
+      <AuthContext.Provider
+        value={{
+          user,
+          isLoading: false,
+          isAuthenticated: true,
+          setUser: vi.fn(),
+          signOut: vi.fn().mockResolvedValue(undefined),
+        }}
+      >
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={['/']}>
+            <Routes>
+              <Route element={<AppLayout />}>
+                <Route path="/" element={<p>Dashboard content</p>} />
+              </Route>
+            </Routes>
+          </MemoryRouter>
+        </QueryClientProvider>
+      </AuthContext.Provider>
+    </ThemeProvider>,
   )
 }
 
 describe('AppLayout commissioner navigation', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    localStorage.clear()
+    document.documentElement.className = ''
   })
 
   it('shows the Members tab to owners', async () => {

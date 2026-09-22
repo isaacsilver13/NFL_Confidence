@@ -62,6 +62,20 @@ def count_voided_by_user_and_week(db: Session, *, user_id: uuid.UUID, week_id: u
     )
 
 
+def count_active_by_user_and_week(db: Session, *, user_id: uuid.UUID, week_id: uuid.UUID) -> int:
+    return int(
+        db.execute(
+            select(func.count(Pick.id))
+            .join(NflGame, Pick.game_id == NflGame.id)
+            .where(
+                Pick.user_id == user_id,
+                NflGame.week_id == week_id,
+                Pick.voided_at.is_(None),
+            )
+        ).scalar_one()
+    )
+
+
 def list_by_user_and_history_season(
     db: Session,
     *,
