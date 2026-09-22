@@ -45,6 +45,15 @@ class MemberPaymentRead(CamelModel):
     voided_pick_count: int = 0
 
 
+class MemberSubmissionRead(CamelModel):
+    user_id: uuid.UUID
+    display_name: str
+    email: str
+    role: LeagueRole
+    submitted_at: datetime | None = None
+    pick_count: int = 0
+
+
 class MemberPaymentUpdateRequest(CamelModel):
     week: int
     is_paid: bool

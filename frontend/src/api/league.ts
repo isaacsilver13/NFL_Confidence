@@ -5,6 +5,7 @@ import type {
   LeagueMember,
   LeagueMemberUpdateInput,
   MemberPaymentStatuses,
+  MemberSubmissionStatuses,
   VoidUnpaidPicksResult,
 } from '@/types/league'
 import { apiFetch } from './client'
@@ -70,4 +71,10 @@ export async function voidUnpaidPicks(week: number): Promise<VoidUnpaidPicksResu
     method: 'POST',
     body: JSON.stringify({ week }),
   })
+}
+
+export async function fetchMemberSubmissionStatuses(
+  week: number,
+): Promise<MemberSubmissionStatuses> {
+  return apiFetch<MemberSubmissionStatuses>(`/league/submissions?week=${week}`)
 }

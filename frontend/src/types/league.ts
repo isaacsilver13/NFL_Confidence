@@ -54,3 +54,17 @@ export interface VoidUnpaidPicksResult {
   voidedPickCount: number
   affectedMemberCount: number
 }
+
+export interface MemberSubmissionStatus {
+  userId: string
+  displayName: string
+  email: string
+  role: LeagueMember['role']
+  submittedAt: string | null
+  pickCount: number
+}
+
+export interface MemberSubmissionStatuses {
+  week: number
+  members: MemberSubmissionStatus[]
+}

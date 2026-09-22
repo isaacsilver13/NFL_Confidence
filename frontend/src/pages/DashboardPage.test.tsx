@@ -189,8 +189,10 @@ describe('DashboardPage league access', () => {
           thirdPlaceFinishes: 0,
           payoutCents: 0,
           pointsRemaining: 10,
+          lastTwoGamePicks: [],
         },
       ],
+      lastTwoGames: [],
     })
     renderPage()
 
