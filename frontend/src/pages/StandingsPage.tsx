@@ -1,8 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { BarChart3 } from 'lucide-react'
 import { ApiError } from '@/api/client'
-import { fetchPickBreakdown, fetchSeasonStandings } from '@/api/leaderboard'
-import { WeeklyPickBreakdown } from '@/components/leaderboard/WeeklyPickBreakdown'
+import { fetchSeasonStandings } from '@/api/leaderboard'
 import type { LeaderboardMember } from '@/types/leaderboard'
 
 function StandingsTable({ standings }: { standings: LeaderboardMember[] }) {
@@ -48,13 +47,8 @@ export function StandingsPage() {
     queryFn: () => fetchSeasonStandings(),
     staleTime: 10 * 60_000,
   })
-  const breakdownQuery = useQuery({
-    queryKey: ['leaderboard', 'pick-breakdown'],
-    queryFn: fetchPickBreakdown,
-    staleTime: 10 * 60_000,
-  })
-  const isLoading = seasonQuery.isPending || breakdownQuery.isPending
-  const error = seasonQuery.error ?? breakdownQuery.error
+  const isLoading = seasonQuery.isPending
+  const error = seasonQuery.error
 
   return (
     <div className="animate-fade-in space-y-6">
@@ -73,8 +67,8 @@ export function StandingsPage() {
       {error && (
         <p role="alert" className="text-danger">
           {error instanceof ApiError && error.status === 404
-            ? 'No completed standings or pick data are available.'
-            : 'Could not load standings and pick data.'}
+            ? 'No completed standings are available.'
+            : 'Could not load standings.'}
         </p>
       )}
       {seasonQuery.data && seasonQuery.data.standings.length === 0 && (
@@ -85,22 +79,6 @@ export function StandingsPage() {
       {seasonQuery.data && seasonQuery.data.standings.length > 0 && (
         <StandingsTable standings={seasonQuery.data.standings} />
       )}
-
-      <section
-        className="space-y-5 rounded-2xl border border-slate-200 bg-surface p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900"
-        aria-labelledby="breakdown-heading"
-      >
-        <div>
-          <p className="text-xs font-bold uppercase tracking-[0.2em] text-accent">League picks</p>
-          <h2
-            id="breakdown-heading"
-            className="mt-1 text-xl font-black text-primary dark:text-white"
-          >
-            Weekly breakdown
-          </h2>
-        </div>
-        {breakdownQuery.data && <WeeklyPickBreakdown weeks={breakdownQuery.data.weeks} />}
-      </section>
     </div>
   )
 }

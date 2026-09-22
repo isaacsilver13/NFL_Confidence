@@ -33,6 +33,8 @@ class GameRead(CamelModel):
     home_score: int | None = None
     winning_team: str | None = None
     is_tie: bool
+    clock: str | None = None
+    period: int | None = None
 
 
 class PickRead(CamelModel):
@@ -82,3 +84,23 @@ class PicksCreateRequest(CamelModel):
     week: int
     picks: list[PickCreate]
     voided_game_ids: list[uuid.UUID] = Field(default_factory=list)
+
+
+class PicksSubmitRequest(CamelModel):
+    week: int
+
+
+class WeekSubmissionRead(CamelModel):
+    submitted_at: datetime | None = None
+
+
+class MemberPicksRead(CamelModel):
+    user_id: uuid.UUID
+    display_name: str
+    picks: list[PickRead]
+
+
+class AllPicksRead(CamelModel):
+    week: WeekRead
+    games: list[GameRead]
+    members: list[MemberPicksRead]

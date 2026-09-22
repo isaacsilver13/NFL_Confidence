@@ -13,6 +13,9 @@ backend/.coverage
 frontend/node_modules/
 frontend/dist/
 frontend/coverage/
+frontend/test-results/
+frontend/playwright-report/
+frontend/e2e/.auth/
 
 # Env files
 .env
@@ -27,3 +30,9 @@ Thumbs.db
 
 # Local Git metadata backups
 .git-legacy-backup/
+
+# Claude in Chrome MCP debug artifacts (console logs, page snapshots/screenshots)
+.playwright-mcp/
+
+# Personal Claude Code settings overrides
+.claude/settings.local.json

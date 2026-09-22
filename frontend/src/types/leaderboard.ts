@@ -1,3 +1,9 @@
+export interface MemberGamePick {
+  gameId: string
+  team: string | null
+  confidence: number | null
+}
+
 export interface LeaderboardMember {
   rank: number
   memberId: string
@@ -11,11 +17,18 @@ export interface LeaderboardMember {
   thirdPlaceFinishes: number
   payoutCents: number
   pointsRemaining: number
+  lastTwoGamePicks: MemberGamePick[]
 }
 
 export interface CompletedWeek {
   weekNumber: number
   seasonNumber: number
+}
+
+export interface GameLabel {
+  gameId: string
+  awayTeam: string
+  homeTeam: string
 }
 
 export interface WeeklyLeaderboard {
@@ -24,6 +37,7 @@ export interface WeeklyLeaderboard {
     seasonNumber: number
   }
   standings: LeaderboardMember[]
+  lastTwoGames: GameLabel[]
 }
 
 export interface SeasonStandings {
@@ -52,4 +66,18 @@ export interface WeeklyPickBreakdown {
 export interface PickBreakdown {
   season: number
   weeks: WeeklyPickBreakdown[]
+}
+
+export interface GamePickDetail {
+  memberName: string
+  team: string
+  confidence: number
+  isCorrect: boolean | null
+}
+
+export interface GamePicks {
+  gameId: string
+  awayTeam: string
+  homeTeam: string
+  picks: GamePickDetail[]
 }

@@ -40,6 +40,8 @@ class NflGame(TimestampMixin, Base):
         index=True,
     )
     is_tie: Mapped[bool] = mapped_column(Boolean, default=False)
+    clock: Mapped[str | None] = mapped_column(String, nullable=True)
+    period: Mapped[int | None] = mapped_column(Integer, nullable=True)
     last_synced: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     week: Mapped["NflWeek"] = relationship(back_populates="games")

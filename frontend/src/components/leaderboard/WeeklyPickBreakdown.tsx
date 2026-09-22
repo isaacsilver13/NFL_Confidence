@@ -1,10 +1,90 @@
+import { useEffect, useRef, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { ApiError } from '@/api/client'
+import { fetchGamePicks } from '@/api/leaderboard'
+import { Button } from '@/components/ui/Button'
 import { TeamLogo } from '@/components/nfl/TeamLogo'
 import { getTeamPalette } from '@/components/nfl/teamPalette'
-import type {
-  GamePickBreakdown,
-  TeamPickCount,
-  WeeklyPickBreakdown as WeeklyPickBreakdownData,
-} from '@/types/leaderboard'
+import type { GamePickBreakdown, TeamPickCount } from '@/types/leaderboard'
+
+function GamePicksModal({ game, onClose }: { game: GamePickBreakdown; onClose: () => void }) {
+  const closeRef = useRef<HTMLButtonElement>(null)
+  const { data, isPending, error } = useQuery({
+    queryKey: ['leaderboard', 'game-picks', game.gameId],
+    queryFn: () => fetchGamePicks(game.gameId),
+  })
+
+  useEffect(() => {
+    closeRef.current?.focus()
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [onClose])
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4"
+      onClick={onClose}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="game-picks-title"
+        onClick={(event) => event.stopPropagation()}
+        className="w-full max-w-md rounded-2xl border border-slate-200 bg-surface p-5 shadow-lg dark:border-slate-800 dark:bg-slate-900"
+      >
+        <div className="flex items-center justify-between gap-3">
+          <h2 id="game-picks-title" className="text-lg font-black text-primary dark:text-white">
+            {game.awayTeam} at {game.homeTeam}
+          </h2>
+          <Button ref={closeRef} type="button" variant="quiet" onClick={onClose}>
+            Close
+          </Button>
+        </div>
+        <div className="mt-4 max-h-96 overflow-y-auto">
+          {isPending && (
+            <p className="text-sm text-ink-muted dark:text-slate-400">Loading picks...</p>
+          )}
+          {error && (
+            <p className="text-sm text-danger">
+              {error instanceof ApiError ? error.message : 'Could not load picks for this game.'}
+            </p>
+          )}
+          {data && data.picks.length === 0 && (
+            <p className="text-sm text-ink-muted dark:text-slate-400">
+              No picks were submitted for this game.
+            </p>
+          )}
+          {data && data.picks.length > 0 && (
+            <ul className="divide-y divide-slate-200 dark:divide-slate-800">
+              {data.picks.map((pick) => (
+                <li
+                  key={pick.memberName}
+                  className="flex items-center justify-between gap-3 py-2 text-sm"
+                >
+                  <span className="font-medium">{pick.memberName}</span>
+                  <span
+                    className={
+                      pick.isCorrect === true
+                        ? 'font-bold text-accent'
+                        : pick.isCorrect === false
+                          ? 'font-bold text-danger'
+                          : 'font-bold text-ink-muted dark:text-slate-400'
+                    }
+                  >
+                    {pick.team} ({pick.confidence})
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
 
 function formatMedian(value: number | null): string {
   if (value === null) return 'No confidence data'
@@ -15,7 +95,13 @@ function countForTeam(counts: TeamPickCount[], team: string): number {
   return counts.find((count) => count.team === team)?.userCount ?? 0
 }
 
-function GameBreakdown({ game }: { game: GamePickBreakdown }) {
+function GameBreakdown({
+  game,
+  onViewPicks,
+}: {
+  game: GamePickBreakdown
+  onViewPicks: () => void
+}) {
   const awayCount = countForTeam(game.teamCounts, game.awayTeam)
   const homeCount = countForTeam(game.teamCounts, game.homeTeam)
   const total = awayCount + homeCount
@@ -68,45 +154,32 @@ function GameBreakdown({ game }: { game: GamePickBreakdown }) {
           No picks were submitted for this game.
         </p>
       )}
+      <div className="mt-3 text-right">
+        <Button type="button" variant="quiet" onClick={onViewPicks}>
+          View Picks
+        </Button>
+      </div>
     </article>
   )
 }
 
-export function WeeklyPickBreakdown({ weeks }: { weeks: WeeklyPickBreakdownData[] }) {
-  if (weeks.length === 0) {
+export function WeeklyPickBreakdown({ games }: { games: GamePickBreakdown[] }) {
+  const [openGame, setOpenGame] = useState<GamePickBreakdown | null>(null)
+
+  if (games.length === 0) {
     return (
       <p className="text-sm text-ink-muted dark:text-slate-400">
-        No completed weeks are available.
+        No games are available for this week.
       </p>
     )
   }
 
   return (
-    <div className="space-y-5">
-      {weeks.map((breakdown) => (
-        <section
-          key={breakdown.weekNumber}
-          className="space-y-3"
-          aria-labelledby={`week-breakdown-${breakdown.weekNumber}`}
-        >
-          <h3
-            id={`week-breakdown-${breakdown.weekNumber}`}
-            className="text-lg font-black text-primary dark:text-white"
-          >
-            Week {breakdown.weekNumber}
-          </h3>
-          {breakdown.games.length === 0 && (
-            <p className="text-sm text-ink-muted dark:text-slate-400">
-              No games are available for this week.
-            </p>
-          )}
-          <div className="space-y-3">
-            {breakdown.games.map((game) => (
-              <GameBreakdown key={game.gameId} game={game} />
-            ))}
-          </div>
-        </section>
+    <div className="space-y-3">
+      {games.map((game) => (
+        <GameBreakdown key={game.gameId} game={game} onViewPicks={() => setOpenGame(game)} />
       ))}
+      {openGame && <GamePicksModal game={openGame} onClose={() => setOpenGame(null)} />}
     </div>
   )
 }

@@ -29,7 +29,7 @@ from app.core.limiter import limiter
 from app.core.responses import error
 from app.db.schema_validator import validate_schema
 from app.db.session import SessionLocal
-from app.jobs.scheduler import create_scheduler
+from app.jobs.scheduler import create_scheduler, schedule_next_lock
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -56,6 +56,14 @@ async def lifespan(application: FastAPI):
     scheduler = create_scheduler() if settings.enable_scheduler else None
     if scheduler is not None:
         scheduler.start()
+        # Re-arm the lock job from current DB state; a redeploy loses any
+        # in-memory one-time job the previous process had scheduled. Don't let
+        # a transient DB hiccup here take down app startup -- the 6-hour
+        # safety-net cron and every future sync/import re-arm this anyway.
+        try:
+            schedule_next_lock(scheduler)
+        except Exception:
+            logger.exception("Could not arm the pick-lock job at startup")
     application.state.scheduler = scheduler
     application.state.scheduler_enabled = settings.enable_scheduler
     try:

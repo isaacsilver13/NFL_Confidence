@@ -11,7 +11,16 @@ from app.models.league_member import LeagueMember
 from app.models.pick import Pick
 from app.models.user import User
 from app.repositories import nfl_game_repository
-from app.schemas.nfl import GameRead, PickRead, PicksCreateRequest, WeekRead
+from app.schemas.nfl import (
+    AllPicksRead,
+    GameRead,
+    MemberPicksRead,
+    PickRead,
+    PicksCreateRequest,
+    PicksSubmitRequest,
+    WeekRead,
+    WeekSubmissionRead,
+)
 from app.services import picks_service, weeks_service
 from app.services.picks_service import PickSubmission
 
@@ -79,6 +88,20 @@ def save_picks(
     return success([_pick_read(pick) for pick in saved_picks])
 
 
+@router.post("/submit")
+def submit_picks(
+    body: PicksSubmitRequest,
+    league_member: tuple[League, LeagueMember] = Depends(get_active_league_member),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    league, member = league_member
+    submission = picks_service.submit_picks(db, user=current_user, week_number=body.week)
+    return success(
+        WeekSubmissionRead(submitted_at=submission.submitted_at).model_dump(by_alias=True)
+    )
+
+
 @router.get("/card/current")
 def get_current_card(
     league_member: tuple[League, LeagueMember] = Depends(get_active_league_member),
@@ -135,10 +158,77 @@ def get_current_card(
     user_picks = picks_service.get_user_picks(db, user=current_user)
     picks_data = [_pick_read(pick) for pick in user_picks]
 
+    submission = picks_service.get_week_submission(
+        db, user=current_user, week_number=week.week_number
+    )
+    submission_data = WeekSubmissionRead(
+        submitted_at=submission.submitted_at if submission else None
+    ).model_dump(by_alias=True)
+
     return success(
         {
             "week": week_data,
             "games": games_data,
             "picks": picks_data,
+            "submission": submission_data,
         }
+    )
+
+
+@router.get("/all/current")
+def get_all_picks_current_week(
+    league_member: tuple[League, LeagueMember] = Depends(get_active_league_member),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Every league member's picks for the current week, once it has locked."""
+    league, member = league_member
+    week, games, member_picks = picks_service.get_all_picks_for_current_week(db, league=league)
+    return success(
+        AllPicksRead(
+            week=WeekRead(
+                id=week.id,
+                season=week.season,
+                week_number=week.week_number,
+                start_date=week.start_date,
+                end_date=week.end_date,
+                status=week.status,
+            ),
+            games=[
+                GameRead(
+                    id=game.id,
+                    away_team=game.away_team,
+                    home_team=game.home_team,
+                    kickoff=game.kickoff_time,
+                    status=game.game_status,
+                    venue_name=game.venue_name,
+                    venue_location=game.venue_location,
+                    spread_team=game.spread_team,
+                    spread=game.spread,
+                    away_score=game.away_score,
+                    home_score=game.home_score,
+                    winning_team=game.winning_team,
+                    is_tie=game.is_tie,
+                )
+                for game in games
+            ],
+            members=[
+                MemberPicksRead(
+                    user_id=league_member_entry.user_id,
+                    display_name=league_member_entry.user.display_name,
+                    picks=[
+                        PickRead(
+                            id=pick.id,
+                            game_id=pick.game_id,
+                            team=pick.picked_team,
+                            confidence=pick.confidence_value,
+                            submitted_at=pick.submitted_at,
+                            voided_at=pick.voided_at,
+                            is_voided=pick.voided_at is not None,
+                        )
+                        for pick in picks
+                    ],
+                )
+                for league_member_entry, picks in member_picks
+            ],
+        ).model_dump(by_alias=True)
     )

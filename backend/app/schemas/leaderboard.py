@@ -5,6 +5,12 @@ import uuid
 from app.schemas.base import CamelModel
 
 
+class MemberGamePickRead(CamelModel):
+    game_id: uuid.UUID
+    team: str | None = None
+    confidence: int | None = None
+
+
 class LeaderboardMemberRead(CamelModel):
     rank: int
     member_id: uuid.UUID
@@ -18,6 +24,7 @@ class LeaderboardMemberRead(CamelModel):
     third_place_finishes: int = 0
     payout_cents: int = 0
     points_remaining: int = 0
+    last_two_game_picks: list[MemberGamePickRead] = []
 
 
 class WeekLabelRead(CamelModel):
@@ -25,9 +32,16 @@ class WeekLabelRead(CamelModel):
     season_number: int
 
 
+class GameLabelRead(CamelModel):
+    game_id: uuid.UUID
+    away_team: str
+    home_team: str
+
+
 class WeeklyLeaderboardRead(CamelModel):
     week: WeekLabelRead
     standings: list[LeaderboardMemberRead]
+    last_two_games: list[GameLabelRead] = []
 
 
 class SeasonStandingsRead(CamelModel):
@@ -56,3 +70,17 @@ class WeeklyPickBreakdownRead(CamelModel):
 class PickBreakdownRead(CamelModel):
     season: int
     weeks: list[WeeklyPickBreakdownRead]
+
+
+class GamePickDetailRead(CamelModel):
+    member_name: str
+    team: str
+    confidence: int
+    is_correct: bool | None = None
+
+
+class GamePicksRead(CamelModel):
+    game_id: uuid.UUID
+    away_team: str
+    home_team: str
+    picks: list[GamePickDetailRead]

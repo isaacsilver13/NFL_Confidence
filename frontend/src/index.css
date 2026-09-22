@@ -1,4 +1,5 @@
 @import 'tailwindcss';
+@custom-variant dark (&:where(.dark, .dark *));
 
 /*
   Design tokens per docs/ui-design-system.md and docs/frontend-specification.md.
@@ -6,10 +7,12 @@
   values, so concrete shades were chosen here and can be adjusted freely.
 */
 @theme {
-  --color-primary: #0b1f3a;
-  --color-primary-hover: #16345c;
-  --color-accent: #1f8f63;
-  --color-accent-hover: #16734f;
+  /* Chicago Bears navy/orange */
+  --color-primary: #0b162a;
+  --color-primary-hover: #16233d;
+  --color-accent: #c83803;
+  --color-accent-hover: #a62e02;
+  --color-success: #1f8f63;
   --color-sky: #2f9fd0;
   --color-gold: #d99a2b;
   --color-danger: #c83c4a;

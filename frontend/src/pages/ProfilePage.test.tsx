@@ -121,6 +121,84 @@ describe('ProfilePage', () => {
     expect(screen.queryByText('GB at CHI')).not.toBeInTheDocument()
   })
 
+  it('summarizes season win rate, weekly points, and a confidence histogram', async () => {
+    mockedFetchPickHistory.mockResolvedValueOnce({
+      season: 2026,
+      weeks: [
+        {
+          weekNumber: 1,
+          picks: [
+            {
+              ...history.weeks[0].picks[0],
+              id: 'p1',
+              confidence: 4,
+              pointsEarned: 4,
+              outcome: 'correct',
+            },
+            {
+              ...history.weeks[0].picks[0],
+              id: 'p2',
+              gameId: 'game-2',
+              confidence: 2,
+              pointsEarned: 0,
+              outcome: 'incorrect',
+            },
+          ],
+        },
+        {
+          weekNumber: 2,
+          picks: [
+            {
+              ...history.weeks[0].picks[0],
+              id: 'p3',
+              gameId: 'game-3',
+              confidence: 4,
+              pointsEarned: 4,
+              outcome: 'correct',
+            },
+          ],
+        },
+      ],
+    })
+    renderPage()
+
+    await screen.findByText('Your season so far')
+    expect(screen.getByText('67%')).toBeInTheDocument()
+    expect(screen.getByText('2 of 3 scored picks')).toBeInTheDocument()
+    expect(screen.getByText('4.0')).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: 'Week 1: 50% win rate' })).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: 'Week 2: 100% win rate' })).toBeInTheDocument()
+    expect(screen.getByText('2-0 (2)')).toBeInTheDocument()
+    expect(screen.getByText('0-1 (1)')).toBeInTheDocument()
+  })
+
+  it('hides season stats when there is no scored history', async () => {
+    mockedFetchPickHistory.mockResolvedValueOnce({
+      season: 2026,
+      weeks: [
+        {
+          weekNumber: 2,
+          picks: [
+            {
+              ...history.weeks[0].picks[0],
+              id: 'pick-current',
+              awayTeam: 'DAL',
+              homeTeam: 'NYG',
+              status: 'scheduled',
+              winningTeam: null,
+              pointsEarned: null,
+              outcome: 'unscored',
+            },
+          ],
+        },
+      ],
+    })
+    renderPage()
+
+    await screen.findByText('DAL at NYG')
+    expect(screen.queryByText('Your season so far')).not.toBeInTheDocument()
+  })
+
   it('sorts history rows when a column header is activated', async () => {
     const user = userEvent.setup()
     mockedFetchPickHistory.mockResolvedValueOnce({

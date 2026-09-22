@@ -20,6 +20,7 @@ from app.models.reminder_preference import ReminderPreference
 from app.models.season_result import SeasonResult
 from app.models.seed_run import SeedRun
 from app.models.user import User
+from app.models.week_submission import WeekSubmission
 from app.models.weekly_result import WeeklyResult
 
 __all__ = [
@@ -39,5 +40,6 @@ __all__ = [
     "SeasonResult",
     "SeedRun",
     "User",
+    "WeekSubmission",
     "WeeklyResult",
 ]

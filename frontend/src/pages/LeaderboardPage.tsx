@@ -2,9 +2,10 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Trophy } from 'lucide-react'
 import { ApiError } from '@/api/client'
-import { fetchWeeklyLeaderboard } from '@/api/leaderboard'
+import { fetchPickBreakdown, fetchWeeklyLeaderboard } from '@/api/leaderboard'
 import { fetchCompletedWeeks, fetchCurrentWeek } from '@/api/nfl'
-import type { LeaderboardMember } from '@/types/leaderboard'
+import { WeeklyPickBreakdown } from '@/components/leaderboard/WeeklyPickBreakdown'
+import type { GameLabel, LeaderboardMember } from '@/types/leaderboard'
 
 interface WeekOption {
   weekNumber: number
@@ -22,7 +23,17 @@ function buildWeekOptions(
   return options.sort((a, b) => a.weekNumber - b.weekNumber)
 }
 
-function LeaderboardTable({ standings }: { standings: LeaderboardMember[] }) {
+function formatGamePick(pick: { team: string | null; confidence: number | null }): string {
+  return pick.team && pick.confidence !== null ? `${pick.team} (${pick.confidence})` : '—'
+}
+
+function LeaderboardTable({
+  standings,
+  lastTwoGames,
+}: {
+  standings: LeaderboardMember[]
+  lastTwoGames: GameLabel[]
+}) {
   return (
     <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-surface shadow-sm dark:border-slate-800 dark:bg-slate-900">
       <table className="w-full min-w-[680px] text-left text-sm">
@@ -34,6 +45,11 @@ function LeaderboardTable({ standings }: { standings: LeaderboardMember[] }) {
             <th className="px-5 py-4 text-right">Correct</th>
             <th className="px-5 py-4 text-right">Points</th>
             <th className="px-5 py-4 text-right">Points Left</th>
+            {lastTwoGames.map((game) => (
+              <th key={game.gameId} className="px-5 py-4 text-right whitespace-nowrap">
+                Picks ({game.awayTeam} @ {game.homeTeam})
+              </th>
+            ))}
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
@@ -49,6 +65,14 @@ function LeaderboardTable({ standings }: { standings: LeaderboardMember[] }) {
               <td className="px-5 py-4 text-right">{member.correctPicks}</td>
               <td className="px-5 py-4 text-right font-black text-accent">{member.totalPoints}</td>
               <td className="px-5 py-4 text-right">{member.pointsRemaining}</td>
+              {lastTwoGames.map((game) => {
+                const pick = member.lastTwoGamePicks.find((p) => p.gameId === game.gameId)
+                return (
+                  <td key={game.gameId} className="px-5 py-4 text-right whitespace-nowrap">
+                    {pick ? formatGamePick(pick) : '—'}
+                  </td>
+                )
+              })}
             </tr>
           ))}
         </tbody>
@@ -78,6 +102,12 @@ export function LeaderboardPage() {
     enabled: selectedWeek !== undefined,
     staleTime: 10 * 60_000,
   })
+  const breakdownQuery = useQuery({
+    queryKey: ['leaderboard', 'pick-breakdown'],
+    queryFn: fetchPickBreakdown,
+    staleTime: 10 * 60_000,
+  })
+  const weekBreakdown = breakdownQuery.data?.weeks.find((week) => week.weekNumber === selectedWeek)
 
   return (
     <div className="animate-fade-in space-y-6">
@@ -85,7 +115,7 @@ export function LeaderboardPage() {
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.2em] text-accent">Weekly race</p>
           <h1 className="mt-2 flex items-center gap-2 text-3xl font-black tracking-tight text-primary dark:text-white">
-            <Trophy className="text-gold" size={25} aria-hidden="true" /> Leaderboard
+            <Trophy className="text-gold" size={25} aria-hidden="true" /> Weekly Leaderboard
           </h1>
         </div>
         <label className="flex items-center gap-3 text-sm font-bold text-ink-muted dark:text-slate-300">
@@ -124,7 +154,40 @@ export function LeaderboardPage() {
         <p className="text-slate-600 dark:text-slate-300">No completed results for this week.</p>
       )}
       {query.data && query.data.standings.length > 0 && (
-        <LeaderboardTable standings={query.data.standings} />
+        <LeaderboardTable standings={query.data.standings} lastTwoGames={query.data.lastTwoGames} />
+      )}
+
+      {selectedWeek !== undefined && (
+        <section
+          className="space-y-5 rounded-2xl border border-slate-200 bg-surface p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900"
+          aria-labelledby="breakdown-heading"
+        >
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.2em] text-accent">League picks</p>
+            <h2
+              id="breakdown-heading"
+              className="mt-1 text-xl font-black text-primary dark:text-white"
+            >
+              Game Breakdown
+            </h2>
+          </div>
+          {breakdownQuery.isPending && (
+            <p className="text-sm text-ink-muted dark:text-slate-400" aria-live="polite">
+              Loading pick breakdown...
+            </p>
+          )}
+          {breakdownQuery.error && (
+            <p className="text-sm text-danger" role="alert">
+              Could not load the pick breakdown.
+            </p>
+          )}
+          {!breakdownQuery.isPending && !breakdownQuery.error && !weekBreakdown && (
+            <p className="text-sm text-ink-muted dark:text-slate-400">
+              Pick breakdown isn&apos;t available until Week {selectedWeek} is complete.
+            </p>
+          )}
+          {weekBreakdown && <WeeklyPickBreakdown games={weekBreakdown.games} />}
+        </section>
       )}
     </div>
   )

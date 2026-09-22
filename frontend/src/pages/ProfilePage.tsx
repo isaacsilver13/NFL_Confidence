@@ -1,9 +1,9 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { ArrowDown, ArrowUp, ArrowUpDown, UserRound } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { ApiError } from '@/api/client'
 import { fetchPickHistory } from '@/api/nfl'
-import type { HistoricalPick, PickOutcome } from '@/types/nfl'
+import type { HistoricalPick, HistoricalWeek, PickOutcome } from '@/types/nfl'
 
 const OUTCOME_LABELS: Record<PickOutcome, string> = {
   correct: 'Correct',
@@ -179,6 +179,184 @@ function SortableHeader({
   )
 }
 
+interface WeekStat {
+  weekNumber: number
+  correct: number
+  incorrect: number
+  scoredPicks: number
+  winRate: number | null
+  totalPoints: number
+}
+
+interface ConfidenceStat {
+  confidence: number
+  correct: number
+  incorrect: number
+}
+
+function computeWeekStats(weeks: HistoricalWeek[]): WeekStat[] {
+  return [...weeks]
+    .sort((left, right) => left.weekNumber - right.weekNumber)
+    .map((week) => {
+      const scored = week.picks.filter(
+        (pick) => pick.outcome === 'correct' || pick.outcome === 'incorrect',
+      )
+      const correct = scored.filter((pick) => pick.outcome === 'correct').length
+      const incorrect = scored.length - correct
+      const totalPoints = week.picks.reduce((sum, pick) => sum + (pick.pointsEarned ?? 0), 0)
+      return {
+        weekNumber: week.weekNumber,
+        correct,
+        incorrect,
+        scoredPicks: scored.length,
+        winRate: scored.length > 0 ? correct / scored.length : null,
+        totalPoints,
+      }
+    })
+}
+
+function computeConfidenceStats(weeks: HistoricalWeek[]): ConfidenceStat[] {
+  const byConfidence = new Map<number, ConfidenceStat>()
+  for (const week of weeks) {
+    for (const pick of week.picks) {
+      if (pick.outcome !== 'correct' && pick.outcome !== 'incorrect') continue
+      const entry = byConfidence.get(pick.confidence) ?? {
+        confidence: pick.confidence,
+        correct: 0,
+        incorrect: 0,
+      }
+      if (pick.outcome === 'correct') entry.correct += 1
+      else entry.incorrect += 1
+      byConfidence.set(pick.confidence, entry)
+    }
+  }
+  return [...byConfidence.values()].sort((left, right) => right.confidence - left.confidence)
+}
+
+function formatWinRate(winRate: number | null): string {
+  return winRate === null ? '—' : `${Math.round(winRate * 100)}%`
+}
+
+function SeasonStats({ weeks }: { weeks: HistoricalWeek[] }) {
+  const weekStats = useMemo(() => computeWeekStats(weeks), [weeks])
+  const confidenceStats = useMemo(() => computeConfidenceStats(weeks), [weeks])
+  const weeksWithScoring = weekStats.filter((week) => week.scoredPicks > 0)
+
+  if (weeksWithScoring.length === 0) return null
+
+  const totalCorrect = weeksWithScoring.reduce((sum, week) => sum + week.correct, 0)
+  const totalScored = weeksWithScoring.reduce((sum, week) => sum + week.scoredPicks, 0)
+  const seasonWinRate = totalScored > 0 ? totalCorrect / totalScored : null
+  const averageWeeklyPoints =
+    weeksWithScoring.reduce((sum, week) => sum + week.totalPoints, 0) / weeksWithScoring.length
+  const maxConfidenceCount = Math.max(
+    1,
+    ...confidenceStats.map((stat) => stat.correct + stat.incorrect),
+  )
+
+  return (
+    <section
+      className="space-y-5 rounded-2xl border border-slate-200 bg-surface p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900"
+      aria-labelledby="season-stats-heading"
+    >
+      <div>
+        <p className="text-xs font-bold uppercase tracking-[0.2em] text-accent">Season stats</p>
+        <h2
+          id="season-stats-heading"
+          className="mt-1 text-xl font-black text-primary dark:text-white"
+        >
+          Your season so far
+        </h2>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
+          <p className="text-xs font-bold uppercase tracking-[0.14em] text-ink-muted dark:text-slate-400">
+            Season win rate
+          </p>
+          <p className="mt-1 text-2xl font-black text-primary dark:text-white">
+            {formatWinRate(seasonWinRate)}
+          </p>
+          <p className="text-xs text-ink-muted dark:text-slate-400">
+            {totalCorrect} of {totalScored} scored picks
+          </p>
+        </div>
+        <div className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
+          <p className="text-xs font-bold uppercase tracking-[0.14em] text-ink-muted dark:text-slate-400">
+            Average weekly points
+          </p>
+          <p className="mt-1 text-2xl font-black text-primary dark:text-white">
+            {averageWeeklyPoints.toFixed(1)}
+          </p>
+          <p className="text-xs text-ink-muted dark:text-slate-400">
+            Across {weeksWithScoring.length} scored week{weeksWithScoring.length === 1 ? '' : 's'}
+          </p>
+        </div>
+      </div>
+
+      <div>
+        <p className="text-xs font-bold uppercase tracking-[0.14em] text-ink-muted dark:text-slate-400">
+          Win rate per week
+        </p>
+        <ul className="mt-2 space-y-1.5">
+          {weeksWithScoring.map((week) => (
+            <li key={week.weekNumber} className="flex items-center gap-3 text-sm">
+              <span className="w-16 shrink-0 font-bold">Week {week.weekNumber}</span>
+              <div
+                className="h-3 flex-1 overflow-hidden rounded-full bg-surface-muted dark:bg-slate-800"
+                role="img"
+                aria-label={`Week ${week.weekNumber}: ${formatWinRate(week.winRate)} win rate`}
+              >
+                <div
+                  className="h-full rounded-full bg-accent"
+                  style={{ width: `${(week.winRate ?? 0) * 100}%` }}
+                />
+              </div>
+              <span className="w-12 shrink-0 text-right text-ink-muted dark:text-slate-400">
+                {formatWinRate(week.winRate)}
+              </span>
+              <span className="w-16 shrink-0 text-right font-bold text-accent">
+                {week.totalPoints} pts
+              </span>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      {confidenceStats.length > 0 && (
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.14em] text-ink-muted dark:text-slate-400">
+            Confidence point histogram
+          </p>
+          <ul className="mt-2 space-y-1.5">
+            {confidenceStats.map((stat) => {
+              const total = stat.correct + stat.incorrect
+              const correctWidth = (stat.correct / maxConfidenceCount) * 100
+              const incorrectWidth = (stat.incorrect / maxConfidenceCount) * 100
+              return (
+                <li key={stat.confidence} className="flex items-center gap-3 text-sm">
+                  <span className="w-8 shrink-0 text-right font-bold">{stat.confidence}</span>
+                  <div
+                    className="flex h-3 flex-1 overflow-hidden rounded-full bg-surface-muted dark:bg-slate-800"
+                    role="img"
+                    aria-label={`Confidence ${stat.confidence}: ${stat.correct} correct, ${stat.incorrect} incorrect`}
+                  >
+                    <div className="h-full bg-accent" style={{ width: `${correctWidth}%` }} />
+                    <div className="h-full bg-danger" style={{ width: `${incorrectWidth}%` }} />
+                  </div>
+                  <span className="w-20 shrink-0 text-right text-ink-muted dark:text-slate-400">
+                    {stat.correct}-{stat.incorrect} ({total})
+                  </span>
+                </li>
+              )
+            })}
+          </ul>
+        </div>
+      )}
+    </section>
+  )
+}
+
 export function ProfilePage() {
   const historyQuery = useQuery({
     queryKey: ['picks', 'history'],
@@ -223,6 +401,9 @@ export function ProfilePage() {
             Your current and completed-week picks will appear here.
           </p>
         </div>
+      )}
+      {historyQuery.data && historyQuery.data.weeks.length > 0 && (
+        <SeasonStats weeks={historyQuery.data.weeks} />
       )}
       {selectedWeek && (
         <section className="space-y-3" aria-labelledby={`history-week-${selectedWeek.weekNumber}`}>

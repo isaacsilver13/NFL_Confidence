@@ -7,6 +7,7 @@ import {
   fetchLeague,
   fetchLeagueMembers,
   fetchMemberPaymentStatuses,
+  fetchMemberSubmissionStatuses,
   removeLeagueMember,
   updateLeagueMember,
   updateMemberPayment,
@@ -16,7 +17,7 @@ import { fetchWeeks } from '@/api/nfl'
 import { fetchSessionBootstrap } from '@/api/session'
 import type { SessionBootstrap } from '@/api/session'
 import type { League, LeagueMember } from '@/types/league'
-import type { MemberPaymentStatuses } from '@/types/league'
+import type { MemberPaymentStatuses, MemberSubmissionStatuses } from '@/types/league'
 import { LeagueSettingsPage } from './LeagueSettingsPage'
 
 vi.mock('@/api/league', () => ({
@@ -24,6 +25,7 @@ vi.mock('@/api/league', () => ({
   fetchLeague: vi.fn(),
   fetchLeagueMembers: vi.fn(),
   fetchMemberPaymentStatuses: vi.fn(),
+  fetchMemberSubmissionStatuses: vi.fn(),
   removeLeagueMember: vi.fn(),
   updateLeagueMember: vi.fn(),
   updateMemberPayment: vi.fn(),
@@ -41,6 +43,7 @@ vi.mock('@/api/session', () => ({
 const mockedFetchLeague = vi.mocked(fetchLeague)
 const mockedFetchLeagueMembers = vi.mocked(fetchLeagueMembers)
 const mockedFetchMemberPaymentStatuses = vi.mocked(fetchMemberPaymentStatuses)
+const mockedFetchMemberSubmissionStatuses = vi.mocked(fetchMemberSubmissionStatuses)
 const mockedRemoveLeagueMember = vi.mocked(removeLeagueMember)
 const mockedUpdateLeagueMember = vi.mocked(updateLeagueMember)
 const mockedUpdateMemberPayment = vi.mocked(updateMemberPayment)
@@ -104,6 +107,18 @@ const paymentStatuses: MemberPaymentStatuses = {
   })),
 }
 
+const submissionStatuses: MemberSubmissionStatuses = {
+  week: 1,
+  members: members.map((member) => ({
+    userId: member.userId,
+    displayName: member.displayName,
+    email: member.email,
+    role: member.role,
+    submittedAt: member.role === 'owner' ? '2026-09-05T12:00:00Z' : null,
+    pickCount: member.role === 'owner' ? 5 : 0,
+  })),
+}
+
 function renderPage(session: SessionBootstrap = ownerSession) {
   mockedFetchSessionBootstrap.mockResolvedValue(session)
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -135,6 +150,7 @@ describe('LeagueSettingsPage', () => {
       },
     ])
     mockedFetchMemberPaymentStatuses.mockResolvedValue(paymentStatuses)
+    mockedFetchMemberSubmissionStatuses.mockResolvedValue(submissionStatuses)
     mockedRemoveLeagueMember.mockResolvedValue(undefined)
     mockedUpdateLeagueMember.mockResolvedValue(members[1])
     mockedUpdateMemberPayment.mockResolvedValue(undefined)
@@ -169,11 +185,11 @@ describe('LeagueSettingsPage', () => {
 
   it('removes a member without showing an error after a successful response', async () => {
     const user = userEvent.setup()
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
     renderPage()
 
     expect((await screen.findAllByText('member@example.com')).length).toBeGreaterThan(0)
     await user.click(screen.getByRole('button', { name: 'Remove Member' }))
+    await user.click(screen.getByRole('button', { name: 'Remove' }))
 
     await waitFor(() => expect(mockedRemoveLeagueMember).toHaveBeenCalledWith('member-1'))
     expect(screen.queryByText('Could not remove Member. Please try again.')).not.toBeInTheDocument()
@@ -181,12 +197,12 @@ describe('LeagueSettingsPage', () => {
 
   it('shows an error when member removal fails', async () => {
     const user = userEvent.setup()
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
     mockedRemoveLeagueMember.mockRejectedValueOnce(new Error('request failed'))
     renderPage()
 
     expect((await screen.findAllByText('member@example.com')).length).toBeGreaterThan(0)
     await user.click(screen.getByRole('button', { name: 'Remove Member' }))
+    await user.click(screen.getByRole('button', { name: 'Remove' }))
 
     expect(
       await screen.findByText('Could not remove Member. Please try again.'),
@@ -202,7 +218,6 @@ describe('LeagueSettingsPage', () => {
 
   it('lets a commissioner mark payment and void unpaid picks', async () => {
     const user = userEvent.setup()
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
     renderPage()
 
     expect(await screen.findByText('Weekly payments')).toBeInTheDocument()
@@ -211,7 +226,17 @@ describe('LeagueSettingsPage', () => {
 
     await waitFor(() => expect(mockedUpdateMemberPayment).toHaveBeenCalledWith('member-1', 1, true))
     await user.click(screen.getByRole('button', { name: 'Void unpaid picks' }))
+    await user.click(screen.getByRole('button', { name: 'Void picks' }))
 
     await waitFor(() => expect(mockedVoidUnpaidPicks).toHaveBeenCalledWith(1))
+  })
+
+  it("shows who has and hasn't submitted picks for the selected week", async () => {
+    renderPage()
+
+    expect(await screen.findByText('Who has submitted picks')).toBeInTheDocument()
+    await waitFor(() => expect(mockedFetchMemberSubmissionStatuses).toHaveBeenCalledWith(1))
+    expect(await screen.findByText(/Submitted Sep 5/)).toBeInTheDocument()
+    expect(screen.getByText('Not submitted')).toBeInTheDocument()
   })
 })

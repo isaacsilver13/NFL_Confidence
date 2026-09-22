@@ -73,6 +73,8 @@ def import_games(db: Session, games: list[EspnGame]) -> int:
             db_game.away_score = imported_game.away_score
             db_game.winning_team = imported_game.winning_team
             db_game.is_tie = imported_game.is_tie
+            db_game.clock = imported_game.clock
+            db_game.period = imported_game.period
             db_game.last_synced = datetime.now(timezone.utc)
             imported += 1
     db.commit()

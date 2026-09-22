@@ -66,6 +66,18 @@ View leaderboard
 
 Notification preferences
 
+**Tool:** Playwright (`frontend/e2e/`), covering mobile viewports only for now (`mobile-390` at 390×844 and `mobile-375` at 375×667, per the 390px overflow requirement in `docs/ui-design-system.md`). Not yet wired into CI — run locally.
+
+**Preconditions:**
+
+1. `backend/scripts/prepare_local.ps1` has been run (starts Docker Postgres, applies migrations, seeds deterministic test data).
+2. The backend is running locally with Google OAuth unconfigured (`GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` unset) so `/auth/dev-login` is enabled.
+3. `npm run dev` is available — Playwright's `webServer` config starts it automatically if it isn't already running.
+
+**Run:** `npm run test:e2e` (from `frontend/`).
+
+**Note on rate limiting:** `/auth/dev-login` and `/auth/refresh` are limited to 30 requests/hour per IP (see `backend/app/api/auth.py`) — a real anti-abuse limit, not a test-only setting. The suite runs fully serially (`workers: 1` in `playwright.config.ts`) and signs in once per worker, reusing that session across all tests (`e2e/fixtures.ts`'s `authedPage`), since the refresh token is single-use and rotates on every call — sharing a saved session across parallel contexts breaks after the first use. A full run costs roughly 24 of the 30 requests, so back-to-back runs within the same hour can hit 429s; the limiter is in-memory, so restarting the backend process resets it.
+
 ---
 
 # Performance Tests
