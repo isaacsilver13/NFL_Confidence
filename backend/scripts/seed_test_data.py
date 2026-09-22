@@ -14,6 +14,9 @@ from app.services import league_service
 from app.services.auth_service import get_or_create_dev_user
 
 TEST_LEAGUE_NAME = "2026 NFL Confidence League"
+# Fixed passcode for local/dev seeding only -- never used for production league
+# creation, which always goes through the normal random-code path.
+DEV_LEAGUE_INVITE_CODE = "DevinTester23"
 TEST_TEAMS = (
     ("BUF", "KC"),
     ("GB", "CHI"),
@@ -42,6 +45,7 @@ def seed_test_data(
                 owner=user,
                 name=TEST_LEAGUE_NAME,
                 season=season or seed_now.year,
+                invite_code=DEV_LEAGUE_INVITE_CODE,
             )
         elif league_member_repository.get_by_league_and_user(db, league.id, user.id) is None:
             league_member_repository.create(

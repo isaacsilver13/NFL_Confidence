@@ -43,7 +43,7 @@ export function LoginPage() {
             Game day starts here
           </p>
           <h1 className="mb-3 text-3xl font-black tracking-tight text-primary dark:text-white">
-            Make every pick count.
+            Good Better Best.
           </h1>
         </div>
         <p className="mb-8 max-w-sm text-slate-600 dark:text-slate-300">
