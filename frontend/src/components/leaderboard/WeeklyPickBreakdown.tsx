@@ -33,10 +33,13 @@ function GamePicksModal({ game, onClose }: { game: GamePickBreakdown; onClose: (
         aria-modal="true"
         aria-labelledby="game-picks-title"
         onClick={(event) => event.stopPropagation()}
-        className="w-full max-w-md rounded-2xl border border-slate-200 bg-surface p-5 shadow-lg dark:border-slate-800 dark:bg-slate-900"
+        className="w-full max-w-md rounded-2xl border border-slate-200 bg-surface p-5 shadow-lg dark:border-slate-800 dev-dark:border-border dark:bg-slate-900 dev-dark:bg-surface-elevated"
       >
         <div className="flex items-center justify-between gap-3">
-          <h2 id="game-picks-title" className="text-lg font-black text-primary dark:text-white">
+          <h2
+            id="game-picks-title"
+            className="text-lg font-black text-primary dark:text-white dev-dark:text-ink"
+          >
             {game.awayTeam} at {game.homeTeam}
           </h2>
           <Button ref={closeRef} type="button" variant="quiet" onClick={onClose}>
@@ -45,7 +48,9 @@ function GamePicksModal({ game, onClose }: { game: GamePickBreakdown; onClose: (
         </div>
         <div className="mt-4 max-h-96 overflow-y-auto">
           {isPending && (
-            <p className="text-sm text-ink-muted dark:text-slate-400">Loading picks...</p>
+            <p className="text-sm text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
+              Loading picks...
+            </p>
           )}
           {error && (
             <p className="text-sm text-danger">
@@ -53,12 +58,12 @@ function GamePicksModal({ game, onClose }: { game: GamePickBreakdown; onClose: (
             </p>
           )}
           {data && data.picks.length === 0 && (
-            <p className="text-sm text-ink-muted dark:text-slate-400">
+            <p className="text-sm text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
               No picks were submitted for this game.
             </p>
           )}
           {data && data.picks.length > 0 && (
-            <ul className="divide-y divide-slate-200 dark:divide-slate-800">
+            <ul className="divide-y divide-slate-200 dark:divide-slate-800 dev-dark:divide-border">
               {data.picks.map((pick) => (
                 <li
                   key={pick.memberName}
@@ -71,7 +76,7 @@ function GamePicksModal({ game, onClose }: { game: GamePickBreakdown; onClose: (
                         ? 'font-bold text-accent'
                         : pick.isCorrect === false
                           ? 'font-bold text-danger'
-                          : 'font-bold text-ink-muted dark:text-slate-400'
+                          : 'font-bold text-ink-muted dark:text-slate-400 dev-dark:text-text-muted'
                     }
                   >
                     {pick.team} ({pick.confidence})
@@ -111,18 +116,18 @@ function GameBreakdown({
   const homePalette = getTeamPalette(game.homeTeam)
 
   return (
-    <article className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-950">
+    <article className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dev-dark:border-border dark:bg-slate-950 dev-dark:bg-background">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2 font-bold">
           <TeamLogo code={game.awayTeam} size="sm" decorative />
           <span>{game.awayTeam}</span>
-          <span className="text-ink-muted dark:text-slate-400">at</span>
+          <span className="text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">at</span>
           <TeamLogo code={game.homeTeam} size="sm" decorative />
           <span>{game.homeTeam}</span>
         </div>
-        <p className="text-sm text-ink-muted dark:text-slate-400">
+        <p className="text-sm text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
           Median confidence:{' '}
-          <span className="font-bold text-ink dark:text-slate-200">
+          <span className="font-bold text-ink dark:text-slate-200 dev-dark:text-ink">
             {formatMedian(game.medianConfidence)}
           </span>
         </p>
@@ -142,7 +147,7 @@ function GameBreakdown({
         </div>
       </div>
       <div
-        className="mt-2 flex h-4 min-w-0 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800"
+        className="mt-2 flex h-4 min-w-0 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800 dev-dark:bg-surface-hover"
         role="img"
         aria-label={`${game.awayTeam} ${awayPercentage} percent, ${game.homeTeam} ${homePercentage} percent`}
       >
@@ -150,7 +155,7 @@ function GameBreakdown({
         <span style={{ width: `${homePercentage}%`, backgroundColor: homePalette.background }} />
       </div>
       {total === 0 && (
-        <p className="mt-2 text-xs text-ink-muted dark:text-slate-400">
+        <p className="mt-2 text-xs text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
           No picks were submitted for this game.
         </p>
       )}
@@ -168,7 +173,7 @@ export function WeeklyPickBreakdown({ games }: { games: GamePickBreakdown[] }) {
 
   if (games.length === 0) {
     return (
-      <p className="text-sm text-ink-muted dark:text-slate-400">
+      <p className="text-sm text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
         No games are available for this week.
       </p>
     )

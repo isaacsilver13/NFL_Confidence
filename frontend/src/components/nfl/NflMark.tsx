@@ -6,8 +6,8 @@ interface NflMarkProps {
 
 export function NflMark({ compact = false }: NflMarkProps) {
   return (
-    <span className="inline-flex items-center gap-2 text-primary dark:text-white">
-      <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-sky shadow-sm dark:bg-sky dark:text-primary">
+    <span className="inline-flex items-center gap-2 text-primary dark:text-white dev-dark:text-ink">
+      <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-sky shadow-sm dark:bg-sky dev-dark:bg-accent dark:text-primary dev-dark:text-white">
         <Shield size={20} strokeWidth={2.5} aria-hidden="true" />
       </span>
       {!compact && (

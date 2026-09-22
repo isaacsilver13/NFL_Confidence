@@ -35,10 +35,10 @@ function LeaderboardTable({
   lastTwoGames: GameLabel[]
 }) {
   return (
-    <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-surface shadow-sm dark:border-slate-800 dark:bg-slate-900">
+    <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-surface shadow-sm dark:border-slate-800 dev-dark:border-border dark:bg-slate-900 dev-dark:bg-surface-elevated">
       <table className="w-full min-w-[680px] text-left text-sm">
         <caption className="sr-only">Weekly leaderboard rankings</caption>
-        <thead className="bg-surface-muted text-xs uppercase tracking-[0.14em] text-ink-muted dark:bg-slate-950 dark:text-slate-400">
+        <thead className="bg-surface-muted text-xs uppercase tracking-[0.14em] text-ink-muted dark:bg-slate-950 dev-dark:bg-background dark:text-slate-400 dev-dark:text-text-muted">
           <tr>
             <th className="px-5 py-4">Rank</th>
             <th className="px-5 py-4">Member</th>
@@ -52,13 +52,16 @@ function LeaderboardTable({
             ))}
           </tr>
         </thead>
-        <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+        <tbody className="divide-y divide-slate-200 dark:divide-slate-800 dev-dark:divide-border">
           {standings.map((member) => (
             <tr
               key={member.memberId}
-              className="transition-colors hover:bg-surface-muted/60 dark:hover:bg-slate-950/60"
+              className="transition-colors hover:bg-surface-muted/60 dark:hover:bg-slate-950/60 dev-dark:hover:bg-surface-hover"
             >
-              <th scope="row" className="px-5 py-4 font-black text-primary dark:text-white">
+              <th
+                scope="row"
+                className="px-5 py-4 font-black text-primary dark:text-white dev-dark:text-ink"
+              >
                 {member.rank}
               </th>
               <td className="px-5 py-4 font-bold">{member.memberName}</td>
@@ -114,16 +117,16 @@ export function LeaderboardPage() {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.2em] text-accent">Weekly race</p>
-          <h1 className="mt-2 flex items-center gap-2 text-3xl font-black tracking-tight text-primary dark:text-white">
+          <h1 className="mt-2 flex items-center gap-2 text-3xl font-black tracking-tight text-primary dark:text-white dev-dark:text-ink">
             <Trophy className="text-gold" size={25} aria-hidden="true" /> Weekly Leaderboard
           </h1>
         </div>
-        <label className="flex items-center gap-3 text-sm font-bold text-ink-muted dark:text-slate-300">
+        <label className="flex items-center gap-3 text-sm font-bold text-ink-muted dark:text-slate-300 dev-dark:text-text-secondary">
           Week
           <select
             value={selectedWeek ?? ''}
             onChange={(event) => setWeek(Number(event.target.value))}
-            className="min-h-11 rounded-xl border border-slate-300 bg-surface px-3 text-ink shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+            className="min-h-11 rounded-xl border border-slate-300 bg-surface px-3 text-ink shadow-sm dark:border-slate-700 dev-dark:border-border-hover dark:bg-slate-900 dev-dark:bg-surface-elevated dark:text-slate-100 dev-dark:text-ink"
           >
             {weekOptions.map(({ weekNumber, isCurrent }) => (
               <option key={weekNumber} value={weekNumber}>
@@ -136,10 +139,15 @@ export function LeaderboardPage() {
       </div>
 
       {selectedWeek === undefined && !weeksQuery.isPending && !currentWeekQuery.isPending && (
-        <p className="text-slate-600 dark:text-slate-300">No weeks available yet.</p>
+        <p className="text-slate-600 dark:text-slate-300 dev-dark:text-text-secondary">
+          No weeks available yet.
+        </p>
       )}
       {selectedWeek !== undefined && query.isPending && (
-        <p className="text-slate-600 dark:text-slate-300" aria-live="polite">
+        <p
+          className="text-slate-600 dark:text-slate-300 dev-dark:text-text-secondary"
+          aria-live="polite"
+        >
           Loading weekly results...
         </p>
       )}
@@ -151,7 +159,9 @@ export function LeaderboardPage() {
         </p>
       )}
       {query.data && query.data.standings.length === 0 && (
-        <p className="text-slate-600 dark:text-slate-300">No completed results for this week.</p>
+        <p className="text-slate-600 dark:text-slate-300 dev-dark:text-text-secondary">
+          No completed results for this week.
+        </p>
       )}
       {query.data && query.data.standings.length > 0 && (
         <LeaderboardTable standings={query.data.standings} lastTwoGames={query.data.lastTwoGames} />
@@ -159,20 +169,23 @@ export function LeaderboardPage() {
 
       {selectedWeek !== undefined && (
         <section
-          className="space-y-5 rounded-2xl border border-slate-200 bg-surface p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900"
+          className="space-y-5 rounded-2xl border border-slate-200 bg-surface p-5 shadow-sm dark:border-slate-800 dev-dark:border-border dark:bg-slate-900 dev-dark:bg-surface-elevated"
           aria-labelledby="breakdown-heading"
         >
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.2em] text-accent">League picks</p>
             <h2
               id="breakdown-heading"
-              className="mt-1 text-xl font-black text-primary dark:text-white"
+              className="mt-1 text-xl font-black text-primary dark:text-white dev-dark:text-ink"
             >
               Game Breakdown
             </h2>
           </div>
           {breakdownQuery.isPending && (
-            <p className="text-sm text-ink-muted dark:text-slate-400" aria-live="polite">
+            <p
+              className="text-sm text-ink-muted dark:text-slate-400 dev-dark:text-text-muted"
+              aria-live="polite"
+            >
               Loading pick breakdown...
             </p>
           )}
@@ -182,7 +195,7 @@ export function LeaderboardPage() {
             </p>
           )}
           {!breakdownQuery.isPending && !breakdownQuery.error && !weekBreakdown && (
-            <p className="text-sm text-ink-muted dark:text-slate-400">
+            <p className="text-sm text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
               Pick breakdown isn&apos;t available until Week {selectedWeek} is complete.
             </p>
           )}

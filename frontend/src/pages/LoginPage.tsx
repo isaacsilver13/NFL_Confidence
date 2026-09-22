@@ -35,18 +35,18 @@ export function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4 py-8 dark:bg-slate-950">
-      <div className="w-full max-w-md animate-slide-up rounded-3xl border border-slate-200 bg-surface p-8 shadow-xl shadow-primary/10 dark:border-slate-800 dark:bg-slate-900 sm:p-10">
+    <div className="flex min-h-screen items-center justify-center bg-background px-4 py-8 dark:bg-slate-950 dev-dark:bg-background">
+      <div className="w-full max-w-md animate-slide-up rounded-3xl border border-slate-200 bg-surface p-8 shadow-xl shadow-primary/10 dark:border-slate-800 dev-dark:border-border dark:bg-slate-900 dev-dark:bg-surface-elevated sm:p-10">
         <NflMark />
         <div className="mt-10">
           <p className="mb-2 text-xs font-bold uppercase tracking-[0.2em] text-accent">
             Never Let It Rest
           </p>
-          <h1 className="mb-3 text-3xl font-black tracking-tight text-primary dark:text-white">
+          <h1 className="mb-3 text-3xl font-black tracking-tight text-primary dark:text-white dev-dark:text-ink">
             Good Better Best
           </h1>
         </div>
-        <p className="mb-8 max-w-sm text-slate-600 dark:text-slate-300">
+        <p className="mb-8 max-w-sm text-slate-600 dark:text-slate-300 dev-dark:text-text-secondary">
           Sign in to view your league and submit picks.
         </p>
         <Button fullWidth onClick={handleGoogleLogin}>
@@ -65,7 +65,9 @@ export function LoginPage() {
             {isDevLoggingIn ? 'Signing in…' : 'Continue as Dev User'}
           </Button>
         )}
-        {error && <p className="mt-4 text-sm text-red-600 dark:text-red-400">{error}</p>}
+        {error && (
+          <p className="mt-4 text-sm text-red-600 dark:text-red-400 dev-dark:text-error">{error}</p>
+        )}
       </div>
     </div>
   )

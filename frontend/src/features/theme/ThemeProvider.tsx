@@ -18,6 +18,15 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     document.documentElement.classList.toggle('dark', theme === 'dark')
   }, [theme])
 
+  useEffect(() => {
+    // Deployed dev builds get this class from index.html's %VITE_APP_ENV%
+    // interpolation before this module even loads; local `npm run dev` has no
+    // VITE_APP_ENV set there, so apply it here via Vite's dev-server flag.
+    if (import.meta.env.DEV) {
+      document.documentElement.classList.add('dev-theme')
+    }
+  }, [])
+
   function toggleTheme() {
     setTheme((current) => {
       const next = current === 'dark' ? 'light' : 'dark'

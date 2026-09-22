@@ -6,6 +6,7 @@ dockerfile = "../docker/Dockerfile.frontend"
 
 [build.args]
 VITE_API_URL = "/api/v1"
+VITE_APP_ENV = "dev"
 
 [http_service]
 internal_port = 80
