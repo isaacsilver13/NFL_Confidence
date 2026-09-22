@@ -23,14 +23,16 @@ The backend client sends `dates`, `seasontype=2`, and `week` query parameters. N
 | Competitor scores | `home_score`, `away_score` |
 | Winner flag or final scores | `winning_team` |
 | Equal final scores | `is_tie` |
+| Status `displayClock` | `clock` |
+| Status `period` | `period` |
 | Competition venue | `venue_name`, `venue_location` |
 | Competition odds | `spread_team`, `spread` |
 
-Events without both valid home and away teams are rejected. Missing scores, venue information, or spread information remain nullable.
+Events without both valid home and away teams are rejected. Missing scores, venue information, spread information, `clock`, or `period` remain nullable (e.g. for scheduled games, or whenever ESPN omits those fields).
 
 ## Import behavior
 
-`app.services.nfl_schedule_service.import_games()` groups normalized games by season and week, creates a week when needed, and upserts games by `espn_game_id`. Existing records receive refreshed kickoff, teams, venue, odds, status, scores, winner, tie state, and `last_synced` values. Re-running an import is therefore safe for the same schedule window.
+`app.services.nfl_schedule_service.import_games()` groups normalized games by season and week, creates a week when needed, and upserts games by `espn_game_id`. Existing records receive refreshed kickoff, teams, venue, odds, status, scores, winner, tie state, clock, period, and `last_synced` values. Re-running an import is therefore safe for the same schedule window.
 
 The explicit local/import command is:
 

@@ -227,6 +227,10 @@ game_status
 
 is_tie
 
+clock
+
+period
+
 last_synced
 
 created_at
@@ -238,7 +242,9 @@ updated_at
 `venue_name` and `venue_location` are nullable values imported from the external schedule feed.
 `spread_team` identifies the favorite and `spread` stores the point line from the favorite's
 perspective, independent of home or away status. Both spread fields are nullable when odds are
-not available.
+not available. `clock` (a display string, e.g. `"8:42"`) and `period` (quarter/OT number) are
+nullable game-clock fields imported alongside the score for live games; they are `null` for
+scheduled games and whenever ESPN omits them.
 
 Game Status Enum
 

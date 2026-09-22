@@ -177,22 +177,14 @@ def current_week_with_games(db_session: Session, league_with_owner):
     from app.models.nfl_game import NflGame
     from app.models.nfl_week import NflWeek
 
-    # Create current week. `week.start_date`/`end_date` stay a wide window
-    # around test-run time so weeks_service.get_current_week's date-range
-    # lookup (start_date <= now <= end_date) still resolves this fixture as
-    # "current" regardless of wall-clock time. `base` anchors the game
-    # kickoff-time math below exactly like the old midnight-UTC-"today"
-    # anchor did, but is derived from test-run time instead -- the old
-    # anchor put the hardcoded hour=20 game in the past for any run after
-    # 8pm UTC, making every test in test_picks_per_game_locking.py see the
-    # whole week as already locked.
+    # Create current week
     now = datetime.now(timezone.utc)
-    base = now - timedelta(hours=18)
+    week_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     week = NflWeek(
         season=2025,
         week_number=1,
-        start_date=now - timedelta(hours=1),
-        end_date=now + timedelta(days=10),
+        start_date=week_start,
+        end_date=week_start + timedelta(days=7),
         status=WeekStatus.REGULAR,
     )
     db_session.add(week)
@@ -205,15 +197,17 @@ def current_week_with_games(db_session: Session, league_with_owner):
         # Sunday games at hours 13, 16 (1pm, 4pm ET)
         # Monday game at hour 20 (8pm)
         if i == 0:  # Thursday
-            kickoff = base + timedelta(hours=20)
+            kickoff = week_start + timedelta(hours=20)
         elif i < 8:  # Sunday afternoon (spread across 3 hours)
-            kickoff = base + timedelta(days=2, hours=13 + (i - 1) // 4, minutes=30 * ((i - 1) % 4))
+            kickoff = week_start + timedelta(
+                days=2, hours=13 + (i - 1) // 4, minutes=30 * ((i - 1) % 4)
+            )
         elif i < 14:  # Sunday/Monday night
-            kickoff = base + timedelta(
+            kickoff = week_start + timedelta(
                 days=2, hours=20 + ((i - 8) // 3), minutes=15 * ((i - 8) % 3)
             )
         else:  # Monday night and late games
-            kickoff = base + timedelta(
+            kickoff = week_start + timedelta(
                 days=3, hours=20 + ((i - 14) // 2), minutes=30 * ((i - 14) % 2)
             )
 

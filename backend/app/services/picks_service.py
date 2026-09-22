@@ -1,16 +1,27 @@
 """Business logic for validating and saving weekly confidence picks."""
 
 import uuid
+from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
-from app.core.exceptions import ValidationError
+from app.core.exceptions import NotFoundError, ValidationError
 from app.models.league import League
+from app.models.league_member import LeagueMember
+from app.models.nfl_game import NflGame
+from app.models.nfl_week import NflWeek
 from app.models.pick import Pick
 from app.models.user import User
-from app.repositories import nfl_game_repository, nfl_week_repository, pick_repository
+from app.models.week_submission import WeekSubmission
+from app.repositories import (
+    league_member_repository,
+    nfl_game_repository,
+    nfl_week_repository,
+    pick_repository,
+    week_submission_repository,
+)
 from app.schemas.nfl import HistoricalPickRead, HistoricalWeekRead, PickHistoryRead
 from app.services import weeks_service
 
@@ -214,3 +225,108 @@ def create_picks(
     for pick in saved_picks:
         db.refresh(pick)
     return saved_picks
+
+
+def get_week_submission(db: Session, *, user: User, week_number: int) -> WeekSubmission | None:
+    week = weeks_service.get_current_week(db)
+    if week.week_number != week_number:
+        return None
+    return week_submission_repository.get_by_user_and_week(db, user_id=user.id, week_id=week.id)
+
+
+def submit_picks(db: Session, *, user: User, week_number: int) -> WeekSubmission:
+    """Formally submit the user's current draft as their official entry for the week.
+
+    Requires a complete, conflict-free card (every game picked, confidence values
+    1..N each used exactly once) and that the week hasn't locked yet. Calling this
+    again before lock resubmits/overwrites the submission timestamp.
+    """
+    week = weeks_service.get_current_week(db)
+    if week.week_number != week_number:
+        raise ValidationError("Picks must be submitted for the current NFL week.")
+
+    games = nfl_game_repository.get_by_week_id(db, week.id)
+    if not games:
+        raise ValidationError("There are no games to submit picks for this week.")
+
+    now = datetime.now(timezone.utc)
+    earliest_kickoff = min(game.kickoff_time for game in games)
+    if earliest_kickoff <= now:
+        raise ValidationError("Picks are locked after the earliest game has already kicked off.")
+
+    picks = pick_repository.list_by_user_and_week(db, user_id=user.id, week_id=week.id)
+    active_picks = [pick for pick in picks if pick.voided_at is None]
+    if len(active_picks) != len(games):
+        raise ValidationError(f"Submit requires a pick for all {len(games)} games.")
+
+    confidence_values = sorted(pick.confidence_value for pick in active_picks)
+    if confidence_values != list(range(1, len(games) + 1)):
+        raise ValidationError(
+            f"Confidence values must use each value from 1 to {len(games)} exactly once."
+        )
+
+    submission = week_submission_repository.upsert(db, user_id=user.id, week_id=week.id)
+    db.commit()
+    db.refresh(submission)
+    return submission
+
+
+def get_all_picks_for_current_week(
+    db: Session, *, league: League
+) -> tuple[NflWeek, list[NflGame], list[tuple[LeagueMember, list[Pick]]]]:
+    """Every league member's picks for the current week, once it has locked.
+
+    Raises ValidationError while the week is still open, so members can't see
+    each other's picks before the earliest kickoff.
+    """
+    week = weeks_service.get_current_week(db)
+    games = nfl_game_repository.get_by_week_id(db, week.id)
+    if not games:
+        raise ValidationError("There are no games to reveal picks for this week.")
+
+    now = datetime.now(timezone.utc)
+    earliest_kickoff = min(game.kickoff_time for game in games)
+    if earliest_kickoff > now:
+        raise ValidationError("Picks aren't revealed until the earliest game kicks off.")
+
+    members = league_member_repository.list_by_league(db, league.id)
+    all_picks = pick_repository.list_by_week_and_users(
+        db, week_id=week.id, user_ids={member.user_id for member in members}
+    )
+    picks_by_user: dict[uuid.UUID, list[Pick]] = defaultdict(list)
+    for pick in all_picks:
+        if pick.voided_at is None:
+            picks_by_user[pick.user_id].append(pick)
+
+    return (
+        week,
+        games,
+        [(member, picks_by_user.get(member.user_id, [])) for member in members],
+    )
+
+
+def list_submission_statuses(
+    db: Session, *, league: League, week_number: int
+) -> tuple[int, list[tuple[LeagueMember, WeekSubmission | None, int]]]:
+    """Per-member submission status for a week, for the commissioner's submitted-picks view."""
+    week = nfl_week_repository.get_by_season_and_week(
+        db, season=league.season, week_number=week_number
+    )
+    if week is None:
+        raise NotFoundError(f"Week {week_number} does not exist for this league's season.")
+
+    members = league_member_repository.list_by_league(db, league.id)
+    submissions = {
+        submission.user_id: submission
+        for submission in week_submission_repository.list_by_week(db, week_id=week.id)
+    }
+    return week_number, [
+        (
+            member,
+            submissions.get(member.user_id),
+            pick_repository.count_active_by_user_and_week(
+                db, user_id=member.user_id, week_id=week.id
+            ),
+        )
+        for member in members
+    ]

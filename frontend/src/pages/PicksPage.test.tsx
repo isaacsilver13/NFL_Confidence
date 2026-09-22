@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ApiError } from '@/api/client'
-import { savePicks } from '@/api/nfl'
+import { fetchAllPicksCurrentWeek, savePicks, submitPicks } from '@/api/nfl'
 import { fetchCurrentPicksCard } from '@/api/session'
 import {
   getPicksCardRefetchInterval,
@@ -14,6 +14,8 @@ import { PicksPage } from './PicksPage'
 
 vi.mock('@/api/nfl', () => ({
   savePicks: vi.fn(),
+  submitPicks: vi.fn(),
+  fetchAllPicksCurrentWeek: vi.fn(),
 }))
 
 vi.mock('@/api/session', () => ({
@@ -22,6 +24,8 @@ vi.mock('@/api/session', () => ({
 
 const mockedFetchCurrentPicksCard = vi.mocked(fetchCurrentPicksCard)
 const mockedSavePicks = vi.mocked(savePicks)
+const mockedSubmitPicks = vi.mocked(submitPicks)
+const mockedFetchAllPicksCurrentWeek = vi.mocked(fetchAllPicksCurrentWeek)
 
 const week: NflWeek = {
   id: 'week-1',
@@ -47,6 +51,8 @@ const games: NflGame[] = [
     homeScore: null,
     winningTeam: null,
     isTie: false,
+    clock: null,
+    period: null,
   },
   {
     id: 'game-2',
@@ -62,6 +68,8 @@ const games: NflGame[] = [
     homeScore: null,
     winningTeam: null,
     isTie: false,
+    clock: null,
+    period: null,
   },
 ]
 
@@ -83,12 +91,14 @@ describe('PicksPage', () => {
       week,
       games,
       picks: [],
+      submission: { submittedAt: null },
     }
     mockedFetchCurrentPicksCard.mockResolvedValue(picksCard)
     mockedSavePicks.mockResolvedValue([] as NflPick[])
+    mockedSubmitPicks.mockResolvedValue({ submittedAt: '2026-09-21T15:00:00Z' })
   })
 
-  it('saves each game the moment its own winner + confidence are complete', async () => {
+  it('renders current games and submits one unique confidence value per game', async () => {
     const user = userEvent.setup()
     renderPage()
 
@@ -106,54 +116,66 @@ describe('PicksPage', () => {
     await user.click(screen.getAllByRole('button', { name: '2' })[0])
     await user.click(screen.getAllByRole('button', { name: '1' })[1])
 
-    // Each game is saved independently as soon as it is complete -- not bundled
-    // into one request for the whole card.
-    await waitFor(() => expect(mockedSavePicks).toHaveBeenCalledTimes(2))
-    const submittedPayloads = mockedSavePicks.mock.calls.map((call) => call[0])
-    expect(submittedPayloads).toEqual(
-      expect.arrayContaining([
-        { week: 1, voidedGameIds: [], picks: [{ gameId: 'game-1', team: 'KC', confidence: 2 }] },
-        { week: 1, voidedGameIds: [], picks: [{ gameId: 'game-2', team: 'GB', confidence: 1 }] },
-      ]),
-    )
+    await waitFor(() => expect(mockedSavePicks).toHaveBeenCalledTimes(1), { timeout: 3000 })
+    expect(mockedSavePicks.mock.calls[0][0]).toEqual({
+      week: 1,
+      voidedGameIds: [],
+      picks: [
+        { gameId: 'game-1', team: 'KC', confidence: 2 },
+        { gameId: 'game-2', team: 'GB', confidence: 1 },
+      ],
+    })
     expect(screen.queryByRole('button', { name: 'Save picks' })).not.toBeInTheDocument()
     expect(await screen.findByText('Picks saved.')).toBeInTheDocument()
   })
 
-  it('keeps earlier completed picks intact when the user keeps picking during a save', async () => {
+  it('enables Submit picks once every game is picked, and submits', async () => {
     const user = userEvent.setup()
-    let resolveFirstSave: (value: NflPick[]) => void = () => {}
-    mockedSavePicks.mockImplementationOnce(
-      () =>
-        new Promise((resolve) => {
-          resolveFirstSave = resolve
-        }),
+    mockedFetchCurrentPicksCard
+      .mockResolvedValueOnce({ week, games, picks: [], submission: { submittedAt: null } })
+      .mockResolvedValue({
+        week,
+        games,
+        picks: [],
+        submission: { submittedAt: '2026-09-21T15:00:00Z' },
+      })
+    renderPage()
+
+    const submitButton = await screen.findByRole('button', { name: 'Submit picks' })
+    expect(submitButton).toBeDisabled()
+    expect(screen.getByText('Not yet submitted')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'KC' }))
+    await user.click(screen.getByRole('button', { name: 'GB' }))
+    await user.click(screen.getAllByRole('button', { name: '2' })[0])
+    await user.click(screen.getAllByRole('button', { name: '1' })[1])
+
+    await waitFor(() => expect(submitButton).not.toBeDisabled())
+    await user.click(submitButton)
+
+    expect(mockedSubmitPicks.mock.calls[0][0]).toBe(1)
+    expect(await screen.findByRole('button', { name: 'Resubmit picks' })).toBeInTheDocument()
+    expect(await screen.findByText(/Submitted/)).toBeInTheDocument()
+  })
+
+  it('shows an error and stays actionable when submit fails', async () => {
+    const user = userEvent.setup()
+    mockedSubmitPicks.mockRejectedValueOnce(
+      new ApiError(422, 'VALIDATION_ERROR', 'Submit requires a pick for all 2 games.'),
     )
     renderPage()
 
-    await screen.findByRole('heading', { name: /Week 1 picks/i })
-
-    // Complete game 1; its save is still in flight (not yet resolved).
+    await screen.findByRole('button', { name: 'BUF' })
     await user.click(screen.getByRole('button', { name: 'KC' }))
-    await user.click(screen.getAllByRole('button', { name: '2' })[0])
-    await waitFor(() => expect(mockedSavePicks).toHaveBeenCalledTimes(1))
-
-    // While that save is in flight, complete game 2 as well.
     await user.click(screen.getByRole('button', { name: 'GB' }))
+    await user.click(screen.getAllByRole('button', { name: '2' })[0])
     await user.click(screen.getAllByRole('button', { name: '1' })[1])
 
-    // Resolve the first save and let its follow-up refetch/invalidate settle.
-    resolveFirstSave([])
+    const submitButton = await screen.findByRole('button', { name: 'Submit picks' })
+    await waitFor(() => expect(submitButton).not.toBeDisabled())
+    await user.click(submitButton)
 
-    // Game 2's own selection must still be visible and must still get saved --
-    // this is the regression check for picks reverting after a save round-trip.
-    await waitFor(() => expect(mockedSavePicks).toHaveBeenCalledTimes(2))
-    expect(screen.getByRole('button', { name: 'GB' })).toHaveAttribute('aria-pressed', 'true')
-    expect(mockedSavePicks.mock.calls[1][0]).toEqual({
-      week: 1,
-      voidedGameIds: [],
-      picks: [{ gameId: 'game-2', team: 'GB', confidence: 1 }],
-    })
+    expect(await screen.findByText('Submit requires a pick for all 2 games.')).toBeInTheDocument()
   })
 
   it('makes picks read-only after the earliest kickoff', async () => {
@@ -162,6 +184,7 @@ describe('PicksPage', () => {
       week,
       games: [{ ...games[0], kickoff: '2026-08-25T19:00:00Z' }, games[1]],
       picks: [],
+      submission: { submittedAt: null },
     })
     renderPage()
 
@@ -170,12 +193,48 @@ describe('PicksPage', () => {
     expect(screen.getByRole('button', { name: 'BUF' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'KC' })).toBeDisabled()
     expect(screen.getAllByRole('button', { name: '1' })[0]).toBeDisabled()
+    expect(screen.queryByRole('button', { name: /submit picks/i })).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'KC' }))
     expect(mockedSavePicks).not.toHaveBeenCalled()
   })
 
-  it('saves a completed pick on its own, then resolves a later conflict by voiding just the older pick', async () => {
+  it("reveals every member's picks once locked, on demand", async () => {
+    const user = userEvent.setup()
+    mockedFetchCurrentPicksCard.mockResolvedValueOnce({
+      week,
+      games: [{ ...games[0], kickoff: '2026-08-25T19:00:00Z' }, games[1]],
+      picks: [],
+      submission: { submittedAt: null },
+    })
+    mockedFetchAllPicksCurrentWeek.mockResolvedValue({
+      week,
+      games,
+      members: [
+        {
+          userId: 'user-1',
+          displayName: 'Alex',
+          picks: [{ id: 'p1', gameId: 'game-1', team: 'KC', confidence: 3, submittedAt: '' }],
+        },
+        { userId: 'user-2', displayName: 'Sam', picks: [] },
+      ],
+    })
+    renderPage()
+
+    await screen.findByText('Picks locked')
+    expect(screen.queryByText('Alex')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /see everyone's picks/i }))
+
+    expect(await screen.findByText('Alex')).toBeInTheDocument()
+    expect(screen.getByText('KC (3)')).toBeInTheDocument()
+    expect(screen.getByText('Sam')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /hide all picks/i }))
+    expect(screen.queryByText('Alex')).not.toBeInTheDocument()
+  })
+
+  it('voids incomplete and conflicting drafts while keeping the save flow live', async () => {
     const user = userEvent.setup()
     renderPage()
 
@@ -183,13 +242,15 @@ describe('PicksPage', () => {
     await user.click(screen.getByRole('button', { name: 'BUF' }))
     await user.click(screen.getAllByRole('button', { name: '1' })[0])
 
-    await waitFor(() => expect(mockedSavePicks).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(mockedSavePicks).toHaveBeenCalledTimes(1), { timeout: 3000 })
     expect(mockedSavePicks.mock.calls[0][0]).toEqual({
       week: 1,
       picks: [{ gameId: 'game-1', team: 'BUF', confidence: 1 }],
-      voidedGameIds: [],
+      voidedGameIds: ['game-2'],
     })
-    expect(await screen.findByText('Picks saved.')).toBeInTheDocument()
+    expect(
+      await screen.findByText(/incomplete or conflicting picks were voided/i),
+    ).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'GB' }))
     const secondConfidenceGroup = screen.getByRole('group', {
@@ -207,18 +268,12 @@ describe('PicksPage', () => {
       screen.getByRole('listitem', { name: 'Confidence 1 used, conflict' }),
     ).toBeInTheDocument()
 
-    // Only the newly-completed game (game-2) triggers a save; it takes over the
-    // confidence value and the older pick (game-1) is voided alongside it --
-    // game-1 itself was never re-submitted since it wasn't touched.
-    await waitFor(() => expect(mockedSavePicks).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(mockedSavePicks).toHaveBeenCalledTimes(2), { timeout: 3000 })
     expect(mockedSavePicks.mock.calls[1][0]).toEqual({
       week: 1,
-      picks: [{ gameId: 'game-2', team: 'GB', confidence: 1 }],
-      voidedGameIds: ['game-1'],
+      picks: [],
+      voidedGameIds: ['game-1', 'game-2'],
     })
-    expect(
-      await screen.findByText(/incomplete or conflicting picks were voided/i),
-    ).toBeInTheDocument()
   })
 
   it('renders confidence values in a 4x4 grid and toggles picks off', async () => {
@@ -242,6 +297,7 @@ describe('PicksPage', () => {
           submittedAt: '2026-08-24T12:00:00Z',
         },
       ],
+      submission: { submittedAt: null },
     })
     renderPage()
 
@@ -261,12 +317,10 @@ describe('PicksPage', () => {
 
     expect(winner).toHaveAttribute('aria-pressed', 'false')
     expect(confidence).toHaveAttribute('aria-pressed', 'false')
-    // Un-picking game-1 only voids game-1 -- game-2 is untouched and is not
-    // resubmitted alongside it.
-    await waitFor(() => expect(mockedSavePicks).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(mockedSavePicks).toHaveBeenCalledTimes(1), { timeout: 3000 })
     expect(mockedSavePicks.mock.calls[0][0]).toEqual({
       week: 1,
-      picks: [],
+      picks: [{ gameId: 'game-2', team: 'GB', confidence: 1 }],
       voidedGameIds: ['game-1'],
     })
   })
@@ -303,6 +357,7 @@ describe('PicksPage', () => {
           submittedAt: '2026-08-24T12:00:00Z',
         },
       ],
+      submission: { submittedAt: null },
     }
     mockedFetchCurrentPicksCard.mockResolvedValueOnce(picksCard)
     renderPage()
@@ -341,13 +396,84 @@ describe('PicksPage', () => {
     expect(kcImages.length).toBeGreaterThan(0)
   })
 
+  it('hides the score and clock for an in-progress game until it is final', async () => {
+    mockedFetchCurrentPicksCard.mockResolvedValueOnce({
+      week,
+      games: [
+        { ...games[0], status: 'live', awayScore: 14, homeScore: 21, period: 3, clock: '8:42' },
+        games[1],
+      ],
+      picks: [],
+      submission: { submittedAt: null },
+    })
+    renderPage()
+
+    await screen.findByRole('heading', { name: /Week 1 picks/i })
+    expect(screen.queryByText('14–21')).not.toBeInTheDocument()
+    expect(screen.queryByText('Q3 · 8:42')).not.toBeInTheDocument()
+    expect(screen.queryByText('Live')).not.toBeInTheDocument()
+  })
+
+  it('shows the final score and highlights the winning team', async () => {
+    mockedFetchCurrentPicksCard.mockResolvedValueOnce({
+      week,
+      games: [
+        {
+          ...games[0],
+          status: 'final',
+          awayScore: 17,
+          homeScore: 27,
+          winningTeam: 'KC',
+          isTie: false,
+        },
+        games[1],
+      ],
+      picks: [],
+      submission: { submittedAt: null },
+    })
+    renderPage()
+
+    await screen.findByRole('heading', { name: /Week 1 picks/i })
+    expect(screen.getByText('17–27')).toBeInTheDocument()
+    expect(screen.getByText('Final')).toBeInTheDocument()
+    expect(screen.getByTestId('team-name-game-1-home')).toHaveClass('text-accent')
+    expect(screen.getByTestId('team-name-game-1-away')).not.toHaveClass('text-accent')
+  })
+
+  it('shows a tied final score without highlighting either team', async () => {
+    mockedFetchCurrentPicksCard.mockResolvedValueOnce({
+      week,
+      games: [
+        {
+          ...games[0],
+          status: 'final',
+          awayScore: 20,
+          homeScore: 20,
+          winningTeam: null,
+          isTie: true,
+        },
+        games[1],
+      ],
+      picks: [],
+      submission: { submittedAt: null },
+    })
+    renderPage()
+
+    await screen.findByRole('heading', { name: /Week 1 picks/i })
+    expect(screen.getByText('Final · Tie')).toBeInTheDocument()
+    expect(screen.getByTestId('team-name-game-1-away')).not.toHaveClass('text-accent')
+    expect(screen.getByTestId('team-name-game-1-home')).not.toHaveClass('text-accent')
+  })
+
   it('polls the picks card only when a game is live', () => {
-    expect(getPicksCardRefetchInterval({ week, games, picks: [] })).toBe(false)
+    const submission = { submittedAt: null }
+    expect(getPicksCardRefetchInterval({ week, games, picks: [], submission })).toBe(false)
     expect(
       getPicksCardRefetchInterval({
         week,
         games: [{ ...games[0], status: 'live' }, games[1]],
         picks: [],
+        submission,
       }),
     ).toBe(LIVE_GAME_POLL_INTERVAL_MS)
     expect(
@@ -355,6 +481,7 @@ describe('PicksPage', () => {
         week,
         games: [{ ...games[0], status: 'final' }, games[1]],
         picks: [],
+        submission,
       }),
     ).toBe(false)
   })

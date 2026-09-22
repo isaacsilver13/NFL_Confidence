@@ -5,7 +5,7 @@
 
 import type { User } from '@/types/auth'
 import type { League, LeagueMember } from '@/types/league'
-import type { NflWeek, NflGame, NflPick } from '@/types/nfl'
+import type { NflWeek, NflGame, NflPick, WeekSubmission } from '@/types/nfl'
 import { apiFetch } from './client'
 
 /** All data needed to initialize the authenticated app. */
@@ -31,6 +31,7 @@ export interface CurrentPicksCard {
   week: NflWeek
   games: NflGame[]
   picks: NflPick[]
+  submission: WeekSubmission
 }
 
 /** Fetches week + games + picks for the current week in a single request. */

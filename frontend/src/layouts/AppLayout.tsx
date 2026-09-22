@@ -1,12 +1,16 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
-import { LogOut } from 'lucide-react'
+import { LogOut, Moon, Sun } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { fetchSessionBootstrap } from '@/api/session'
 import { Button } from '@/components/ui/Button'
 import { NflMark } from '@/components/nfl/NflMark'
 import { useAuth } from '@/features/auth/AuthContext'
+import { useTheme } from '@/features/theme/ThemeContext'
 
-const NAV_LINKS = [{ to: '/', label: 'Dashboard' }]
+const NAV_LINKS = [
+  { to: '/', label: 'Dashboard' },
+  { to: '/picks', label: 'Picks' },
+]
 
 function navLinkClassName({ isActive }: { isActive: boolean }): string {
   return [
@@ -19,6 +23,7 @@ function navLinkClassName({ isActive }: { isActive: boolean }): string {
 
 export function AppLayout() {
   const { user, signOut } = useAuth()
+  const { theme, toggleTheme } = useTheme()
   const navigate = useNavigate()
   const { data: bootstrapData } = useQuery({
     queryKey: ['session', 'bootstrap'],
@@ -56,6 +61,17 @@ export function AppLayout() {
                 {user.displayName}
               </span>
             )}
+            <Button
+              variant="quiet"
+              onClick={toggleTheme}
+              aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            >
+              {theme === 'dark' ? (
+                <Sun size={16} aria-hidden="true" />
+              ) : (
+                <Moon size={16} aria-hidden="true" />
+              )}
+            </Button>
             <Button variant="quiet" onClick={() => void handleSignOut()}>
               <LogOut size={16} aria-hidden="true" />
               Sign out
