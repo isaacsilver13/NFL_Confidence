@@ -16,6 +16,7 @@ from app.models import (
     SeasonResult,
     User,
     WeeklyResult,
+    WeekSubmission,
 )
 from app.models.enums import GameStatus, LeagueRole, WeekStatus
 from app.services import leaderboard_service
@@ -76,6 +77,12 @@ def _week_and_games(db: Session, league: League, week_number: int) -> tuple[NflW
     return week, games
 
 
+def _submit(db: Session, *, user: User, week: NflWeek) -> None:
+    """The weekly leaderboard only counts members with a WeekSubmission row."""
+    db.add(WeekSubmission(user_id=user.id, week_id=week.id))
+    db.flush()
+
+
 def _members(db: Session, league: League) -> tuple[User, User]:
     owner = db.get(User, league.owner_id)
     assert owner is not None
@@ -95,6 +102,8 @@ def test_weekly_leaderboard_returns_ranked_members(db_session: Session) -> None:
     league = _league(db_session, owner)
     owner, challenger = _members(db_session, league)
     week, _ = _week_and_games(db_session, league, 2)
+    _submit(db_session, user=owner, week=week)
+    _submit(db_session, user=challenger, week=week)
     db_session.add_all(
         [
             WeeklyResult(
@@ -122,6 +131,89 @@ def test_weekly_leaderboard_returns_ranked_members(db_session: Session) -> None:
 
     assert [member.member_name for member in result.standings] == ["Owner", "Challenger"]
     assert [member.total_points for member in result.standings] == [17, 8]
+
+
+def test_weekly_leaderboard_includes_last_two_games_picks(db_session: Session) -> None:
+    owner = _user(db_session, "Owner")
+    league = _league(db_session, owner)
+    owner, challenger = _members(db_session, league)
+    week, games = _week_and_games(db_session, league, 2)
+    _submit(db_session, user=owner, week=week)
+    _submit(db_session, user=challenger, week=week)
+    db_session.add_all(
+        [
+            WeeklyResult(
+                league_id=league.id,
+                week_id=week.id,
+                user_id=owner.id,
+                total_points=17,
+                correct_picks=2,
+                incorrect_picks=0,
+                weekly_rank=1,
+            ),
+            WeeklyResult(
+                league_id=league.id,
+                week_id=week.id,
+                user_id=challenger.id,
+                total_points=8,
+                correct_picks=1,
+                incorrect_picks=1,
+                weekly_rank=2,
+            ),
+            Pick(
+                user_id=owner.id,
+                game_id=games[1].id,
+                picked_team="CHI",
+                confidence_value=2,
+            ),
+        ]
+    )
+
+    result = leaderboard_service.get_weekly_leaderboard(db_session, league=league, week_number=2)
+
+    assert [(g.away_team, g.home_team) for g in result.last_two_games] == [
+        ("BUF", "KC"),
+        ("GB", "CHI"),
+    ]
+    owner_row = next(m for m in result.standings if m.member_name == "Owner")
+    challenger_row = next(m for m in result.standings if m.member_name == "Challenger")
+    assert [p.team for p in owner_row.last_two_game_picks] == [None, "CHI"]
+    assert [p.confidence for p in owner_row.last_two_game_picks] == [None, 2]
+    assert [p.team for p in challenger_row.last_two_game_picks] == [None, None]
+
+
+def test_weekly_leaderboard_excludes_members_without_a_submission(db_session: Session) -> None:
+    owner = _user(db_session, "Owner")
+    league = _league(db_session, owner)
+    owner, challenger = _members(db_session, league)
+    week, _ = _week_and_games(db_session, league, 2)
+    _submit(db_session, user=owner, week=week)
+    db_session.add_all(
+        [
+            WeeklyResult(
+                league_id=league.id,
+                week_id=week.id,
+                user_id=owner.id,
+                total_points=17,
+                correct_picks=2,
+                incorrect_picks=0,
+                weekly_rank=1,
+            ),
+            WeeklyResult(
+                league_id=league.id,
+                week_id=week.id,
+                user_id=challenger.id,
+                total_points=8,
+                correct_picks=1,
+                incorrect_picks=1,
+                weekly_rank=2,
+            ),
+        ]
+    )
+
+    result = leaderboard_service.get_weekly_leaderboard(db_session, league=league, week_number=2)
+
+    assert [member.member_name for member in result.standings] == ["Owner"]
 
 
 def test_weekly_leaderboard_reports_points_remaining_on_unfinished_games(
@@ -169,6 +261,7 @@ def test_weekly_leaderboard_reports_points_remaining_on_unfinished_games(
     )
     db_session.add_all([decided_game, live_game, voided_game])
     db_session.flush()
+    _submit(db_session, user=owner, week=week)
     db_session.add_all(
         [
             WeeklyResult(
@@ -328,6 +421,64 @@ def test_pick_breakdown_counts_distinct_members_and_excludes_outsiders(
         ("CHI", 0),
     ]
     assert outsider.id not in {owner.id, challenger.id}
+
+
+def test_get_game_picks_returns_league_members_only_for_completed_weeks(
+    db_session: Session,
+) -> None:
+    league, owner, challenger, outsider = _breakdown_fixture(db_session)
+    game = (
+        db_session.query(NflGame)
+        .join(NflWeek, NflGame.week_id == NflWeek.id)
+        .filter(NflWeek.season == league.season, NflWeek.week_number == 2)
+        .order_by(NflGame.kickoff_time)
+        .first()
+    )
+    assert game is not None
+
+    result = leaderboard_service.get_game_picks(
+        db_session, league=league, viewer_id=owner.id, game_id=game.id
+    )
+
+    assert result.away_team == "BUF"
+    assert result.home_team == "KC"
+    member_names = {p.member_name for p in result.picks}
+    assert member_names == {"Owner", "Challenger"}
+    assert outsider.display_name not in member_names
+    owner_pick = next(p for p in result.picks if p.member_name == "Owner")
+    assert owner_pick.team == "KC"
+    assert owner_pick.confidence == 1
+    assert owner_pick.is_correct is True
+
+
+def test_get_game_picks_not_found_for_incomplete_week(db_session: Session) -> None:
+    owner = _user(db_session, "Owner")
+    league = _league(db_session, owner)
+    db_session.add(LeagueMember(league_id=league.id, user_id=owner.id, role=LeagueRole.OWNER))
+    week = NflWeek(
+        season=league.season,
+        week_number=9,
+        start_date=datetime(2026, 11, 1, tzinfo=timezone.utc),
+        end_date=datetime(2026, 11, 8, tzinfo=timezone.utc),
+        status=WeekStatus.REGULAR,
+    )
+    db_session.add(week)
+    db_session.flush()
+    game = NflGame(
+        week_id=week.id,
+        espn_game_id=f"leaderboard-test-{uuid.uuid4().hex}",
+        kickoff_time=week.start_date,
+        away_team="BUF",
+        home_team="KC",
+        game_status=GameStatus.SCHEDULED,
+    )
+    db_session.add(game)
+    db_session.flush()
+
+    with pytest.raises(NotFoundError):
+        leaderboard_service.get_game_picks(
+            db_session, league=league, viewer_id=owner.id, game_id=game.id
+        )
 
 
 def test_pick_breakdown_includes_completed_weeks_without_picks(db_session: Session) -> None:

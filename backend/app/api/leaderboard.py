@@ -1,5 +1,7 @@
 """Authenticated leaderboard, standings, and pick breakdown routes."""
 
+import uuid
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
@@ -62,4 +64,18 @@ def get_pick_breakdown(
 ) -> dict:
     league, member = league_member
     result = leaderboard_service.get_pick_breakdown(db, league=league, viewer_id=current_user.id)
+    return success(result.model_dump(mode="json", by_alias=True))
+
+
+@router.get("/games/{game_id}/picks")
+def get_game_picks(
+    game_id: uuid.UUID,
+    league_member: tuple[League, LeagueMember] = Depends(get_active_league_member),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    league, member = league_member
+    result = leaderboard_service.get_game_picks(
+        db, league=league, viewer_id=current_user.id, game_id=game_id
+    )
     return success(result.model_dump(mode="json", by_alias=True))
