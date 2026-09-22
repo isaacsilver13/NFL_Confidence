@@ -30,6 +30,7 @@ def test_scheduler_registers_single_instance_of_each_launch_job() -> None:
         "monday_thursday_score_sync",
         "overnight_score_sync",
         "weekly_picks_reminder",
+        "weekly_report",
     }
 
 
@@ -110,6 +111,59 @@ def test_weekly_reminders_target_incomplete_members_and_are_idempotent(
     assert nfl_schedule.send_weekly_reminders(db_session) == 1
     assert nfl_schedule.send_weekly_reminders(db_session) == 0
     assert [message["to"] for message in sent] == [incomplete.email]
+
+
+def test_weekly_report_emails_commissioners_once_per_completed_week(
+    db_session: Session, monkeypatch
+) -> None:
+    owner = _make_user(db_session, "owner")
+    member = _make_user(db_session, "member")
+    league = league_service.create_league(
+        db_session, owner=owner, name="Report Test League", season=2026
+    )
+    db_session.add(LeagueMember(league_id=league.id, user_id=member.id, role=LeagueRole.MEMBER))
+    now = datetime.now(timezone.utc)
+    complete_week = NflWeek(
+        season=league.season,
+        week_number=1,
+        start_date=now - timedelta(days=8),
+        end_date=now - timedelta(days=1),
+        status=WeekStatus.COMPLETE,
+    )
+    db_session.add(complete_week)
+    db_session.flush()
+    game = NflGame(
+        week_id=complete_week.id,
+        espn_game_id=f"report-game-{uuid.uuid4().hex}",
+        kickoff_time=now - timedelta(days=7),
+        away_team="BUF",
+        home_team="KC",
+        home_score=21,
+        away_score=14,
+        winning_team="KC",
+        game_status=GameStatus.FINAL,
+    )
+    db_session.add(game)
+    db_session.flush()
+    db_session.add(
+        Pick(
+            user_id=owner.id,
+            game_id=game.id,
+            picked_team="KC",
+            confidence_value=1,
+            points_earned=1,
+        )
+    )
+    db_session.commit()
+
+    sent: list[dict[str, object]] = []
+    monkeypatch.setattr(nfl_schedule, "send_email", lambda **kwargs: sent.append(kwargs))
+
+    assert nfl_schedule.send_weekly_report(db_session) == 1
+    assert nfl_schedule.send_weekly_report(db_session) == 0
+    assert [message["to"] for message in sent] == [owner.email]
+    assert "Week 1" in str(sent[0]["subject"])
+    assert "BUF" in str(sent[0]["html"])
 
 
 def test_get_next_lock_deadline_returns_none_without_active_league(db_session: Session) -> None:

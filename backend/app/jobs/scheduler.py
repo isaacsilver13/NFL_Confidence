@@ -17,6 +17,7 @@ from app.jobs.nfl_schedule import (
     run_current_week_sync,
     run_next_week_import,
     send_weekly_reminders,
+    send_weekly_report,
 )
 from app.models.job_execution import JobExecution
 
@@ -141,7 +142,11 @@ def create_scheduler() -> BackgroundScheduler:
     )
     scheduler.add_job(
         lambda: _import_and_rearm(scheduler, "schedule_import", run_next_week_import),
-        CronTrigger(day_of_week="tue", hour=10, minute=0, timezone=EASTERN),
+        # Opens next week's picks on the Monday of the current week (e.g. week 3
+        # opens Monday morning of week 2) rather than waiting until Tuesday.
+        # import_games re-syncs spreads/kickoff times on every later sync, so
+        # early-imported data self-corrects before that week's own lock.
+        CronTrigger(day_of_week="mon", hour=8, minute=0, timezone=EASTERN),
         id="schedule_import",
         replace_existing=True,
     )
@@ -171,6 +176,12 @@ def create_scheduler() -> BackgroundScheduler:
         lambda: _run_logged("weekly_picks_reminder", send_weekly_reminders),
         CronTrigger(day_of_week="wed", hour=18, minute=0, timezone=EASTERN),
         id="weekly_picks_reminder",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        lambda: _run_logged("weekly_report", send_weekly_report),
+        CronTrigger(day_of_week="tue", hour=9, minute=0, timezone=EASTERN),
+        id="weekly_report",
         replace_existing=True,
     )
     # Safety net in case the one-time kickoff job above is ever lost (e.g. a
