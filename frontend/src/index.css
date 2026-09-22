@@ -1,5 +1,9 @@
 @import 'tailwindcss';
 @custom-variant dark (&:where(.dark, .dark *));
+/* Chicago Bears dark theme — dev environment only. See docs/ui-design-system.md
+   note in this file's design-tokens comment below; `.dev-theme` is applied by
+   index.html (deployed dev build) or ThemeProvider.tsx (local `npm run dev`). */
+@custom-variant dev-dark (&:where(.dark.dev-theme, .dark.dev-theme *));
 
 /*
   Design tokens per docs/ui-design-system.md and docs/frontend-specification.md.
@@ -22,8 +26,84 @@
   --color-ink: #132238;
   --color-ink-muted: #5b6b78;
 
+  /* Additional semantic tokens, currently consumed only by dev-dark: utilities
+     (see @custom-variant dev-dark above); light-mode defaults below approximate
+     the existing light palette so nothing changes outside the dev dark theme. */
+  --color-surface-elevated: #ffffff;
+  --color-surface-hover: #e3eaec;
+  --color-surface-active: #d7e0e3;
+  --color-accent-active: #8a2600;
+  --color-accent-muted: #f1d9cc;
+  --color-text-secondary: #5b6b78;
+  --color-text-muted: #78878f;
+  --color-text-disabled: #a7b0b5;
+  --color-border: #d7e0e3;
+  --color-border-muted: #e3eaec;
+  --color-border-hover: #b7c3c8;
+  --color-border-focus: #c83803;
+  --color-warning: #d99a2b;
+  --color-warning-bg: #fbf1de;
+  --color-error: #c83c4a;
+  --color-error-bg: #fbe4e6;
+  --color-info: #3d5170;
+  --color-info-bg: #e6eaf0;
+  --color-success-bg: #e1f2ea;
+  --color-chart-1: #c83803;
+  --color-chart-2: #f07832;
+  --color-chart-3: #5b9bd5;
+  --color-chart-4: #3b536d;
+  --color-chart-5: #7c8fa6;
+  --color-chart-6: #d6a23a;
+  --color-chart-7: #5faf8a;
+  --color-chart-8: #a78bc4;
+
   --animate-fade-in: fade-in 150ms ease-out;
   --animate-slide-up: slide-up 200ms ease-out;
+}
+
+/* Chicago Bears dark theme (dev only) — see @custom-variant dev-dark above.
+   Overrides only apply when both .dark and .dev-theme are present, so prod
+   dark mode (which never gets .dev-theme) is unaffected. */
+html.dark.dev-theme {
+  --color-background: #0b162a;
+  --color-surface: #101d33;
+  --color-surface-elevated: #162b4d;
+  --color-surface-hover: #1d385d;
+  --color-surface-active: #24456e;
+
+  --color-accent: #c83803;
+  --color-accent-hover: #e04a0a;
+  --color-accent-active: #a83200;
+  --color-accent-muted: #6f2b18;
+
+  --color-ink: #f4f2ee;
+  --color-text-secondary: #a7afb8;
+  --color-text-muted: #718092;
+  --color-text-disabled: #4e5d6e;
+
+  --color-border: #263b54;
+  --color-border-muted: #1d3047;
+  --color-border-hover: #3b536d;
+  --color-border-focus: #c83803;
+
+  --color-success: #3fa66b;
+  --color-success-bg: #18382b;
+  --color-warning: #d99a2b;
+  --color-warning-bg: #3b2d15;
+  --color-danger: #d9544d;
+  --color-error: #d9544d;
+  --color-error-bg: #3d1d20;
+  --color-info: #5b9bd5;
+  --color-info-bg: #192f46;
+
+  --color-chart-1: #c83803;
+  --color-chart-2: #f07832;
+  --color-chart-3: #5b9bd5;
+  --color-chart-4: #3b536d;
+  --color-chart-5: #7c8fa6;
+  --color-chart-6: #d6a23a;
+  --color-chart-7: #5faf8a;
+  --color-chart-8: #a78bc4;
 }
 
 @layer base {

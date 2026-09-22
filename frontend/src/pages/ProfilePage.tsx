@@ -36,7 +36,7 @@ function Outcome({ pick }: { pick: HistoricalPick }) {
         ? 'text-danger'
         : pick.outcome === 'voided'
           ? 'text-gold'
-          : 'text-ink-muted dark:text-slate-400'
+          : 'text-ink-muted dark:text-slate-400 dev-dark:text-text-muted'
   return <span className={`font-bold ${color}`}>{OUTCOME_LABELS[pick.outcome]}</span>
 }
 
@@ -61,10 +61,10 @@ function HistoryTable({ picks }: { picks: HistoricalPick[] }) {
   }
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
+    <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800 dev-dark:border-border">
       <table className="w-full min-w-[760px] text-left text-sm">
         <caption className="sr-only">Your picks</caption>
-        <thead className="bg-surface-muted text-xs uppercase tracking-[0.14em] text-ink-muted dark:bg-slate-950 dark:text-slate-400">
+        <thead className="bg-surface-muted text-xs uppercase tracking-[0.14em] text-ink-muted dark:bg-slate-950 dev-dark:bg-background dark:text-slate-400 dev-dark:text-text-muted">
           <tr>
             <SortableHeader
               label="Game"
@@ -105,12 +105,12 @@ function HistoryTable({ picks }: { picks: HistoricalPick[] }) {
             />
           </tr>
         </thead>
-        <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+        <tbody className="divide-y divide-slate-200 dark:divide-slate-800 dev-dark:divide-border">
           {sortedPicks.map((pick) => (
             <tr key={pick.id}>
               <th scope="row" className="px-4 py-3 font-semibold">
                 {pick.awayTeam} at {pick.homeTeam}
-                <span className="block text-xs font-normal text-ink-muted dark:text-slate-400">
+                <span className="block text-xs font-normal text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
                   {formatKickoff(pick.kickoff)}
                 </span>
               </th>
@@ -170,7 +170,7 @@ function SortableHeader({
         type="button"
         onClick={() => onSort(sortKey)}
         aria-label={`Sort by ${label}`}
-        className="inline-flex items-center gap-1 font-bold hover:text-primary dark:hover:text-white"
+        className="inline-flex items-center gap-1 font-bold hover:text-primary dark:hover:text-white dev-dark:hover:text-ink"
       >
         <span>{label}</span>
         <Icon size={14} aria-hidden="true" />
@@ -256,46 +256,46 @@ function SeasonStats({ weeks }: { weeks: HistoricalWeek[] }) {
 
   return (
     <section
-      className="space-y-5 rounded-2xl border border-slate-200 bg-surface p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900"
+      className="space-y-5 rounded-2xl border border-slate-200 bg-surface p-5 shadow-sm dark:border-slate-800 dev-dark:border-border dark:bg-slate-900 dev-dark:bg-surface-elevated"
       aria-labelledby="season-stats-heading"
     >
       <div>
         <p className="text-xs font-bold uppercase tracking-[0.2em] text-accent">Season stats</p>
         <h2
           id="season-stats-heading"
-          className="mt-1 text-xl font-black text-primary dark:text-white"
+          className="mt-1 text-xl font-black text-primary dark:text-white dev-dark:text-ink"
         >
           Your season so far
         </h2>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <div className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
-          <p className="text-xs font-bold uppercase tracking-[0.14em] text-ink-muted dark:text-slate-400">
+        <div className="rounded-xl border border-slate-200 p-4 dark:border-slate-800 dev-dark:border-border">
+          <p className="text-xs font-bold uppercase tracking-[0.14em] text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
             Season win rate
           </p>
-          <p className="mt-1 text-2xl font-black text-primary dark:text-white">
+          <p className="mt-1 text-2xl font-black text-primary dark:text-white dev-dark:text-ink">
             {formatWinRate(seasonWinRate)}
           </p>
-          <p className="text-xs text-ink-muted dark:text-slate-400">
+          <p className="text-xs text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
             {totalCorrect} of {totalScored} scored picks
           </p>
         </div>
-        <div className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
-          <p className="text-xs font-bold uppercase tracking-[0.14em] text-ink-muted dark:text-slate-400">
+        <div className="rounded-xl border border-slate-200 p-4 dark:border-slate-800 dev-dark:border-border">
+          <p className="text-xs font-bold uppercase tracking-[0.14em] text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
             Average weekly points
           </p>
-          <p className="mt-1 text-2xl font-black text-primary dark:text-white">
+          <p className="mt-1 text-2xl font-black text-primary dark:text-white dev-dark:text-ink">
             {averageWeeklyPoints.toFixed(1)}
           </p>
-          <p className="text-xs text-ink-muted dark:text-slate-400">
+          <p className="text-xs text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
             Across {weeksWithScoring.length} scored week{weeksWithScoring.length === 1 ? '' : 's'}
           </p>
         </div>
       </div>
 
       <div>
-        <p className="text-xs font-bold uppercase tracking-[0.14em] text-ink-muted dark:text-slate-400">
+        <p className="text-xs font-bold uppercase tracking-[0.14em] text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
           Win rate per week
         </p>
         <ul className="mt-2 space-y-1.5">
@@ -303,7 +303,7 @@ function SeasonStats({ weeks }: { weeks: HistoricalWeek[] }) {
             <li key={week.weekNumber} className="flex items-center gap-3 text-sm">
               <span className="w-16 shrink-0 font-bold">Week {week.weekNumber}</span>
               <div
-                className="h-3 flex-1 overflow-hidden rounded-full bg-surface-muted dark:bg-slate-800"
+                className="h-3 flex-1 overflow-hidden rounded-full bg-surface-muted dark:bg-slate-800 dev-dark:bg-surface-hover"
                 role="img"
                 aria-label={`Week ${week.weekNumber}: ${formatWinRate(week.winRate)} win rate`}
               >
@@ -312,7 +312,7 @@ function SeasonStats({ weeks }: { weeks: HistoricalWeek[] }) {
                   style={{ width: `${(week.winRate ?? 0) * 100}%` }}
                 />
               </div>
-              <span className="w-12 shrink-0 text-right text-ink-muted dark:text-slate-400">
+              <span className="w-12 shrink-0 text-right text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
                 {formatWinRate(week.winRate)}
               </span>
               <span className="w-16 shrink-0 text-right font-bold text-accent">
@@ -325,7 +325,7 @@ function SeasonStats({ weeks }: { weeks: HistoricalWeek[] }) {
 
       {confidenceStats.length > 0 && (
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.14em] text-ink-muted dark:text-slate-400">
+          <p className="text-xs font-bold uppercase tracking-[0.14em] text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
             Confidence point histogram
           </p>
           <ul className="mt-2 space-y-1.5">
@@ -337,14 +337,14 @@ function SeasonStats({ weeks }: { weeks: HistoricalWeek[] }) {
                 <li key={stat.confidence} className="flex items-center gap-3 text-sm">
                   <span className="w-8 shrink-0 text-right font-bold">{stat.confidence}</span>
                   <div
-                    className="flex h-3 flex-1 overflow-hidden rounded-full bg-surface-muted dark:bg-slate-800"
+                    className="flex h-3 flex-1 overflow-hidden rounded-full bg-surface-muted dark:bg-slate-800 dev-dark:bg-surface-hover"
                     role="img"
                     aria-label={`Confidence ${stat.confidence}: ${stat.correct} correct, ${stat.incorrect} incorrect`}
                   >
                     <div className="h-full bg-accent" style={{ width: `${correctWidth}%` }} />
                     <div className="h-full bg-danger" style={{ width: `${incorrectWidth}%` }} />
                   </div>
-                  <span className="w-20 shrink-0 text-right text-ink-muted dark:text-slate-400">
+                  <span className="w-20 shrink-0 text-right text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
                     {stat.correct}-{stat.incorrect} ({total})
                   </span>
                 </li>
@@ -377,12 +377,15 @@ export function ProfilePage() {
     <div className="animate-fade-in space-y-6">
       <div>
         <p className="text-xs font-bold uppercase tracking-[0.2em] text-accent">Your record</p>
-        <h1 className="mt-2 flex items-center gap-2 text-3xl font-black tracking-tight text-primary dark:text-white">
+        <h1 className="mt-2 flex items-center gap-2 text-3xl font-black tracking-tight text-primary dark:text-white dev-dark:text-ink">
           <UserRound className="text-sky" size={25} aria-hidden="true" /> Profile
         </h1>
       </div>
       {historyQuery.isPending && (
-        <p aria-live="polite" className="text-slate-600 dark:text-slate-300">
+        <p
+          aria-live="polite"
+          className="text-slate-600 dark:text-slate-300 dev-dark:text-text-secondary"
+        >
           Loading your pick history...
         </p>
       )}
@@ -394,10 +397,10 @@ export function ProfilePage() {
         </p>
       )}
       {historyQuery.data && historyQuery.data.weeks.length === 0 && (
-        <div className="rounded-2xl border border-slate-200 bg-surface p-8 text-center shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="rounded-2xl border border-slate-200 bg-surface p-8 text-center shadow-sm dark:border-slate-800 dev-dark:border-border dark:bg-slate-900 dev-dark:bg-surface-elevated">
           <UserRound className="mx-auto text-sky" size={40} aria-hidden="true" />
           <h2 className="mt-4 text-xl font-bold">No picks submitted yet.</h2>
-          <p className="mt-2 text-slate-600 dark:text-slate-300">
+          <p className="mt-2 text-slate-600 dark:text-slate-300 dev-dark:text-text-secondary">
             Your current and completed-week picks will appear here.
           </p>
         </div>
@@ -411,7 +414,7 @@ export function ProfilePage() {
             <div>
               <label
                 htmlFor="profile-week"
-                className="block text-xs font-bold uppercase tracking-[0.16em] text-ink-muted dark:text-slate-400"
+                className="block text-xs font-bold uppercase tracking-[0.16em] text-ink-muted dark:text-slate-400 dev-dark:text-text-muted"
               >
                 Review week
               </label>
@@ -419,7 +422,7 @@ export function ProfilePage() {
                 id="profile-week"
                 value={selectedWeekNumber ?? ''}
                 onChange={(event) => setRequestedWeek(Number(event.target.value))}
-                className="mt-2 min-h-11 rounded-xl border border-slate-300 bg-white px-3 text-sm font-bold text-ink dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                className="mt-2 min-h-11 rounded-xl border border-slate-300 bg-white px-3 text-sm font-bold text-ink dark:border-slate-700 dev-dark:border-border-hover dark:bg-slate-950 dev-dark:bg-background dark:text-slate-100 dev-dark:text-ink"
               >
                 {availableWeeks.map((week) => (
                   <option key={week.weekNumber} value={week.weekNumber}>
@@ -430,7 +433,7 @@ export function ProfilePage() {
             </div>
             <h2
               id={`history-week-${selectedWeek.weekNumber}`}
-              className="text-xl font-black text-primary dark:text-white"
+              className="text-xl font-black text-primary dark:text-white dev-dark:text-ink"
             >
               Week {selectedWeek.weekNumber}
             </h2>

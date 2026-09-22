@@ -6,10 +6,10 @@ import type { LeaderboardMember } from '@/types/leaderboard'
 
 function StandingsTable({ standings }: { standings: LeaderboardMember[] }) {
   return (
-    <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-surface shadow-sm dark:border-slate-800 dark:bg-slate-900">
+    <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-surface shadow-sm dark:border-slate-800 dev-dark:border-border dark:bg-slate-900 dev-dark:bg-surface-elevated">
       <table className="w-full min-w-[760px] text-left text-sm">
         <caption className="sr-only">Season standings</caption>
-        <thead className="bg-surface-muted text-xs uppercase tracking-[0.14em] text-ink-muted dark:bg-slate-950 dark:text-slate-400">
+        <thead className="bg-surface-muted text-xs uppercase tracking-[0.14em] text-ink-muted dark:bg-slate-950 dev-dark:bg-background dark:text-slate-400 dev-dark:text-text-muted">
           <tr>
             <th className="px-5 py-4">Rank</th>
             <th className="px-5 py-4">Member</th>
@@ -18,13 +18,16 @@ function StandingsTable({ standings }: { standings: LeaderboardMember[] }) {
             <th className="px-5 py-4 text-right">Podiums</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+        <tbody className="divide-y divide-slate-200 dark:divide-slate-800 dev-dark:divide-border">
           {standings.map((member) => (
             <tr
               key={member.memberId}
-              className="transition-colors hover:bg-surface-muted/60 dark:hover:bg-slate-950/60"
+              className="transition-colors hover:bg-surface-muted/60 dark:hover:bg-slate-950/60 dev-dark:hover:bg-surface-hover"
             >
-              <th scope="row" className="px-5 py-4 font-black text-primary dark:text-white">
+              <th
+                scope="row"
+                className="px-5 py-4 font-black text-primary dark:text-white dev-dark:text-ink"
+              >
                 {member.rank}
               </th>
               <td className="px-5 py-4 font-bold">{member.memberName}</td>
@@ -54,13 +57,16 @@ export function StandingsPage() {
     <div className="animate-fade-in space-y-6">
       <div>
         <p className="text-xs font-bold uppercase tracking-[0.2em] text-accent">Long game</p>
-        <h1 className="mt-2 flex items-center gap-2 text-3xl font-black tracking-tight text-primary dark:text-white">
+        <h1 className="mt-2 flex items-center gap-2 text-3xl font-black tracking-tight text-primary dark:text-white dev-dark:text-ink">
           <BarChart3 className="text-sky" size={25} aria-hidden="true" /> Season standings
         </h1>
       </div>
 
       {isLoading && (
-        <p aria-live="polite" className="text-slate-600 dark:text-slate-300">
+        <p
+          aria-live="polite"
+          className="text-slate-600 dark:text-slate-300 dev-dark:text-text-secondary"
+        >
           Loading season standings...
         </p>
       )}
@@ -72,7 +78,7 @@ export function StandingsPage() {
         </p>
       )}
       {seasonQuery.data && seasonQuery.data.standings.length === 0 && (
-        <p className="text-slate-600 dark:text-slate-300">
+        <p className="text-slate-600 dark:text-slate-300 dev-dark:text-text-secondary">
           No completed season results are available.
         </p>
       )}

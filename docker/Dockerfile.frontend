@@ -8,6 +8,8 @@ RUN npm ci
 COPY . .
 ARG VITE_API_URL=/api/v1
 ENV VITE_API_URL=${VITE_API_URL}
+ARG VITE_APP_ENV=production
+ENV VITE_APP_ENV=${VITE_APP_ENV}
 RUN npm run build
 RUN grep -q '/api/v1' dist/assets/*.js \
 	&& grep -q '/auth/refresh' dist/assets/*.js \

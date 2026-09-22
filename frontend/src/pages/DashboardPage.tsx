@@ -184,7 +184,10 @@ function DashboardSections({
         >
           <Suspense
             fallback={
-              <p className="text-slate-600 dark:text-slate-300" aria-live="polite">
+              <p
+                className="text-slate-600 dark:text-slate-300 dev-dark:text-text-secondary"
+                aria-live="polite"
+              >
                 Loading {sectionTitles[section].toLowerCase()}...
               </p>
             }
@@ -236,7 +239,7 @@ function CreateLeagueForm() {
           required
           value={name}
           onChange={(event) => setName(event.target.value)}
-          className="min-h-11 w-full rounded-md border border-slate-300 px-3 py-2 dark:border-slate-700 dark:bg-slate-900"
+          className="min-h-11 w-full rounded-md border border-slate-300 px-3 py-2 dark:border-slate-700 dev-dark:border-border-hover dark:bg-slate-900 dev-dark:bg-surface-elevated"
         />
       </div>
       <div>
@@ -249,13 +252,15 @@ function CreateLeagueForm() {
           required
           value={season}
           onChange={(event) => setSeason(Number(event.target.value))}
-          className="min-h-11 w-full rounded-md border border-slate-300 px-3 py-2 dark:border-slate-700 dark:bg-slate-900"
+          className="min-h-11 w-full rounded-md border border-slate-300 px-3 py-2 dark:border-slate-700 dev-dark:border-border-hover dark:bg-slate-900 dev-dark:bg-surface-elevated"
         />
       </div>
       <Button type="submit" disabled={isSubmitting} fullWidth>
         {isSubmitting ? 'Creating…' : 'Create league'}
       </Button>
-      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+      {error && (
+        <p className="text-sm text-red-600 dark:text-red-400 dev-dark:text-error">{error}</p>
+      )}
     </form>
   )
 }
@@ -298,14 +303,16 @@ function JoinLeagueForm() {
           required
           value={code}
           onChange={(event) => setCode(event.target.value)}
-          className="min-h-11 w-full rounded-md border border-slate-300 px-3 py-2 dark:border-slate-700 dark:bg-slate-900"
+          className="min-h-11 w-full rounded-md border border-slate-300 px-3 py-2 dark:border-slate-700 dev-dark:border-border-hover dark:bg-slate-900 dev-dark:bg-surface-elevated"
         />
       </div>
       <Button type="submit" disabled={isSubmitting} fullWidth>
         <KeyRound size={16} aria-hidden="true" />
         {isSubmitting ? 'Joining…' : 'Join league'}
       </Button>
-      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+      {error && (
+        <p className="text-sm text-red-600 dark:text-red-400 dev-dark:text-error">{error}</p>
+      )}
     </form>
   )
 }
@@ -330,7 +337,7 @@ export function DashboardPage() {
   if (isLoading) {
     return (
       <div
-        className="flex items-center gap-2 py-10 text-sm font-semibold text-ink-muted dark:text-slate-400"
+        className="flex items-center gap-2 py-10 text-sm font-semibold text-ink-muted dark:text-slate-400 dev-dark:text-text-muted"
         role="status"
       >
         <LoaderCircle className="h-5 w-5 animate-spin" aria-hidden="true" />
@@ -349,14 +356,14 @@ export function DashboardPage() {
           <p className="text-xs font-bold uppercase tracking-[0.2em] text-accent">
             Your season starts here
           </p>
-          <h1 className="mt-2 text-3xl font-black tracking-tight text-primary dark:text-white">
+          <h1 className="mt-2 text-3xl font-black tracking-tight text-primary dark:text-white dev-dark:text-ink">
             Welcome to the pool.
           </h1>
         </div>
-        <p className="text-slate-600 dark:text-slate-300">
+        <p className="text-slate-600 dark:text-slate-300 dev-dark:text-text-secondary">
           No league has been created yet. Create one to get started.
         </p>
-        <div className="max-w-md rounded-2xl border border-slate-200 bg-surface p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="max-w-md rounded-2xl border border-slate-200 bg-surface p-5 shadow-sm dark:border-slate-800 dev-dark:border-border dark:bg-slate-900 dev-dark:bg-surface-elevated">
           <CreateLeagueForm />
         </div>
       </div>
@@ -368,15 +375,15 @@ export function DashboardPage() {
       <div className="animate-fade-in space-y-6">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.2em] text-accent">League access</p>
-          <h1 className="mt-2 text-3xl font-black tracking-tight text-primary dark:text-white">
+          <h1 className="mt-2 text-3xl font-black tracking-tight text-primary dark:text-white dev-dark:text-ink">
             Join your pool.
           </h1>
         </div>
-        <p className="text-slate-600 dark:text-slate-300">
+        <p className="text-slate-600 dark:text-slate-300 dev-dark:text-text-secondary">
           You are signed in, but you are not a member yet. Ask the commissioner for the league
           passcode to join.
         </p>
-        <div className="max-w-md rounded-2xl border border-slate-200 bg-surface p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="max-w-md rounded-2xl border border-slate-200 bg-surface p-5 shadow-sm dark:border-slate-800 dev-dark:border-border dark:bg-slate-900 dev-dark:bg-surface-elevated">
           <JoinLeagueForm />
         </div>
       </div>
@@ -390,7 +397,7 @@ export function DashboardPage() {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.2em] text-accent">League hub</p>
-          <h1 className="mt-2 text-3xl font-black tracking-tight text-primary dark:text-white">
+          <h1 className="mt-2 text-3xl font-black tracking-tight text-primary dark:text-white dev-dark:text-ink">
             Dashboard
           </h1>
         </div>
@@ -415,11 +422,11 @@ export function DashboardPage() {
           </div>
         </div>
       )}
-      <div className="rounded-2xl border border-slate-200 bg-surface p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <p className="text-xs font-bold uppercase tracking-[0.16em] text-ink-muted dark:text-slate-400">
+      <div className="rounded-2xl border border-slate-200 bg-surface p-5 shadow-sm dark:border-slate-800 dev-dark:border-border dark:bg-slate-900 dev-dark:bg-surface-elevated">
+        <p className="text-xs font-bold uppercase tracking-[0.16em] text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
           Current week
         </p>
-        <p className="mt-2 text-2xl font-black text-primary dark:text-white">
+        <p className="mt-2 text-2xl font-black text-primary dark:text-white dev-dark:text-ink">
           {currentWeek ? `Week ${currentWeek.weekNumber}` : 'Unavailable'}
         </p>
       </div>
