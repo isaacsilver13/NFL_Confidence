@@ -120,10 +120,24 @@ function GameBreakdown({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2 font-bold">
           <TeamLogo code={game.awayTeam} size="sm" decorative />
-          <span>{game.awayTeam}</span>
+          <span>
+            {game.awayTeam}
+            {game.awayRecord && (
+              <span className="ml-1 font-semibold text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
+                ({game.awayRecord})
+              </span>
+            )}
+          </span>
           <span className="text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">at</span>
           <TeamLogo code={game.homeTeam} size="sm" decorative />
-          <span>{game.homeTeam}</span>
+          <span>
+            {game.homeTeam}
+            {game.homeRecord && (
+              <span className="ml-1 font-semibold text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
+                ({game.homeRecord})
+              </span>
+            )}
+          </span>
         </div>
         <p className="text-sm text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
           Median confidence:{' '}

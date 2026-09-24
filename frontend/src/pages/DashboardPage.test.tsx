@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '@/api/client'
-import { joinLeagueWithCode } from '@/api/league'
+import { fetchLeaguePot, joinLeagueWithCode } from '@/api/league'
 import { fetchCurrentPicksCard, fetchSessionBootstrap, type SessionBootstrap } from '@/api/session'
 import { fetchCompletedWeeks } from '@/api/nfl'
 import { fetchSeasonStandings, fetchWeeklyLeaderboard } from '@/api/leaderboard'
@@ -25,6 +25,7 @@ vi.mock('./ProfilePage', () => ({
 vi.mock('@/api/league', () => ({
   createLeague: vi.fn(),
   joinLeagueWithCode: vi.fn(),
+  fetchLeaguePot: vi.fn(),
 }))
 
 vi.mock('@/api/session', () => ({
@@ -43,6 +44,7 @@ vi.mock('@/api/leaderboard', () => ({
 }))
 
 const mockedJoinLeagueWithCode = vi.mocked(joinLeagueWithCode)
+const mockedFetchLeaguePot = vi.mocked(fetchLeaguePot)
 const mockedFetchSessionBootstrap = vi.mocked(fetchSessionBootstrap)
 const mockedFetchCurrentPicksCard = vi.mocked(fetchCurrentPicksCard)
 const mockedFetchCompletedWeeks = vi.mocked(fetchCompletedWeeks)
@@ -113,6 +115,16 @@ describe('DashboardPage league access', () => {
     })
     mockedFetchCompletedWeeks.mockResolvedValue([])
     mockedFetchSeasonStandings.mockResolvedValue({ season: 2026, standings: [] })
+    mockedFetchLeaguePot.mockResolvedValue({
+      weekNumber: 1,
+      locksAt: null,
+      isVisible: false,
+      paidMemberCount: 0,
+      potCents: 0,
+      firstPlaceCents: 0,
+      secondPlaceCents: 2000,
+      thirdPlaceCents: 1000,
+    })
   })
 
   it('prompts a signed-in non-member for the shared league passcode', async () => {
@@ -168,6 +180,35 @@ describe('DashboardPage league access', () => {
     expect(standingsSection).toHaveAttribute('aria-expanded', 'false')
     expect(await screen.findByText('Leaderboard section body')).toBeInTheDocument()
     expect(mockedFetchCompletedWeeks).toHaveBeenCalledTimes(1)
+  })
+
+  it('hides the league pot before the visibility cutoff', async () => {
+    mockedFetchSessionBootstrap.mockResolvedValueOnce(memberSession)
+    renderPage()
+
+    await screen.findByText('Week 1')
+    expect(screen.queryByText('League pot')).not.toBeInTheDocument()
+  })
+
+  it('shows the league pot and prize split once visible', async () => {
+    mockedFetchSessionBootstrap.mockResolvedValueOnce(memberSession)
+    mockedFetchLeaguePot.mockResolvedValue({
+      weekNumber: 1,
+      locksAt: '2026-09-10T00:00:00Z',
+      isVisible: true,
+      paidMemberCount: 8,
+      potCents: 16000,
+      firstPlaceCents: 13000,
+      secondPlaceCents: 2000,
+      thirdPlaceCents: 1000,
+    })
+    renderPage()
+
+    expect(await screen.findByText('League pot')).toBeInTheDocument()
+    expect(screen.getByText('$160')).toBeInTheDocument()
+    expect(screen.getByText('$130')).toBeInTheDocument()
+    expect(screen.getByText('$20')).toBeInTheDocument()
+    expect(screen.getByText('$10')).toBeInTheDocument()
   })
 
   it('shows the live current week rank in the summary before any week completes', async () => {

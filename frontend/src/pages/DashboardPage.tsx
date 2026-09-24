@@ -3,7 +3,7 @@ import { ArrowUpRight, CalendarDays, KeyRound, LoaderCircle, Users } from 'lucid
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { ApiError } from '@/api/client'
-import { createLeague, joinLeagueWithCode } from '@/api/league'
+import { createLeague, fetchLeaguePot, joinLeagueWithCode } from '@/api/league'
 import { fetchCompletedWeeks, fetchPickHistory } from '@/api/nfl'
 import { fetchWeeklyLeaderboard, fetchSeasonStandings } from '@/api/leaderboard'
 import { fetchCurrentPicksCard, fetchSessionBootstrap } from '@/api/session'
@@ -317,6 +317,51 @@ function JoinLeagueForm() {
   )
 }
 
+function formatCents(cents: number): string {
+  return `$${Math.round(cents / 100)}`
+}
+
+function LeaguePotCard() {
+  const { data: pot } = useQuery({
+    queryKey: ['league', 'pot'],
+    queryFn: fetchLeaguePot,
+    staleTime: 60_000,
+  })
+
+  if (!pot || !pot.isVisible) return null
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-surface p-5 shadow-sm dark:border-slate-800 dev-dark:border-border dark:bg-slate-900 dev-dark:bg-surface-elevated">
+      <p className="text-xs font-bold uppercase tracking-[0.16em] text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
+        League pot
+      </p>
+      <p className="mt-1 text-2xl font-black text-primary dark:text-white dev-dark:text-ink">
+        {formatCents(pot.potCents)}
+      </p>
+      <div className="mt-3 flex flex-wrap gap-4 text-sm">
+        <span className="inline-flex items-center gap-1.5">
+          <span aria-hidden="true">🥇</span>
+          <span className="font-bold text-primary dark:text-white dev-dark:text-ink">
+            {formatCents(pot.firstPlaceCents)}
+          </span>
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span aria-hidden="true">🥈</span>
+          <span className="font-bold text-primary dark:text-white dev-dark:text-ink">
+            {formatCents(pot.secondPlaceCents)}
+          </span>
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span aria-hidden="true">🥉</span>
+          <span className="font-bold text-primary dark:text-white dev-dark:text-ink">
+            {formatCents(pot.thirdPlaceCents)}
+          </span>
+        </span>
+      </div>
+    </div>
+  )
+}
+
 export function DashboardPage() {
   const navigate = useNavigate()
   const {
@@ -430,6 +475,7 @@ export function DashboardPage() {
           {currentWeek ? `Week ${currentWeek.weekNumber}` : 'Unavailable'}
         </p>
       </div>
+      <LeaguePotCard />
       <DashboardSections userId={user.id} currentWeekNumber={currentWeek?.weekNumber} />
     </div>
   )

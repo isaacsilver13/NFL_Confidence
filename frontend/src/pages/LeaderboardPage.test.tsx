@@ -220,6 +220,8 @@ describe('LeaderboardPage', () => {
               gameId: 'game-1',
               awayTeam: 'CHI',
               homeTeam: 'GB',
+              awayRecord: null,
+              homeRecord: null,
               medianConfidence: 4,
               teamCounts: [
                 { team: 'CHI', userCount: 3 },
@@ -273,6 +275,8 @@ describe('LeaderboardPage', () => {
               gameId: 'game-1',
               awayTeam: 'CHI',
               homeTeam: 'GB',
+              awayRecord: null,
+              homeRecord: null,
               medianConfidence: 4,
               teamCounts: [{ team: 'CHI', userCount: 2 }],
             },

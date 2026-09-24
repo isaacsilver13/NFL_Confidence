@@ -45,6 +45,17 @@ class MemberPaymentRead(CamelModel):
     voided_pick_count: int = 0
 
 
+class LeaguePotRead(CamelModel):
+    week_number: int
+    locks_at: datetime | None = None
+    is_visible: bool
+    paid_member_count: int
+    pot_cents: int
+    first_place_cents: int
+    second_place_cents: int
+    third_place_cents: int
+
+
 class MemberSubmissionRead(CamelModel):
     user_id: uuid.UUID
     display_name: str

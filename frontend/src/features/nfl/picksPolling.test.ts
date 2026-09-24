@@ -29,6 +29,8 @@ function game(status: string): NflGame {
     isTie: false,
     clock: null,
     period: null,
+    awayRecord: null,
+    homeRecord: null,
   }
 }
 

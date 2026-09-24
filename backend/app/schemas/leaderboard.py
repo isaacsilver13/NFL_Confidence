@@ -58,6 +58,8 @@ class GamePickBreakdownRead(CamelModel):
     game_id: uuid.UUID
     away_team: str
     home_team: str
+    away_record: str | None = None
+    home_record: str | None = None
     median_confidence: float | None = None
     team_counts: list[TeamPickCountRead]
 

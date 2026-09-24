@@ -68,6 +68,8 @@ def import_games(db: Session, games: list[EspnGame]) -> int:
             db_game.venue_location = imported_game.venue_location
             db_game.spread_team = imported_game.spread_team
             db_game.spread = imported_game.spread
+            db_game.away_record = imported_game.away_record
+            db_game.home_record = imported_game.home_record
             db_game.game_status = _STATUS_MAP[imported_game.game_status]
             db_game.home_score = imported_game.home_score
             db_game.away_score = imported_game.away_score

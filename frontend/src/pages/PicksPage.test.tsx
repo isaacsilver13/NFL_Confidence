@@ -53,6 +53,8 @@ const games: NflGame[] = [
     isTie: false,
     clock: null,
     period: null,
+    awayRecord: '1-2',
+    homeRecord: '2-1',
   },
   {
     id: 'game-2',
@@ -70,6 +72,8 @@ const games: NflGame[] = [
     isTie: false,
     clock: null,
     period: null,
+    awayRecord: null,
+    homeRecord: null,
   },
 ]
 
@@ -105,8 +109,10 @@ describe('PicksPage', () => {
     expect(await screen.findByRole('button', { name: 'BUF' })).toBeInTheDocument()
     expect(screen.getByTestId('picks-scroll-pane')).toHaveClass('pb-4', 'sm:pb-0')
     expect(screen.getByRole('button', { name: 'GB' })).toBeInTheDocument()
-    expect(screen.getByText('Highmark Stadium')).toBeInTheDocument()
+    expect(screen.getByText(/Highmark Stadium/)).toBeInTheDocument()
     expect(screen.getByText(/Line: KC -3.5/)).toBeInTheDocument()
+    expect(screen.getByTestId('team-record-game-1-away')).toHaveTextContent('(1-2)')
+    expect(screen.getByTestId('team-record-game-1-home')).toHaveTextContent('(2-1)')
 
     await user.click(screen.getByRole('button', { name: 'KC' }))
     await user.click(screen.getByRole('button', { name: 'GB' }))
@@ -123,7 +129,9 @@ describe('PicksPage', () => {
       ],
     })
     expect(screen.queryByRole('button', { name: 'Save picks' })).not.toBeInTheDocument()
-    expect(await screen.findByText('Picks saved.')).toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByText('Saving…')).not.toBeInTheDocument())
+    expect(screen.queryByText('Picks saved.')).not.toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
   it('enables Submit picks once every game is picked, and submits', async () => {

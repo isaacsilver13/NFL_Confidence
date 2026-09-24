@@ -25,6 +25,8 @@ export interface NflGame {
   isTie: boolean
   clock: string | null
   period: number | null
+  awayRecord: string | null
+  homeRecord: string | null
 }
 
 export interface NflPick {

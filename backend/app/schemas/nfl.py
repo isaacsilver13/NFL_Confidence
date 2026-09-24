@@ -35,6 +35,8 @@ class GameRead(CamelModel):
     is_tie: bool
     clock: str | None = None
     period: int | None = None
+    away_record: str | None = None
+    home_record: str | None = None
 
 
 class PickRead(CamelModel):

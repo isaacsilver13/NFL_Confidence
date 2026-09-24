@@ -54,6 +54,8 @@ export interface GamePickBreakdown {
   gameId: string
   awayTeam: string
   homeTeam: string
+  awayRecord: string | null
+  homeRecord: string | null
   medianConfidence: number | null
   teamCounts: TeamPickCount[]
 }

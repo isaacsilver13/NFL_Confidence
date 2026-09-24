@@ -168,8 +168,11 @@ describe('ProfilePage', () => {
     expect(screen.getByText('4.0')).toBeInTheDocument()
     expect(screen.getByRole('img', { name: 'Week 1: 50% win rate' })).toBeInTheDocument()
     expect(screen.getByRole('img', { name: 'Week 2: 100% win rate' })).toBeInTheDocument()
-    expect(screen.getByText('2-0 (2)')).toBeInTheDocument()
-    expect(screen.getByText('0-1 (1)')).toBeInTheDocument()
+    expect(
+      screen.getByRole('img', {
+        name: 'Confidence point histogram: confidence 2, 0 correct and 1 incorrect; confidence 4, 2 correct and 0 incorrect',
+      }),
+    ).toBeInTheDocument()
   })
 
   it('hides season stats when there is no scored history', async () => {

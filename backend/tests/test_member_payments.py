@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.auth.jwt import create_access_token
 from app.models import League, LeagueMember, NflGame, NflWeek, Pick, User
 from app.models.enums import GameStatus, LeagueRole, WeekStatus
+from app.models.member_weekly_payment import MemberWeeklyPayment
 from app.services import scoring_service
 
 
@@ -125,3 +126,85 @@ def test_only_commissioner_can_manage_payments_and_void_unpaid_picks(client, db_
     db_session.refresh(pick)
     assert pick.voided_at is not None
     assert pick.points_earned is None
+
+
+def test_league_pot_reflects_paid_member_count_and_clamps_first_place(client, db_session: Session):
+    owner, member, week, _pick = _fixture(db_session, client)
+    league = db_session.query(League).one()
+
+    extra_members = [_user(db_session, f"Extra{i}") for i in range(3)]
+    for extra in extra_members:
+        db_session.add(LeagueMember(league_id=league.id, user_id=extra.id, role=LeagueRole.MEMBER))
+    db_session.flush()
+
+    now = datetime.now(timezone.utc)
+    for paid_user in [owner, member, *extra_members]:
+        db_session.add(
+            MemberWeeklyPayment(
+                league_id=league.id,
+                week_id=week.id,
+                user_id=paid_user.id,
+                is_paid=True,
+                marked_at=now,
+                marked_by_user_id=owner.id,
+            )
+        )
+    db_session.commit()
+
+    response = client.get("/api/v1/league/pot", headers=_headers(member))
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["paidMemberCount"] == 5
+    assert data["potCents"] == 5000
+    assert data["secondPlaceCents"] == 2000
+    assert data["thirdPlaceCents"] == 1000
+    assert data["firstPlaceCents"] == 2000
+    assert data["isVisible"] is True
+
+    # Fewer than 3 paid members: first place is clamped to zero, never negative.
+    db_session.query(MemberWeeklyPayment).filter(
+        MemberWeeklyPayment.user_id.in_([extra.id for extra in extra_members])
+    ).delete(synchronize_session=False)
+    db_session.commit()
+
+    response = client.get("/api/v1/league/pot", headers=_headers(member))
+    data = response.json()["data"]
+    assert data["paidMemberCount"] == 2
+    assert data["potCents"] == 2000
+    assert data["firstPlaceCents"] == 0
+
+
+def test_league_pot_not_visible_before_the_weeks_first_kickoff(client, db_session: Session):
+    owner = _user(db_session, "FutureOwner")
+    league_response = client.post(
+        "/api/v1/league",
+        json={"name": "Future Kickoff League", "season": 2026},
+        headers=_headers(owner),
+    )
+    assert league_response.status_code == 200
+
+    now = datetime.now(timezone.utc)
+    week = NflWeek(
+        season=2026,
+        week_number=1,
+        start_date=now - timedelta(days=1),
+        end_date=now + timedelta(days=6),
+        status=WeekStatus.REGULAR,
+    )
+    db_session.add(week)
+    db_session.flush()
+    db_session.add(
+        NflGame(
+            week_id=week.id,
+            espn_game_id=f"pot-future-{uuid.uuid4().hex}",
+            kickoff_time=now + timedelta(days=1),
+            away_team="BUF",
+            home_team="KC",
+            game_status=GameStatus.SCHEDULED,
+        )
+    )
+    db_session.commit()
+
+    response = client.get("/api/v1/league/pot", headers=_headers(owner))
+    assert response.status_code == 200
+    assert response.json()["data"]["isVisible"] is False

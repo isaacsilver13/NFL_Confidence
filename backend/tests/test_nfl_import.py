@@ -118,8 +118,16 @@ def test_fetch_schedule_normalizes_espn_venue_and_favorite_spread() -> None:
                 "competitions": [
                     {
                         "competitors": [
-                            {"homeAway": "away", "team": {"abbreviation": "BUF"}},
-                            {"homeAway": "home", "team": {"abbreviation": "KC"}},
+                            {
+                                "homeAway": "away",
+                                "team": {"abbreviation": "BUF"},
+                                "records": [{"type": "total", "summary": "1-2"}],
+                            },
+                            {
+                                "homeAway": "home",
+                                "team": {"abbreviation": "KC"},
+                                "records": [{"type": "total", "summary": "2-1"}],
+                            },
                         ],
                         "venue": {
                             "fullName": "GEHA Field at Arrowhead Stadium",
@@ -140,3 +148,45 @@ def test_fetch_schedule_normalizes_espn_venue_and_favorite_spread() -> None:
     assert games[0].venue_location == "Kansas City, MO"
     assert games[0].spread_team == "KC"
     assert games[0].spread == -3.5
+    assert games[0].away_record == "1-2"
+    assert games[0].home_record == "2-1"
+
+
+def test_fetch_schedule_leaves_record_none_when_espn_omits_it() -> None:
+    payload = {
+        "events": [
+            {
+                "id": "espn-event-2",
+                "date": "2026-09-10T00:00:00Z",
+                "competitions": [
+                    {
+                        "competitors": [
+                            {"homeAway": "away", "team": {"abbreviation": "BUF"}},
+                            {"homeAway": "home", "team": {"abbreviation": "KC"}},
+                        ],
+                    }
+                ],
+            }
+        ]
+    }
+    transport = httpx.MockTransport(lambda request: httpx.Response(200, json=payload))
+    with httpx.Client(transport=transport, base_url="https://example.test") as client:
+        games = fetch_schedule(2026, 1, client=client)
+
+    assert games[0].away_record is None
+    assert games[0].home_record is None
+
+
+def test_import_games_persists_team_records(db_session: Session) -> None:
+    game = _espn_game()
+    game = EspnGame(**{**vars(game), "away_record": "1-2", "home_record": "2-1"})
+
+    assert import_games(db_session, [game]) == 1
+
+    imported = db_session.scalar(
+        select(NflGame).where(NflGame.espn_game_id == "espn-import-test-1")
+    )
+
+    assert imported is not None
+    assert imported.away_record == "1-2"
+    assert imported.home_record == "2-1"

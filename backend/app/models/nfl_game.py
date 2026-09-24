@@ -31,6 +31,8 @@ class NflGame(TimestampMixin, Base):
     venue_location: Mapped[str | None] = mapped_column(String(255))
     spread_team: Mapped[str | None] = mapped_column(String(64))
     spread: Mapped[float | None] = mapped_column(Float)
+    away_record: Mapped[str | None] = mapped_column(String(16))
+    home_record: Mapped[str | None] = mapped_column(String(16))
     home_score: Mapped[int | None] = mapped_column(Integer)
     away_score: Mapped[int | None] = mapped_column(Integer)
     winning_team: Mapped[str | None] = mapped_column(String(64), index=True)

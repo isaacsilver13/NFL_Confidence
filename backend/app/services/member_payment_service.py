@@ -1,6 +1,7 @@
 """Commissioner workflows for weekly payment status and unpaid picks."""
 
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
@@ -15,7 +16,15 @@ from app.repositories import (
     nfl_week_repository,
     pick_repository,
 )
-from app.services import scoring_service
+from app.services import scoring_service, weeks_service
+
+# Per-member league fee, confirmed with the commissioner (2026-09-24). Not
+# stored on the league model — this league's dues have never varied, so a
+# schema field would be speculative until a second league needs a different
+# amount.
+_MEMBER_FEE_CENTS = 1000
+_SECOND_PLACE_CENTS = 2000
+_THIRD_PLACE_CENTS = 1000
 
 
 def _get_week(db: Session, *, league: League, week_number: int):
@@ -121,3 +130,44 @@ def void_unpaid_picks(
     db.flush()
     scoring_service.score_week(db, league=league, week_id=week.id)
     return voided_pick_count, len(affected_user_ids)
+
+
+@dataclass(frozen=True)
+class LeaguePot:
+    week_number: int
+    locks_at: datetime | None
+    is_visible: bool
+    paid_member_count: int
+    pot_cents: int
+    first_place_cents: int
+    second_place_cents: int
+    third_place_cents: int
+
+
+def get_league_pot(db: Session, *, league: League) -> LeaguePot:
+    """Current week's pot and prize split, from paid-member counts and the
+    current week's earliest kickoff — both already-authoritative data
+    (`MemberWeeklyPayment.is_paid`, `NflGame.kickoff_time`), not a separately
+    stored pot value.
+    """
+    week = weeks_service.get_current_week(db)
+    _, statuses = list_payment_statuses(db, league=league, week_number=week.week_number)
+    paid_member_count = sum(
+        1 for _, payment, _ in statuses if payment is not None and payment.is_paid
+    )
+    pot_cents = paid_member_count * _MEMBER_FEE_CENTS
+    first_place_cents = max(pot_cents - _SECOND_PLACE_CENTS - _THIRD_PLACE_CENTS, 0)
+
+    locks_at = min((game.kickoff_time for game in week.games), default=None)
+    is_visible = locks_at is not None and locks_at <= datetime.now(timezone.utc)
+
+    return LeaguePot(
+        week_number=week.week_number,
+        locks_at=locks_at,
+        is_visible=is_visible,
+        paid_member_count=paid_member_count,
+        pot_cents=pot_cents,
+        first_place_cents=first_place_cents,
+        second_place_cents=_SECOND_PLACE_CENTS,
+        third_place_cents=_THIRD_PLACE_CENTS,
+    )
