@@ -1,15 +1,7 @@
 import { useMemo, useState } from 'react'
 import { ArrowDown, ArrowUp, ArrowUpDown, UserRound } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts'
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { ApiError } from '@/api/client'
 import { fetchPickHistory } from '@/api/nfl'
 import type { HistoricalPick, HistoricalWeek, PickOutcome } from '@/types/nfl'
@@ -340,7 +332,10 @@ function SeasonStats({ weeks }: { weeks: HistoricalWeek[] }) {
             className="mt-2 h-64"
             role="img"
             aria-label={`Confidence point histogram: ${confidenceHistogramData
-              .map((stat) => `confidence ${stat.confidence}, ${stat.correct} correct and ${stat.incorrect} incorrect`)
+              .map(
+                (stat) =>
+                  `confidence ${stat.confidence}, ${stat.correct} correct and ${stat.incorrect} incorrect`,
+              )
               .join('; ')}`}
           >
             <ResponsiveContainer width="100%" height="100%">
@@ -366,7 +361,12 @@ function SeasonStats({ weeks }: { weeks: HistoricalWeek[] }) {
                   formatter={(value, name) => [value, name === 'correct' ? 'Correct' : 'Incorrect']}
                   labelFormatter={(confidence) => `Confidence ${confidence}`}
                 />
-                <Bar dataKey="correct" stackId="outcome" fill="var(--color-success)" name="Correct" />
+                <Bar
+                  dataKey="correct"
+                  stackId="outcome"
+                  fill="var(--color-success)"
+                  name="Correct"
+                />
                 <Bar
                   dataKey="incorrect"
                   stackId="outcome"
