@@ -170,7 +170,7 @@ describe('ProfilePage', () => {
     expect(screen.getByRole('img', { name: 'Week 2: 100% win rate' })).toBeInTheDocument()
     expect(
       screen.getByRole('img', {
-        name: 'Confidence point histogram: confidence 2, 0 correct and 1 incorrect; confidence 4, 2 correct and 0 incorrect',
+        name: 'Confidence point histogram: confidence 4, 2 correct',
       }),
     ).toBeInTheDocument()
   })

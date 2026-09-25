@@ -132,7 +132,7 @@ def test_league_pot_reflects_paid_member_count_and_clamps_first_place(client, db
     owner, member, week, _pick = _fixture(db_session, client)
     league = db_session.query(League).one()
 
-    extra_members = [_user(db_session, f"Extra{i}") for i in range(3)]
+    extra_members = [_user(db_session, f"Extra{i}") for i in range(4)]
     for extra in extra_members:
         db_session.add(LeagueMember(league_id=league.id, user_id=extra.id, role=LeagueRole.MEMBER))
     db_session.flush()
@@ -154,16 +154,43 @@ def test_league_pot_reflects_paid_member_count_and_clamps_first_place(client, db
     response = client.get("/api/v1/league/pot", headers=_headers(member))
     assert response.status_code == 200
     data = response.json()["data"]
-    assert data["paidMemberCount"] == 5
-    assert data["potCents"] == 5000
+    assert data["paidMemberCount"] == 6
+    assert data["potCents"] == 6000
+    assert data["firstPlaceCents"] == 3000
     assert data["secondPlaceCents"] == 2000
     assert data["thirdPlaceCents"] == 1000
-    assert data["firstPlaceCents"] == 2000
     assert data["isVisible"] is True
 
-    # Fewer than 3 paid members: first place is clamped to zero, never negative.
+    # Below $60 (fewer than 6 paid members), the small-pot table applies
+    # instead of the standard $20/$10 second/third split.
     db_session.query(MemberWeeklyPayment).filter(
-        MemberWeeklyPayment.user_id.in_([extra.id for extra in extra_members])
+        MemberWeeklyPayment.user_id == extra_members[0].id
+    ).delete(synchronize_session=False)
+    db_session.commit()
+
+    response = client.get("/api/v1/league/pot", headers=_headers(member))
+    data = response.json()["data"]
+    assert data["paidMemberCount"] == 5
+    assert data["potCents"] == 5000
+    assert data["firstPlaceCents"] == 3000
+    assert data["secondPlaceCents"] == 1000
+    assert data["thirdPlaceCents"] == 1000
+
+    db_session.query(MemberWeeklyPayment).filter(
+        MemberWeeklyPayment.user_id == extra_members[1].id
+    ).delete(synchronize_session=False)
+    db_session.commit()
+
+    response = client.get("/api/v1/league/pot", headers=_headers(member))
+    data = response.json()["data"]
+    assert data["paidMemberCount"] == 4
+    assert data["potCents"] == 4000
+    assert data["firstPlaceCents"] == 2000
+    assert data["secondPlaceCents"] == 1000
+    assert data["thirdPlaceCents"] == 1000
+
+    db_session.query(MemberWeeklyPayment).filter(
+        MemberWeeklyPayment.user_id.in_([extra.id for extra in extra_members[1:]])
     ).delete(synchronize_session=False)
     db_session.commit()
 
@@ -171,7 +198,9 @@ def test_league_pot_reflects_paid_member_count_and_clamps_first_place(client, db
     data = response.json()["data"]
     assert data["paidMemberCount"] == 2
     assert data["potCents"] == 2000
-    assert data["firstPlaceCents"] == 0
+    assert data["firstPlaceCents"] == 2000
+    assert data["secondPlaceCents"] == 0
+    assert data["thirdPlaceCents"] == 0
 
 
 def test_league_pot_not_visible_before_the_weeks_first_kickoff(client, db_session: Session):

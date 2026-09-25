@@ -192,7 +192,6 @@ interface WeekStat {
 interface ConfidenceStat {
   confidence: number
   correct: number
-  incorrect: number
 }
 
 function computeWeekStats(weeks: HistoricalWeek[]): WeekStat[] {
@@ -220,14 +219,12 @@ function computeConfidenceStats(weeks: HistoricalWeek[]): ConfidenceStat[] {
   const byConfidence = new Map<number, ConfidenceStat>()
   for (const week of weeks) {
     for (const pick of week.picks) {
-      if (pick.outcome !== 'correct' && pick.outcome !== 'incorrect') continue
+      if (pick.outcome !== 'correct') continue
       const entry = byConfidence.get(pick.confidence) ?? {
         confidence: pick.confidence,
         correct: 0,
-        incorrect: 0,
       }
-      if (pick.outcome === 'correct') entry.correct += 1
-      else entry.incorrect += 1
+      entry.correct += 1
       byConfidence.set(pick.confidence, entry)
     }
   }
@@ -332,10 +329,7 @@ function SeasonStats({ weeks }: { weeks: HistoricalWeek[] }) {
             className="mt-2 h-64"
             role="img"
             aria-label={`Confidence point histogram: ${confidenceHistogramData
-              .map(
-                (stat) =>
-                  `confidence ${stat.confidence}, ${stat.correct} correct and ${stat.incorrect} incorrect`,
-              )
+              .map((stat) => `confidence ${stat.confidence}, ${stat.correct} correct`)
               .join('; ')}`}
           >
             <ResponsiveContainer width="100%" height="100%">
@@ -358,20 +352,13 @@ function SeasonStats({ weeks }: { weeks: HistoricalWeek[] }) {
                   width={36}
                 />
                 <Tooltip
-                  formatter={(value, name) => [value, name === 'correct' ? 'Correct' : 'Incorrect']}
+                  formatter={(value) => [value, 'Correct']}
                   labelFormatter={(confidence) => `Confidence ${confidence}`}
                 />
                 <Bar
                   dataKey="correct"
-                  stackId="outcome"
                   fill="var(--color-success)"
                   name="Correct"
-                />
-                <Bar
-                  dataKey="incorrect"
-                  stackId="outcome"
-                  fill="var(--color-danger)"
-                  name="Incorrect"
                   radius={[4, 4, 0, 0]}
                 />
               </BarChart>

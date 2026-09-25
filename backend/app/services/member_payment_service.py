@@ -26,6 +26,19 @@ _MEMBER_FEE_CENTS = 1000
 _SECOND_PLACE_CENTS = 2000
 _THIRD_PLACE_CENTS = 1000
 
+# Below $60 the standard $20/$10 second/third split can't be subtracted from
+# the pot without going negative, so the commissioner specified these payouts
+# directly per paid-member count (2026-09-24). $60+ (6+ paid members) uses the
+# standard formula below, which already continues this same pattern.
+_SMALL_POT_SPLITS_CENTS: dict[int, tuple[int, int, int]] = {
+    # paid_member_count: (first, second, third)
+    1: (1000, 0, 0),
+    2: (2000, 0, 0),
+    3: (2000, 1000, 0),
+    4: (2000, 1000, 1000),
+    5: (3000, 1000, 1000),
+}
+
 
 def _get_week(db: Session, *, league: League, week_number: int):
     week = nfl_week_repository.get_by_season_and_week(
@@ -156,7 +169,16 @@ def get_league_pot(db: Session, *, league: League) -> LeaguePot:
         1 for _, payment, _ in statuses if payment is not None and payment.is_paid
     )
     pot_cents = paid_member_count * _MEMBER_FEE_CENTS
-    first_place_cents = max(pot_cents - _SECOND_PLACE_CENTS - _THIRD_PLACE_CENTS, 0)
+    if paid_member_count in _SMALL_POT_SPLITS_CENTS:
+        first_place_cents, second_place_cents, third_place_cents = _SMALL_POT_SPLITS_CENTS[
+            paid_member_count
+        ]
+    elif paid_member_count == 0:
+        first_place_cents, second_place_cents, third_place_cents = 0, 0, 0
+    else:
+        second_place_cents = _SECOND_PLACE_CENTS
+        third_place_cents = _THIRD_PLACE_CENTS
+        first_place_cents = max(pot_cents - second_place_cents - third_place_cents, 0)
 
     locks_at = min((game.kickoff_time for game in week.games), default=None)
     is_visible = locks_at is not None and locks_at <= datetime.now(timezone.utc)
@@ -168,6 +190,6 @@ def get_league_pot(db: Session, *, league: League) -> LeaguePot:
         paid_member_count=paid_member_count,
         pot_cents=pot_cents,
         first_place_cents=first_place_cents,
-        second_place_cents=_SECOND_PLACE_CENTS,
-        third_place_cents=_THIRD_PLACE_CENTS,
+        second_place_cents=second_place_cents,
+        third_place_cents=third_place_cents,
     )
