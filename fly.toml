@@ -1,8 +1,12 @@
-app = "nfl-confidence-api"
+app = "nfl-confidence-web"
 primary_region = "iad"
 
 [build]
-dockerfile = "../docker/Dockerfile.backend"
+dockerfile = "docker/Dockerfile"
+
+[build.args]
+VITE_API_URL = "/api/v1"
+VITE_APP_ENV = "production"
 
 [deploy]
 release_command = "alembic upgrade head"
