@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { ArrowDown, ArrowUp, ArrowUpDown, UserRound } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { ApiError } from '@/api/client'
 import { fetchPickHistory } from '@/api/nfl'
 import type { HistoricalPick, HistoricalWeek, PickOutcome } from '@/types/nfl'
@@ -249,9 +250,8 @@ function SeasonStats({ weeks }: { weeks: HistoricalWeek[] }) {
   const seasonWinRate = totalScored > 0 ? totalCorrect / totalScored : null
   const averageWeeklyPoints =
     weeksWithScoring.reduce((sum, week) => sum + week.totalPoints, 0) / weeksWithScoring.length
-  const maxConfidenceCount = Math.max(
-    1,
-    ...confidenceStats.map((stat) => stat.correct + stat.incorrect),
+  const confidenceHistogramData = [...confidenceStats].sort(
+    (left, right) => left.confidence - right.confidence,
   )
 
   return (
@@ -323,34 +323,60 @@ function SeasonStats({ weeks }: { weeks: HistoricalWeek[] }) {
         </ul>
       </div>
 
-      {confidenceStats.length > 0 && (
+      {confidenceHistogramData.length > 0 && (
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.14em] text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
             Confidence point histogram
           </p>
-          <ul className="mt-2 space-y-1.5">
-            {confidenceStats.map((stat) => {
-              const total = stat.correct + stat.incorrect
-              const correctWidth = (stat.correct / maxConfidenceCount) * 100
-              const incorrectWidth = (stat.incorrect / maxConfidenceCount) * 100
-              return (
-                <li key={stat.confidence} className="flex items-center gap-3 text-sm">
-                  <span className="w-8 shrink-0 text-right font-bold">{stat.confidence}</span>
-                  <div
-                    className="flex h-3 flex-1 overflow-hidden rounded-full bg-surface-muted dark:bg-slate-800 dev-dark:bg-surface-hover"
-                    role="img"
-                    aria-label={`Confidence ${stat.confidence}: ${stat.correct} correct, ${stat.incorrect} incorrect`}
-                  >
-                    <div className="h-full bg-accent" style={{ width: `${correctWidth}%` }} />
-                    <div className="h-full bg-danger" style={{ width: `${incorrectWidth}%` }} />
-                  </div>
-                  <span className="w-20 shrink-0 text-right text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
-                    {stat.correct}-{stat.incorrect} ({total})
-                  </span>
-                </li>
+          <div
+            className="mt-2 h-64"
+            role="img"
+            aria-label={`Confidence point histogram: ${confidenceHistogramData
+              .map(
+                (stat) =>
+                  `confidence ${stat.confidence}, ${stat.correct} correct and ${stat.incorrect} incorrect`,
               )
-            })}
-          </ul>
+              .join('; ')}`}
+          >
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart
+                data={confidenceHistogramData}
+                margin={{ top: 4, right: 8, bottom: 4, left: 0 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" vertical={false} className="opacity-20" />
+                <XAxis
+                  dataKey="confidence"
+                  label={{ value: 'Confidence value', position: 'insideBottom', offset: -4 }}
+                  tickLine={false}
+                  fontSize={12}
+                />
+                <YAxis
+                  allowDecimals={false}
+                  label={{ value: 'Times used', angle: -90, position: 'insideLeft' }}
+                  tickLine={false}
+                  fontSize={12}
+                  width={36}
+                />
+                <Tooltip
+                  formatter={(value, name) => [value, name === 'correct' ? 'Correct' : 'Incorrect']}
+                  labelFormatter={(confidence) => `Confidence ${confidence}`}
+                />
+                <Bar
+                  dataKey="correct"
+                  stackId="outcome"
+                  fill="var(--color-success)"
+                  name="Correct"
+                />
+                <Bar
+                  dataKey="incorrect"
+                  stackId="outcome"
+                  fill="var(--color-danger)"
+                  name="Incorrect"
+                  radius={[4, 4, 0, 0]}
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
         </div>
       )}
     </section>

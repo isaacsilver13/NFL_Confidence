@@ -150,6 +150,8 @@ def get_current_card(
             home_score=game.home_score,
             winning_team=game.winning_team,
             is_tie=game.is_tie,
+            away_record=game.away_record,
+            home_record=game.home_record,
         ).model_dump(by_alias=True)
         for game in games
     ]
@@ -208,6 +210,8 @@ def get_all_picks_current_week(
                     home_score=game.home_score,
                     winning_team=game.winning_team,
                     is_tie=game.is_tie,
+                    away_record=game.away_record,
+                    home_record=game.home_record,
                 )
                 for game in games
             ],

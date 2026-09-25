@@ -4,6 +4,7 @@ import type {
   League,
   LeagueMember,
   LeagueMemberUpdateInput,
+  LeaguePot,
   MemberPaymentStatuses,
   MemberSubmissionStatuses,
   VoidUnpaidPicksResult,
@@ -12,6 +13,10 @@ import { apiFetch } from './client'
 
 export async function fetchLeague(): Promise<League> {
   return apiFetch<League>('/league')
+}
+
+export async function fetchLeaguePot(): Promise<LeaguePot> {
+  return apiFetch<LeaguePot>('/league/pot')
 }
 
 export async function fetchLeagueMembers(): Promise<LeagueMember[]> {

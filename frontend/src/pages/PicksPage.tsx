@@ -540,42 +540,32 @@ function GamesForm({
             <legend className="sr-only">
               {game.awayTeam} at {game.homeTeam}
             </legend>
-            <div className="border-b border-slate-200 bg-surface-muted/60 px-4 py-3 dark:border-slate-800 dev-dark:border-border dark:bg-slate-950/50">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
-                  {formatKickoff(game.kickoff)} · {game.status}
-                </p>
-                <span
-                  className={`inline-flex items-center gap-1 text-xs font-black uppercase tracking-[0.12em] ${isConflicting ? 'text-danger' : isPicked ? 'text-accent' : 'text-ink-muted dark:text-slate-400 dev-dark:text-text-muted'}`}
-                >
-                  {isConflicting ? (
-                    <AlertTriangle size={13} aria-hidden="true" />
-                  ) : isPicked ? (
-                    <Check size={13} aria-hidden="true" />
-                  ) : null}
-                  {isConflicting ? 'Conflict' : isPicked ? 'Picked' : 'Not picked'}
-                </span>
-              </div>
-              <p className="mt-2 text-sm text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
-                <span className="font-semibold text-ink dark:text-slate-200 dev-dark:text-ink">
-                  {game.venueName ?? 'Venue unavailable'}
-                </span>
-                {game.venueLocation && <span> · {game.venueLocation}</span>}
-                <span>
+            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-slate-200 bg-surface-muted/60 px-3 py-2 text-xs dark:border-slate-800 dev-dark:border-border dark:bg-slate-950/50">
+              <p className="font-semibold uppercase tracking-[0.14em] text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
+                {formatKickoff(game.kickoff)} · {game.status}
+                <span className="normal-case tracking-normal text-ink-muted/80 dark:text-slate-500 dev-dark:text-text-muted">
                   {' '}
-                  · Line:{' '}
+                  · {game.venueName ?? 'Venue unavailable'}
+                  {game.venueLocation && ` · ${game.venueLocation}`} · Line:{' '}
                   {game.spreadTeam && game.spread !== null
                     ? `${game.spreadTeam} ${formatSpread(game.spread)}`
                     : 'Not available'}
                 </span>
               </p>
+              <span
+                className={`inline-flex shrink-0 items-center gap-1 text-xs font-black uppercase tracking-[0.12em] ${isConflicting ? 'text-danger' : isPicked ? 'text-accent' : 'text-ink-muted dark:text-slate-400 dev-dark:text-text-muted'}`}
+              >
+                {isConflicting ? (
+                  <AlertTriangle size={13} aria-hidden="true" />
+                ) : isPicked ? (
+                  <Check size={13} aria-hidden="true" />
+                ) : null}
+                {isConflicting ? 'Conflict' : isPicked ? 'Picked' : 'Not picked'}
+              </span>
             </div>
-            <div className="flex flex-col gap-5 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
-              <div className="min-w-0">
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">
-                  Matchup
-                </p>
-                <div className="mt-3 flex items-center gap-3">
+            <div className="flex flex-col gap-3 p-3 sm:p-4 lg:flex-row lg:items-center lg:justify-between lg:gap-6">
+              <div className="min-w-0 lg:w-64 lg:shrink-0">
+                <div className="flex items-center gap-3">
                   <div className="flex min-w-0 items-center gap-2">
                     <TeamLogo code={game.awayTeam} decorative />
                     <span
@@ -584,6 +574,14 @@ function GamesForm({
                     >
                       {game.awayTeam}
                     </span>
+                    {game.awayRecord && (
+                      <span
+                        data-testid={`team-record-${game.id}-away`}
+                        className="text-xs font-semibold text-ink-muted dark:text-slate-400 dev-dark:text-text-muted"
+                      >
+                        ({game.awayRecord})
+                      </span>
+                    )}
                   </div>
                   {game.status === 'final' ? (
                     <div className="flex flex-col items-center">
@@ -607,12 +605,20 @@ function GamesForm({
                     >
                       {game.homeTeam}
                     </span>
+                    {game.homeRecord && (
+                      <span
+                        data-testid={`team-record-${game.id}-home`}
+                        className="text-xs font-semibold text-ink-muted dark:text-slate-400 dev-dark:text-text-muted"
+                      >
+                        ({game.homeRecord})
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
-              <div className="flex flex-col gap-4 sm:items-end">
+              <div className="flex flex-col gap-3 sm:items-end lg:flex-row lg:items-center lg:gap-6">
                 <div>
-                  <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
+                  <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
                     Pick a winner
                   </p>
                   <div
@@ -639,11 +645,11 @@ function GamesForm({
                   </div>
                 </div>
                 <div>
-                  <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
+                  <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
                     Confidence
                   </p>
                   <div
-                    className="grid grid-cols-4 gap-2"
+                    className="grid grid-cols-4 gap-1.5"
                     role="group"
                     aria-label={`Confidence for ${game.awayTeam} at ${game.homeTeam}`}
                   >
@@ -681,7 +687,7 @@ function GamesForm({
         )
       })}
 
-      {(saveMutation.isPending || saved || submitError) && (
+      {(saveMutation.isPending || (saved && (hasConflicts || voided)) || submitError) && (
         <div className="sticky bottom-3 z-10 -mx-1 flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-surface/95 p-3 shadow-lg shadow-primary/10 backdrop-blur sm:static sm:mx-0 sm:border-0 sm:bg-transparent sm:p-0 sm:shadow-none sm:backdrop-blur-none dark:border-slate-800 dev-dark:border-border dark:bg-slate-900/95 dev-dark:bg-surface-elevated/95 sm:dark:bg-transparent">
           {saveMutation.isPending && (
             <p
@@ -691,13 +697,14 @@ function GamesForm({
               Saving…
             </p>
           )}
-          {saved && (
+          {saved && hasConflicts && (
             <p role="status" className="text-sm font-semibold text-accent">
-              {hasConflicts
-                ? 'Picks saved, but conflicts must be resolved before this week is complete.'
-                : voided
-                  ? 'Picks saved. Incomplete or conflicting picks were voided.'
-                  : 'Picks saved.'}
+              Picks saved, but conflicts must be resolved before this week is complete.
+            </p>
+          )}
+          {saved && !hasConflicts && voided && (
+            <p role="status" className="text-sm font-semibold text-accent">
+              Picks saved. Incomplete or conflicting picks were voided.
             </p>
           )}
           {submitError && (

@@ -31,6 +31,8 @@ class EspnGame:
     venue_location: str | None
     spread_team: str | None
     spread: float | None
+    away_record: str | None = None
+    home_record: str | None = None
 
 
 def _team_code(competitor: dict[str, Any]) -> str | None:
@@ -44,6 +46,14 @@ def _score(competitor: dict[str, Any]) -> int | None:
         return int(value) if value is not None and value != "" else None
     except (TypeError, ValueError):
         return None
+
+
+def _record(competitor: dict[str, Any]) -> str | None:
+    for record in competitor.get("records") or []:
+        if record.get("type") == "total":
+            summary = record.get("summary")
+            return summary if isinstance(summary, str) and summary else None
+    return None
 
 
 def _status(event: dict[str, Any], competition: dict[str, Any]) -> str:
@@ -131,6 +141,8 @@ def normalize_event(event: dict[str, Any], *, season: int, week_number: int) -> 
     spread_team, spread = _spread(competition, away_team, home_team)
     venue_name, venue_location = _venue(competition)
     clock, period = _clock(event, competition)
+    away_record = _record(away)
+    home_record = _record(home)
     return EspnGame(
         espn_game_id=str(event["id"]),
         season=season,
@@ -149,6 +161,8 @@ def normalize_event(event: dict[str, Any], *, season: int, week_number: int) -> 
         venue_location=venue_location,
         spread_team=spread_team,
         spread=spread,
+        away_record=away_record,
+        home_record=home_record,
     )
 
 

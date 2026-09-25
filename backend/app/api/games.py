@@ -34,6 +34,8 @@ def _game_read(game: NflGame) -> dict:
         is_tie=game.is_tie,
         clock=game.clock,
         period=game.period,
+        away_record=game.away_record,
+        home_record=game.home_record,
     ).model_dump(by_alias=True)
 
 

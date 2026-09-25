@@ -257,6 +257,8 @@ def get_pick_breakdown(db: Session, *, league: League, viewer_id: uuid.UUID) -> 
             NflGame.id,
             NflGame.away_team,
             NflGame.home_team,
+            NflGame.away_record,
+            NflGame.home_record,
         )
         .select_from(NflGame)
         .join(NflWeek, NflGame.week_id == NflWeek.id)
@@ -307,7 +309,7 @@ def get_pick_breakdown(db: Session, *, league: League, viewer_id: uuid.UUID) -> 
         confidences_by_game[game_id].append(confidence)
 
     games_by_week: dict[int, list[GamePickBreakdownRead]] = defaultdict(list)
-    for week_number, game_id, away_team, home_team in game_rows:
+    for week_number, game_id, away_team, home_team, away_record, home_record in game_rows:
         confidences = sorted(confidences_by_game[game_id])
         median_confidence: float | None = None
         if confidences:
@@ -322,6 +324,8 @@ def get_pick_breakdown(db: Session, *, league: League, viewer_id: uuid.UUID) -> 
                 game_id=game_id,
                 away_team=away_team,
                 home_team=home_team,
+                away_record=away_record,
+                home_record=home_record,
                 median_confidence=median_confidence,
                 team_counts=[
                     TeamPickCountRead(team=away_team, user_count=counts.get(away_team, 0)),

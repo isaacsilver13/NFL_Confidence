@@ -25,6 +25,8 @@ describe('WeeklyPickBreakdown', () => {
             gameId: 'game-1',
             awayTeam: 'CHI',
             homeTeam: 'GB',
+            awayRecord: '2-1',
+            homeRecord: '1-2',
             medianConfidence: 4.5,
             teamCounts: [
               { team: 'CHI', userCount: 6 },
@@ -37,6 +39,8 @@ describe('WeeklyPickBreakdown', () => {
 
     expect(screen.getByText('Median confidence:')).toBeInTheDocument()
     expect(screen.getByText('4.5')).toBeInTheDocument()
+    expect(screen.getByText('(2-1)')).toBeInTheDocument()
+    expect(screen.getByText('(1-2)')).toBeInTheDocument()
     expect(screen.getByText('CHI: 6 picks')).toBeInTheDocument()
     expect(screen.getByText('GB: 2 picks')).toBeInTheDocument()
     expect(screen.getByText('75%')).toBeInTheDocument()
@@ -52,6 +56,8 @@ describe('WeeklyPickBreakdown', () => {
             gameId: 'game-1',
             awayTeam: 'BUF',
             homeTeam: 'KC',
+            awayRecord: null,
+            homeRecord: null,
             medianConfidence: null,
             teamCounts: [
               { team: 'BUF', userCount: 0 },
@@ -90,6 +96,8 @@ describe('WeeklyPickBreakdown', () => {
             gameId: 'game-1',
             awayTeam: 'CHI',
             homeTeam: 'GB',
+            awayRecord: null,
+            homeRecord: null,
             medianConfidence: 4,
             teamCounts: [
               { team: 'CHI', userCount: 1 },

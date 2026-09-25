@@ -26,6 +26,7 @@ from app.schemas.league import (
     LeagueJoinRequest,
     LeagueMemberRead,
     LeagueMemberUpdateRequest,
+    LeaguePotRead,
     LeagueRead,
     MemberPaymentRead,
     MemberPaymentUpdateRequest,
@@ -127,6 +128,27 @@ def update_member(
             avatar_url=updated_member.user.avatar_url,
             role=updated_member.role.value,
             joined_at=updated_member.joined_at,
+        ).model_dump(by_alias=True)
+    )
+
+
+@router.get("/pot")
+def get_league_pot(
+    league_member: tuple[League, LeagueMember] = Depends(get_active_league_member),
+    db: Session = Depends(get_db),
+) -> dict:
+    league, _ = league_member
+    pot = member_payment_service.get_league_pot(db, league=league)
+    return success(
+        LeaguePotRead(
+            week_number=pot.week_number,
+            locks_at=pot.locks_at,
+            is_visible=pot.is_visible,
+            paid_member_count=pot.paid_member_count,
+            pot_cents=pot.pot_cents,
+            first_place_cents=pot.first_place_cents,
+            second_place_cents=pot.second_place_cents,
+            third_place_cents=pot.third_place_cents,
         ).model_dump(by_alias=True)
     )
 
