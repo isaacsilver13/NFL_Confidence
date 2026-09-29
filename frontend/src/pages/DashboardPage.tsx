@@ -10,6 +10,11 @@ import { fetchCurrentPicksCard, fetchSessionBootstrap } from '@/api/session'
 import { Button } from '@/components/ui/Button'
 import { AccordionSection } from '@/components/ui/AccordionSection'
 
+const WeeklyGameBreakdownSection = lazy(() =>
+  import('@/components/leaderboard/WeeklyGameBreakdownSection').then((module) => ({
+    default: module.WeeklyGameBreakdownSection,
+  })),
+)
 const LeaderboardPage = lazy(() =>
   import('./LeaderboardPage').then((module) => ({ default: module.LeaderboardPage })),
 )
@@ -20,7 +25,7 @@ const ProfilePage = lazy(() =>
   import('./ProfilePage').then((module) => ({ default: module.ProfilePage })),
 )
 
-const SECTION_IDS = ['leaderboard', 'standings', 'profile'] as const
+const SECTION_IDS = ['leaderboard', 'breakdown', 'standings', 'profile'] as const
 type SectionId = (typeof SECTION_IDS)[number]
 const OPEN_SECTIONS_STORAGE_PREFIX = 'nfl-confidence:open-sections:'
 
@@ -144,6 +149,7 @@ function DashboardSections({
       weeklyMember ? `Your current rank is #${weeklyMember.rank}` : undefined,
       'See the weekly race and your current rank',
     ),
+    breakdown: 'See how the league split its picks on each completed game',
     standings: sectionSummary(
       seasonMember
         ? `Your season pick record is ${seasonMember.correctPicks}-${seasonMember.incorrectPicks}`
@@ -162,11 +168,13 @@ function DashboardSections({
 
   const sectionContent: Record<SectionId, React.ReactNode> = {
     leaderboard: <LeaderboardPage />,
+    breakdown: <WeeklyGameBreakdownSection />,
     standings: <StandingsPage />,
     profile: <ProfilePage />,
   }
   const sectionTitles: Record<SectionId, string> = {
     leaderboard: 'Weekly Leaderboard',
+    breakdown: 'Weekly Game Breakdown',
     standings: 'Season Standings',
     profile: 'My Picks',
   }

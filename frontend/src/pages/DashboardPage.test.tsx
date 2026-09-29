@@ -14,6 +14,10 @@ vi.mock('./LeaderboardPage', () => ({
   LeaderboardPage: () => <div>Leaderboard section body</div>,
 }))
 
+vi.mock('@/components/leaderboard/WeeklyGameBreakdownSection', () => ({
+  WeeklyGameBreakdownSection: () => <div>Breakdown section body</div>,
+}))
+
 vi.mock('./StandingsPage', () => ({
   StandingsPage: () => <div>Standings section body</div>,
 }))
@@ -168,6 +172,23 @@ describe('DashboardPage league access', () => {
     await user.click(screen.getByRole('button', { name: /join league/i }))
 
     expect(await screen.findByText('You are already a member of this league.')).toBeInTheDocument()
+  })
+
+  it('places Weekly Game Breakdown between the leaderboard and season standings', async () => {
+    mockedFetchSessionBootstrap.mockResolvedValueOnce(memberSession)
+    renderPage()
+
+    await screen.findByRole('button', { name: /^Weekly Leaderboard/ })
+    const titles = screen
+      .getAllByRole('button', { expanded: false })
+      .concat(screen.getAllByRole('button', { expanded: true }))
+      .map((button) => button.textContent ?? '')
+    const order = ['Weekly Leaderboard', 'Weekly Game Breakdown', 'Season Standings', 'My Picks']
+    const positions = order.map((title) => titles.findIndex((text) => text.startsWith(title)))
+    expect(positions.every((position) => position >= 0)).toBe(true)
+    const sections = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent ?? '')
+    const indexes = order.map((title) => sections.findIndex((text) => text.startsWith(title)))
+    expect(indexes).toEqual([...indexes].sort((a, b) => a - b))
   })
 
   it('opens only Weekly Leaderboard by default and fetches its data', async () => {

@@ -2,24 +2,36 @@ import { useQuery } from '@tanstack/react-query'
 import { BarChart3 } from 'lucide-react'
 import { ApiError } from '@/api/client'
 import { fetchSeasonStandings } from '@/api/leaderboard'
+import { SortableTh } from '@/components/ui/SortableTable'
+import { useTableSort } from '@/components/ui/useTableSort'
 import type { LeaderboardMember } from '@/types/leaderboard'
 
 function StandingsTable({ standings }: { standings: LeaderboardMember[] }) {
+  const sort = useTableSort(standings, {
+    rank: { value: (m) => m.rank, numeric: false },
+    member: { value: (m) => m.memberName },
+    points: { value: (m) => m.totalPoints, numeric: true },
+    wins: { value: (m) => m.weeklyWins, numeric: true },
+    podiums: {
+      value: (m) => m.firstPlaceFinishes + m.secondPlaceFinishes + m.thirdPlaceFinishes,
+      numeric: true,
+    },
+  })
   return (
     <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-surface shadow-sm dark:border-slate-800 dev-dark:border-border dark:bg-slate-900 dev-dark:bg-surface-elevated">
       <table className="w-full min-w-[760px] text-left text-sm">
         <caption className="sr-only">Season standings</caption>
         <thead className="bg-surface-muted text-xs uppercase tracking-[0.14em] text-ink-muted dark:bg-slate-950 dev-dark:bg-background dark:text-slate-400 dev-dark:text-text-muted">
           <tr>
-            <th className="px-5 py-4">Rank</th>
-            <th className="px-5 py-4">Member</th>
-            <th className="px-5 py-4 text-right">Points</th>
-            <th className="px-5 py-4 text-right">Weekly wins</th>
-            <th className="px-5 py-4 text-right">Podiums</th>
+            <SortableTh label="Rank" columnKey="rank" sort={sort} />
+            <SortableTh label="Member" columnKey="member" sort={sort} />
+            <SortableTh label="Points" columnKey="points" sort={sort} align="right" />
+            <SortableTh label="Weekly wins" columnKey="wins" sort={sort} align="right" />
+            <SortableTh label="Podiums" columnKey="podiums" sort={sort} align="right" />
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-200 dark:divide-slate-800 dev-dark:divide-border">
-          {standings.map((member) => (
+          {sort.sortedRows.map((member) => (
             <tr
               key={member.memberId}
               className="transition-colors hover:bg-surface-muted/60 dark:hover:bg-slate-950/60 dev-dark:hover:bg-surface-hover"

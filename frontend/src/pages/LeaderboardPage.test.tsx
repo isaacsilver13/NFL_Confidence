@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fetchPickBreakdown, fetchWeeklyLeaderboard } from '@/api/leaderboard'
+import { fetchWeeklyLeaderboard } from '@/api/leaderboard'
 import {
   fetchAllPicksForWeek,
   fetchStartedWeeks,
@@ -14,7 +14,6 @@ import { LeaderboardPage } from './LeaderboardPage'
 
 vi.mock('@/api/leaderboard', () => ({
   fetchWeeklyLeaderboard: vi.fn(),
-  fetchPickBreakdown: vi.fn(),
 }))
 
 vi.mock('@/api/nfl', () => ({
@@ -25,7 +24,6 @@ vi.mock('@/api/nfl', () => ({
 }))
 
 const mockedFetchWeeklyLeaderboard = vi.mocked(fetchWeeklyLeaderboard)
-const mockedFetchPickBreakdown = vi.mocked(fetchPickBreakdown)
 const mockedFetchAllPicksForWeek = vi.mocked(fetchAllPicksForWeek)
 const mockedFetchStartedWeeks = vi.mocked(fetchStartedWeeks)
 const mockedFetchLastRefreshed = vi.mocked(fetchLastRefreshed)
@@ -52,7 +50,6 @@ function renderPage() {
 describe('LeaderboardPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockedFetchPickBreakdown.mockResolvedValue({ season: 2026, weeks: [] })
     mockedFetchLastRefreshed.mockResolvedValue({ lastRefreshedAt: '2026-09-27T21:12:00Z' })
   })
 
@@ -226,105 +223,6 @@ describe('LeaderboardPage', () => {
 
     const select = await screen.findByRole('combobox', { name: 'Week' })
     expect(select).toHaveClass('dark:text-slate-100')
-  })
-
-  it('shows the pick breakdown for the selected week', async () => {
-    mockedFetchStartedWeeks.mockResolvedValue([{ weekNumber: 1, seasonNumber: 2026 }])
-    mockedFetchCurrentWeek.mockResolvedValue(currentWeek)
-    mockedFetchWeeklyLeaderboard.mockResolvedValue({
-      week: { weekNumber: 3, seasonNumber: 2026 },
-      standings: [],
-      nightGames: [],
-      picksRevealed: true,
-    })
-    mockedFetchPickBreakdown.mockResolvedValue({
-      season: 2026,
-      weeks: [
-        {
-          weekNumber: 3,
-          games: [
-            {
-              gameId: 'game-1',
-              awayTeam: 'CHI',
-              homeTeam: 'GB',
-              awayRecord: null,
-              homeRecord: null,
-              medianConfidence: 4,
-              teamCounts: [
-                { team: 'CHI', userCount: 3 },
-                { team: 'GB', userCount: 1 },
-              ],
-            },
-          ],
-        },
-      ],
-    })
-
-    renderPage()
-
-    expect(await screen.findByText('Game Breakdown')).toBeInTheDocument()
-    expect(await screen.findByText('CHI: 3 picks')).toBeInTheDocument()
-  })
-
-  it("shows a message when the selected week's breakdown isn't available yet", async () => {
-    mockedFetchStartedWeeks.mockResolvedValue([])
-    mockedFetchCurrentWeek.mockResolvedValue(currentWeek)
-    mockedFetchWeeklyLeaderboard.mockResolvedValue({
-      week: { weekNumber: 3, seasonNumber: 2026 },
-      standings: [],
-      nightGames: [],
-      picksRevealed: true,
-    })
-    mockedFetchPickBreakdown.mockResolvedValue({ season: 2026, weeks: [] })
-
-    renderPage()
-
-    expect(
-      await screen.findByText("Pick breakdown isn't available until Week 3 is complete."),
-    ).toBeInTheDocument()
-  })
-
-  it('switches the pick breakdown when a different week is selected', async () => {
-    const user = userEvent.setup()
-    mockedFetchStartedWeeks.mockResolvedValue([{ weekNumber: 1, seasonNumber: 2026 }])
-    mockedFetchCurrentWeek.mockResolvedValue(currentWeek)
-    mockedFetchWeeklyLeaderboard.mockResolvedValue({
-      week: { weekNumber: 1, seasonNumber: 2026 },
-      standings: [],
-      nightGames: [],
-      picksRevealed: true,
-    })
-    mockedFetchPickBreakdown.mockResolvedValue({
-      season: 2026,
-      weeks: [
-        {
-          weekNumber: 1,
-          games: [
-            {
-              gameId: 'game-1',
-              awayTeam: 'CHI',
-              homeTeam: 'GB',
-              awayRecord: null,
-              homeRecord: null,
-              medianConfidence: 4,
-              teamCounts: [{ team: 'CHI', userCount: 2 }],
-            },
-          ],
-        },
-      ],
-    })
-
-    renderPage()
-
-    // Defaults to the live current week (3), which has no completed breakdown yet.
-    await screen.findByText("Pick breakdown isn't available until Week 3 is complete.")
-
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Week' }), 'Week 1')
-
-    expect(await screen.findByText('CHI: 2 picks')).toBeInTheDocument()
-    expect(
-      screen.queryByText("Pick breakdown isn't available until Week 3 is complete."),
-    ).not.toBeInTheDocument()
   })
 
   it("opens everyone's picks for the selected week in a popup, hidden without standings", async () => {

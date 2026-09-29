@@ -2,7 +2,71 @@ import { useEffect, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { ApiError } from '@/api/client'
 import { fetchAllPicksForWeek } from '@/api/nfl'
+import type { AllPicks, MemberPicks } from '@/types/nfl'
 import { Button } from '@/components/ui/Button'
+import { SortableTh } from '@/components/ui/SortableTable'
+import { useTableSort, type SortColumn } from '@/components/ui/useTableSort'
+
+function PicksTable({ data }: { data: AllPicks }) {
+  const columns: Record<string, SortColumn<MemberPicks>> = {
+    member: { value: (member) => member.displayName },
+  }
+  for (const game of data.games) {
+    columns[game.id] = {
+      value: (member) => member.picks.find((pick) => pick.gameId === game.id)?.confidence ?? null,
+      numeric: true,
+    }
+  }
+  const sort = useTableSort(data.members, columns)
+
+  return (
+    <table className="w-full min-w-[640px] border-collapse text-sm">
+      <thead>
+        <tr className="bg-surface-muted dark:bg-slate-900 dev-dark:bg-surface-elevated">
+          <SortableTh
+            label="Member"
+            columnKey="member"
+            sort={sort}
+            className="sticky left-0 z-10 bg-surface-muted px-3 py-2 dark:bg-slate-900 dev-dark:bg-surface-elevated"
+          />
+          {data.games.map((game) => (
+            <SortableTh
+              key={game.id}
+              label={`${game.awayTeam} @ ${game.homeTeam}`}
+              columnKey={game.id}
+              sort={sort}
+              align="center"
+              className="px-3 py-2 whitespace-nowrap"
+            />
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {sort.sortedRows.map((member) => {
+          const picksByGame = new Map(member.picks.map((pick) => [pick.gameId, pick]))
+          return (
+            <tr
+              key={member.userId}
+              className="border-t border-slate-200 dark:border-slate-800 dev-dark:border-border"
+            >
+              <td className="sticky left-0 z-10 bg-surface px-3 py-2 font-semibold whitespace-nowrap dark:bg-slate-900 dev-dark:bg-surface-elevated">
+                {member.displayName}
+              </td>
+              {data.games.map((game) => {
+                const pick = picksByGame.get(game.id)
+                return (
+                  <td key={game.id} className="px-3 py-2 text-center whitespace-nowrap">
+                    {pick ? `${pick.team} (${pick.confidence})` : '—'}
+                  </td>
+                )
+              })}
+            </tr>
+          )
+        })}
+      </tbody>
+    </table>
+  )
+}
 
 export function AllPicksModal({ week, onClose }: { week: number; onClose: () => void }) {
   const closeRef = useRef<HTMLButtonElement>(null)
@@ -56,45 +120,7 @@ export function AllPicksModal({ week, onClose }: { week: number; onClose: () => 
               {error instanceof ApiError ? error.message : "Could not load everyone's picks."}
             </p>
           )}
-          {data && (
-            <table className="w-full min-w-[640px] border-collapse text-sm">
-              <thead>
-                <tr className="bg-surface-muted dark:bg-slate-900 dev-dark:bg-surface-elevated">
-                  <th className="sticky left-0 z-10 bg-surface-muted px-3 py-2 text-left font-bold dark:bg-slate-900 dev-dark:bg-surface-elevated">
-                    Member
-                  </th>
-                  {data.games.map((game) => (
-                    <th key={game.id} className="px-3 py-2 text-center font-bold whitespace-nowrap">
-                      {game.awayTeam} @ {game.homeTeam}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {data.members.map((member) => {
-                  const picksByGame = new Map(member.picks.map((pick) => [pick.gameId, pick]))
-                  return (
-                    <tr
-                      key={member.userId}
-                      className="border-t border-slate-200 dark:border-slate-800 dev-dark:border-border"
-                    >
-                      <td className="sticky left-0 z-10 bg-surface px-3 py-2 font-semibold whitespace-nowrap dark:bg-slate-900 dev-dark:bg-surface-elevated">
-                        {member.displayName}
-                      </td>
-                      {data.games.map((game) => {
-                        const pick = picksByGame.get(game.id)
-                        return (
-                          <td key={game.id} className="px-3 py-2 text-center whitespace-nowrap">
-                            {pick ? `${pick.team} (${pick.confidence})` : '—'}
-                          </td>
-                        )
-                      })}
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          )}
+          {data && <PicksTable data={data} />}
         </div>
       </div>
     </div>
