@@ -79,6 +79,7 @@ describe('LeaderboardPage', () => {
         },
       ],
       nightGames: [],
+      picksRevealed: true,
     })
 
     renderPage()
@@ -100,6 +101,7 @@ describe('LeaderboardPage', () => {
       week: { weekNumber: 3, seasonNumber: 2026 },
       standings: [],
       nightGames: [],
+      picksRevealed: true,
     })
 
     renderPage()
@@ -142,6 +144,7 @@ describe('LeaderboardPage', () => {
         },
       ],
       nightGames: [],
+      picksRevealed: true,
     })
 
     renderPage()
@@ -192,6 +195,7 @@ describe('LeaderboardPage', () => {
           nightGamePicks: [],
         },
       ],
+      picksRevealed: true,
       nightGames: [
         { gameId: 'game-1', awayTeam: 'DEN', homeTeam: 'KC' },
         { gameId: 'game-2', awayTeam: 'DAL', homeTeam: 'CHI' },
@@ -215,6 +219,7 @@ describe('LeaderboardPage', () => {
       week: { weekNumber: 3, seasonNumber: 2026 },
       standings: [],
       nightGames: [],
+      picksRevealed: true,
     })
 
     renderPage()
@@ -230,6 +235,7 @@ describe('LeaderboardPage', () => {
       week: { weekNumber: 3, seasonNumber: 2026 },
       standings: [],
       nightGames: [],
+      picksRevealed: true,
     })
     mockedFetchPickBreakdown.mockResolvedValue({
       season: 2026,
@@ -267,6 +273,7 @@ describe('LeaderboardPage', () => {
       week: { weekNumber: 3, seasonNumber: 2026 },
       standings: [],
       nightGames: [],
+      picksRevealed: true,
     })
     mockedFetchPickBreakdown.mockResolvedValue({ season: 2026, weeks: [] })
 
@@ -285,6 +292,7 @@ describe('LeaderboardPage', () => {
       week: { weekNumber: 1, seasonNumber: 2026 },
       standings: [],
       nightGames: [],
+      picksRevealed: true,
     })
     mockedFetchPickBreakdown.mockResolvedValue({
       season: 2026,
@@ -346,6 +354,7 @@ describe('LeaderboardPage', () => {
               },
             ],
       nightGames: [],
+      picksRevealed: true,
     }))
     mockedFetchAllPicksForWeek.mockResolvedValue({
       week: { ...currentWeek, id: 'week-2', weekNumber: 2 },
@@ -382,5 +391,37 @@ describe('LeaderboardPage', () => {
 
     await user.click(screen.getByRole('button', { name: 'Close' }))
     expect(screen.queryByText('KC (3)')).not.toBeInTheDocument()
+  })
+
+  it("hides the everyone's picks button until the week's first kickoff", async () => {
+    mockedFetchStartedWeeks.mockResolvedValue([])
+    mockedFetchCurrentWeek.mockResolvedValue(currentWeek)
+    mockedFetchWeeklyLeaderboard.mockResolvedValue({
+      week: { weekNumber: 3, seasonNumber: 2026 },
+      standings: [
+        {
+          rank: 1,
+          memberId: 'user-1',
+          memberName: 'Owner',
+          totalPoints: 0,
+          correctPicks: 0,
+          incorrectPicks: 0,
+          weeklyWins: 0,
+          firstPlaceFinishes: 0,
+          secondPlaceFinishes: 0,
+          thirdPlaceFinishes: 0,
+          payoutCents: 0,
+          pointsRemaining: 0,
+          nightGamePicks: [],
+        },
+      ],
+      nightGames: [],
+      picksRevealed: false,
+    })
+
+    renderPage()
+
+    expect(await screen.findByText('Owner')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /see everyone's picks/i })).not.toBeInTheDocument()
   })
 })

@@ -38,6 +38,7 @@ export interface WeeklyLeaderboard {
   }
   standings: LeaderboardMember[]
   nightGames: GameLabel[]
+  picksRevealed: boolean
 }
 
 export interface SeasonStandings {

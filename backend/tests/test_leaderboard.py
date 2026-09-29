@@ -251,6 +251,7 @@ def test_weekly_leaderboard_hides_night_games_until_sunday_night_kickoff(
 
     assert result.night_games == []
     assert result.standings[0].night_game_picks == []
+    assert result.picks_revealed is False
 
 
 def test_weekly_leaderboard_shows_night_games_once_sunday_night_has_kicked_off(
@@ -274,6 +275,7 @@ def test_weekly_leaderboard_shows_night_games_once_sunday_night_has_kicked_off(
 
     result = leaderboard_service.get_weekly_leaderboard(db_session, league=league, week_number=2)
 
+    assert result.picks_revealed is True
     assert len(result.night_games) == 3
     assert [(p.team, p.confidence) for p in result.standings[0].night_game_picks] == [
         ("KC", 3),

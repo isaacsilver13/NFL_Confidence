@@ -234,6 +234,7 @@ describe('DashboardPage league access', () => {
         },
       ],
       nightGames: [],
+      picksRevealed: true,
     })
     renderPage()
 

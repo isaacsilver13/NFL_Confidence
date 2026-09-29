@@ -228,6 +228,7 @@ def get_weekly_leaderboard(
     )
     if not standings:
         raise NotFoundError(f"Week {week.week_number} has no leaderboard data.")
+    kickoffs = [game.kickoff_time for game in nfl_game_repository.get_by_week_id(db, week.id)]
     return WeeklyLeaderboardRead(
         week=WeekLabelRead(week_number=week.week_number, season_number=week.season),
         standings=standings,
@@ -235,6 +236,7 @@ def get_weekly_leaderboard(
             GameLabelRead(game_id=game.id, away_team=game.away_team, home_team=game.home_team)
             for game in night_games
         ],
+        picks_revealed=bool(kickoffs) and min(kickoffs) <= datetime.now(timezone.utc),
     )
 
 
