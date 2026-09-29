@@ -7,7 +7,7 @@ from app.api import health
 from app.core.config import Settings
 from app.db.schema_validator import _validate_table
 from app.db.session import Base
-from app.main import app, settings
+from app.main import app
 
 client = TestClient(app)
 
@@ -19,9 +19,8 @@ def test_health_check_returns_healthy_status() -> None:
     assert response.json() == {"data": {"status": "healthy"}, "message": None}
 
 
-def test_readiness_check_verifies_database_and_scheduler(client) -> None:
+def test_readiness_check_verifies_database_and_reports_external_scheduler(client) -> None:
     response = client.get("/api/v1/health/ready")
-    expected_scheduler = "running" if settings.enable_scheduler else "disabled"
 
     assert response.status_code == 200
     assert response.json() == {
@@ -29,7 +28,7 @@ def test_readiness_check_verifies_database_and_scheduler(client) -> None:
             "status": "ready",
             "database": "healthy",
             "schema": "valid",
-            "scheduler": expected_scheduler,
+            "scheduler": "external",
         },
         "message": None,
     }
@@ -74,7 +73,7 @@ def test_validate_schema_reports_missing_objects(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_startup_schema_drift_prevents_scheduler_creation(monkeypatch) -> None:
+async def test_startup_schema_drift_prevents_app_startup(monkeypatch) -> None:
     monkeypatch.setattr(
         "app.main.validate_schema",
         lambda _db: [{"kind": "missing_column", "table": "users", "column": "email"}],
@@ -85,15 +84,6 @@ async def test_startup_schema_drift_prevents_scheduler_creation(monkeypatch) -> 
             pass
 
 
-def test_lifespan_can_disable_scheduler(monkeypatch) -> None:
-    monkeypatch.setattr(settings, "enable_scheduler", False)
-    monkeypatch.setattr("app.main._validate_startup_schema", lambda: None)
-
-    with TestClient(app):
-        assert app.state.scheduler is None
-        assert app.state.scheduler_enabled is False
-
-
 def test_settings_normalize_fly_postgres_urls() -> None:
     for database_url in (
         "postgres://user:password@db.internal:5432/pool",
@@ -101,10 +91,3 @@ def test_settings_normalize_fly_postgres_urls() -> None:
     ):
         settings = Settings(database_url=database_url)
         assert settings.database_url.startswith("postgresql+psycopg://")
-
-
-def test_settings_can_disable_scheduler(monkeypatch) -> None:
-    monkeypatch.setenv("ENABLE_SCHEDULER", "false")
-    settings = Settings(_env_file=None)
-
-    assert settings.enable_scheduler is False

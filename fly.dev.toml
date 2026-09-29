@@ -32,7 +32,9 @@ cpu_kind = "shared"
 
 [env]
 ENVIRONMENT = "development"
-ENABLE_SCHEDULER = "true"
+# Dev opens picks Monday 10:00 America/Chicago; prod keeps the Tuesday default until released.
+IMPORT_DAY = "mon"
+IMPORT_HOUR = "10"
 NFL_API_BASE_URL = "https://site.api.espn.com/apis/site/v2/sports/football/nfl"
 NFL_API_TIMEOUT_SECONDS = "10"
 GOOGLE_OAUTH_TIMEOUT_SECONDS = "8"
