@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '@/api/client'
 import { fetchSeasonStandings } from '@/api/leaderboard'
@@ -74,6 +75,47 @@ describe('StandingsPage', () => {
     expect(await screen.findByText('Owner')).toBeInTheDocument()
     expect(screen.getByRole('table')).toBeInTheDocument()
     expect(screen.getByText('42')).toBeInTheDocument()
+  })
+
+  it('sorts the standings when a column header is clicked', async () => {
+    const user = userEvent.setup()
+    mockedFetchSeasonStandings.mockResolvedValue({
+      ...standings,
+      standings: [
+        { ...standings.standings[0], memberId: 'a', memberName: 'Alpha', rank: 1, totalPoints: 10 },
+        { ...standings.standings[0], memberId: 'b', memberName: 'Bravo', rank: 2, totalPoints: 30 },
+        {
+          ...standings.standings[0],
+          memberId: 'c',
+          memberName: 'Charlie',
+          rank: 3,
+          totalPoints: 20,
+        },
+      ],
+    })
+
+    renderPage()
+
+    const names = () =>
+      within(screen.getByRole('table'))
+        .getAllByRole('row')
+        .slice(1)
+        .map((row) => within(row).getAllByRole('cell')[0].textContent)
+    await screen.findByText('Alpha')
+    expect(names()).toEqual(['Alpha', 'Bravo', 'Charlie'])
+
+    await user.click(screen.getByRole('button', { name: 'Sort by Points' }))
+    expect(names()).toEqual(['Bravo', 'Charlie', 'Alpha'])
+
+    await user.click(screen.getByRole('button', { name: 'Sort by Points' }))
+    expect(names()).toEqual(['Alpha', 'Charlie', 'Bravo'])
+    expect(screen.getByRole('button', { name: 'Sort by Points' }).closest('th')).toHaveAttribute(
+      'aria-sort',
+      'ascending',
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Sort by Member' }))
+    expect(names()).toEqual(['Alpha', 'Bravo', 'Charlie'])
   })
 
   it('shows a specific message for a 404 error', async () => {

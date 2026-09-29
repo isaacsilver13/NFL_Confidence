@@ -2,12 +2,13 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Trophy } from 'lucide-react'
 import { ApiError } from '@/api/client'
-import { fetchPickBreakdown, fetchWeeklyLeaderboard } from '@/api/leaderboard'
+import { fetchWeeklyLeaderboard } from '@/api/leaderboard'
 import { fetchCurrentWeek, fetchStartedWeeks } from '@/api/nfl'
 import { LastRefreshed } from '@/components/nfl/LastRefreshed'
 import { AllPicksModal } from '@/components/leaderboard/AllPicksModal'
-import { WeeklyPickBreakdown } from '@/components/leaderboard/WeeklyPickBreakdown'
 import { Button } from '@/components/ui/Button'
+import { SortableTh } from '@/components/ui/SortableTable'
+import { useTableSort } from '@/components/ui/useTableSort'
 import type { GameLabel, LeaderboardMember, MemberGamePick } from '@/types/leaderboard'
 
 interface WeekOption {
@@ -42,24 +43,45 @@ function LeaderboardTable({
 }) {
   // The backend sends night games only once Sunday night has kicked off.
   const showPicksRemaining = nightGames.length > 0
+  const sort = useTableSort(standings, {
+    rank: { value: (m) => m.rank },
+    member: { value: (m) => m.memberName },
+    correct: { value: (m) => m.correctPicks, numeric: true },
+    points: { value: (m) => m.totalPoints, numeric: true },
+    pointsLeft: { value: (m) => m.pointsRemaining, numeric: true },
+    // Confidence points still riding on the night games.
+    nightGames: {
+      value: (m) =>
+        m.nightGamePicks.length === 0
+          ? null
+          : m.nightGamePicks.reduce((sum, pick) => sum + (pick.confidence ?? 0), 0),
+      numeric: true,
+    },
+  })
   return (
     <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-surface shadow-sm dark:border-slate-800 dev-dark:border-border dark:bg-slate-900 dev-dark:bg-surface-elevated">
       <table className="w-full min-w-[680px] text-left text-sm">
         <caption className="sr-only">Weekly leaderboard rankings</caption>
         <thead className="bg-surface-muted text-xs uppercase tracking-[0.14em] text-ink-muted dark:bg-slate-950 dev-dark:bg-background dark:text-slate-400 dev-dark:text-text-muted">
           <tr>
-            <th className="px-5 py-4">Rank</th>
-            <th className="px-5 py-4">Member</th>
-            <th className="px-5 py-4 text-right">Correct</th>
-            <th className="px-5 py-4 text-right">Points</th>
-            <th className="px-5 py-4 text-right">Points Left</th>
+            <SortableTh label="Rank" columnKey="rank" sort={sort} />
+            <SortableTh label="Member" columnKey="member" sort={sort} />
+            <SortableTh label="Correct" columnKey="correct" sort={sort} align="right" />
+            <SortableTh label="Points" columnKey="points" sort={sort} align="right" />
+            <SortableTh label="Points Left" columnKey="pointsLeft" sort={sort} align="right" />
             {showPicksRemaining && (
-              <th className="px-5 py-4 text-right whitespace-nowrap">SNF/MNF</th>
+              <SortableTh
+                label="SNF/MNF"
+                columnKey="nightGames"
+                sort={sort}
+                align="right"
+                className="px-5 py-4 whitespace-nowrap"
+              />
             )}
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-200 dark:divide-slate-800 dev-dark:divide-border">
-          {standings.map((member) => (
+          {sort.sortedRows.map((member) => (
             <tr
               key={member.memberId}
               className="transition-colors hover:bg-surface-muted/60 dark:hover:bg-slate-950/60 dev-dark:hover:bg-surface-hover"
@@ -109,12 +131,6 @@ export function LeaderboardPage() {
     enabled: selectedWeek !== undefined,
     staleTime: 10 * 60_000,
   })
-  const breakdownQuery = useQuery({
-    queryKey: ['leaderboard', 'pick-breakdown'],
-    queryFn: fetchPickBreakdown,
-    staleTime: 10 * 60_000,
-  })
-  const weekBreakdown = breakdownQuery.data?.weeks.find((week) => week.weekNumber === selectedWeek)
 
   return (
     <div className="animate-fade-in space-y-6">
@@ -180,42 +196,6 @@ export function LeaderboardPage() {
       )}
       {query.data && query.data.standings.length > 0 && (
         <LeaderboardTable standings={query.data.standings} nightGames={query.data.nightGames} />
-      )}
-
-      {selectedWeek !== undefined && (
-        <section
-          className="space-y-5 rounded-2xl border border-slate-200 bg-surface p-5 shadow-sm dark:border-slate-800 dev-dark:border-border dark:bg-slate-900 dev-dark:bg-surface-elevated"
-          aria-labelledby="breakdown-heading"
-        >
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.2em] text-accent">League picks</p>
-            <h2
-              id="breakdown-heading"
-              className="mt-1 text-xl font-black text-primary dark:text-white dev-dark:text-ink"
-            >
-              Game Breakdown
-            </h2>
-          </div>
-          {breakdownQuery.isPending && (
-            <p
-              className="text-sm text-ink-muted dark:text-slate-400 dev-dark:text-text-muted"
-              aria-live="polite"
-            >
-              Loading pick breakdown...
-            </p>
-          )}
-          {breakdownQuery.error && (
-            <p className="text-sm text-danger" role="alert">
-              Could not load the pick breakdown.
-            </p>
-          )}
-          {!breakdownQuery.isPending && !breakdownQuery.error && !weekBreakdown && (
-            <p className="text-sm text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
-              Pick breakdown isn&apos;t available until Week {selectedWeek} is complete.
-            </p>
-          )}
-          {weekBreakdown && <WeeklyPickBreakdown games={weekBreakdown.games} />}
-        </section>
       )}
     </div>
   )
