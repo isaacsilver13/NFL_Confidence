@@ -12,14 +12,16 @@ Hosting Platform
 
 Fly.io
 
-The checked-in Fly configs use these default app names:
+Prod and dev are each a single Fly app that serves the API and the built
+frontend from one image (`docker/Dockerfile`). The checked-in configs use these
+app names:
 
-- API: `nfl-confidence-api`
-- Frontend: `nfl-confidence-web`
+- Prod: `nfl-confidence-web` (`fly.toml`)
+- Dev: `nfl-confidence-web-dev` (`fly.dev.toml`)
 
-Fly app names are globally unique. Change the `app` value in
-`backend/fly.toml` or `frontend/fly.toml` if either name is already taken, and
-update the frontend `VITE_API_URL` build argument and the URLs below to match.
+Fly app names are globally unique. Change the `app` value in `fly.toml` or
+`fly.dev.toml` if a name is already taken, and update `APP_URL`,
+`CORS_ORIGINS`, and the URLs below to match.
 
 ---
 
@@ -119,10 +121,10 @@ Postgres is not required.
 	overrides `DATABASE_URL` with its local PostgreSQL service.
 
 Neon Free scales compute to zero after inactivity and includes a monthly compute
-allowance. The in-process scheduler performs recurring database work, so stop the
-backend when it is not needed or set `ENABLE_SCHEDULER=false` for API and UI work that
-does not require scheduled imports, pick locking, score synchronization, or reminders.
-When the scheduler is disabled, `/api/v1/health/ready` reports `scheduler: disabled`.
+allowance. The app has no in-process scheduler, so a locally running backend does no
+recurring database work on its own; scheduled jobs only run when something calls
+`POST /api/v1/internal/tick` (see "Scheduled jobs" below).
+`/api/v1/health/ready` always reports `scheduler: external`.
 
 ---
 
@@ -260,19 +262,17 @@ single API machine. A 503 means the machine must not receive traffic; inspect
 `fly logs` before proceeding. The deployment release command is safe to rerun
 because Alembic tracks the applied revision.
 
-Then deploy the frontend:
+Then deploy (the single image contains the API and the built frontend):
 
 ```powershell
-fly deploy .\frontend --config .\frontend\fly.toml
+fly deploy . --config .\fly.toml
 fly status --app nfl-confidence-web
 Invoke-WebRequest https://nfl-confidence-web.fly.dev/
 ```
 
-The frontend config builds against `/api/v1`; Nginx proxies that path to the API.
-If either Fly app name changes, update `frontend/fly.toml` and
-`frontend/nginx.frontend.conf`, deploy the frontend again, and set the backend
-`APP_URL`, `CORS_ORIGINS`, and `GOOGLE_OAUTH_REDIRECT_URL` to the final frontend
-URL.
+The build uses `/api/v1` as the API path on the same origin. If the Fly app
+name changes, update `fly.toml`, deploy again, and set `APP_URL`,
+`CORS_ORIGINS`, and `GOOGLE_OAUTH_REDIRECT_URL` to the final URL.
 
 ## Deployment smoke test
 
@@ -334,8 +334,39 @@ indicates a provider, session, or incomplete-claims authentication failure; a
 account. Any remaining `500` should be investigated in the Fly logs, especially
 for database connectivity or migration errors.
 
-With `ENABLE_SCHEDULER=false`, run the recurring operations from the backend
-directory with the manual job dispatcher:
+## Scheduled jobs
+
+Fly stops the machine when it is idle, so nothing inside the app can run a cron. A
+GitHub Actions workflow (`.github/workflows/scheduled-tick.yml`) runs hourly at :05
+(UTC cron), sends a request that wakes the machine, and calls
+`POST /api/v1/internal/tick` with `Authorization: Bearer <TICK_TOKEN>`. The app then
+decides, in `SCHEDULER_TIMEZONE` (default `America/Chicago`), which jobs are due and
+runs them. Each job runs at most once per clock-hour slot (`job_executions.slot_key`
+is unique per job), so duplicate or late calls are no-ops. The machine goes back to
+sleep on Fly's idle timeout.
+
+Setup, per app:
+
+```powershell
+fly secrets set TICK_TOKEN=<long random string> --app <app>
+```
+
+and in GitHub (Settings -> Secrets and variables -> Actions): secrets
+`TICK_TOKEN_DEV`/`TICK_TOKEN_PROD` (same values as the Fly secrets) and
+`APP_BASE_URL_DEV`/`APP_BASE_URL_PROD` (`https://<app>.fly.dev`), plus repository
+variables `TICK_DEV_ENABLED` / `TICK_PROD_ENABLED` set to `true` to turn on the hourly
+schedule for that environment. Without `TICK_TOKEN` the endpoint answers `503`; with a
+wrong one, `401`. GitHub only fires scheduled workflows from the default branch; use
+"Run workflow" (`workflow_dispatch`) to tick an environment by hand.
+
+Windows and days are settings, not code (`SUNDAY_SYNC_START_HOUR`/`_END_HOUR`
+inclusive, `MONTHU_SYNC_START_HOUR`/`_END_HOUR`, `OVERNIGHT_SYNC_HOUR`, `IMPORT_DAY`,
+`IMPORT_HOUR`, `REMINDER_DAY`, `REMINDER_HOUR`); defaults are in
+`backend/app/core/config.py`. The sync jobs also record every run in `job_executions`
+(`GET /api/v1/admin/jobs/status`).
+
+To run a recurring operation by hand from the backend directory, use the manual job
+dispatcher:
 
 ```powershell
 .venv\Scripts\python.exe -m scripts.import_nfl_schedule --season 2026 --week 1

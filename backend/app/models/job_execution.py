@@ -3,7 +3,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Integer, String, Uuid, func
+from sqlalchemy import DateTime, Index, Integer, String, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.session import Base
@@ -13,9 +13,15 @@ class JobExecution(Base):
     """Records each execution of a scheduled job for monitoring and debugging."""
 
     __tablename__ = "job_executions"
+    __table_args__ = (
+        # One run per job per schedule slot. NULL slot_key (manual/legacy runs)
+        # never conflicts, so only tick-claimed slots are de-duplicated.
+        Index("uq_job_executions_job_slot", "job_name", "slot_key", unique=True),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     job_name: Mapped[str] = mapped_column(String(100))  # "import_games", "score_week", etc.
+    slot_key: Mapped[str | None] = mapped_column(String(100), nullable=True)
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     status: Mapped[str] = mapped_column(String(20))  # "running", "success", "failed"

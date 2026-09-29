@@ -1,8 +1,12 @@
-app = "nfl-confidence-api"
+app = "nfl-confidence-web"
 primary_region = "iad"
 
 [build]
-dockerfile = "../docker/Dockerfile.backend"
+dockerfile = "docker/Dockerfile"
+
+[build.args]
+VITE_API_URL = "/api/v1"
+VITE_APP_ENV = "production"
 
 [deploy]
 release_command = "alembic upgrade head"
@@ -28,7 +32,6 @@ cpu_kind = "shared"
 
 [env]
 ENVIRONMENT = "production"
-ENABLE_SCHEDULER = "true"
 NFL_API_BASE_URL = "https://site.api.espn.com/apis/site/v2/sports/football/nfl"
 NFL_API_TIMEOUT_SECONDS = "10"
 GOOGLE_OAUTH_TIMEOUT_SECONDS = "8"

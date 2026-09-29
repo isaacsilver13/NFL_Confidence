@@ -5,11 +5,14 @@ Routes must stay thin: validate request -> call service -> return response.
 """
 
 import logging
+import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from starlette.middleware.sessions import SessionMiddleware
@@ -17,6 +20,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from app.api.auth import router as auth_router
 from app.api.games import router as games_router
 from app.api.health import router as health_router
+from app.api.internal import router as internal_router
 from app.api.jobs import router as jobs_router
 from app.api.leaderboard import router as leaderboard_router
 from app.api.league import router as league_router
@@ -29,7 +33,6 @@ from app.core.limiter import limiter
 from app.core.responses import error
 from app.db.schema_validator import validate_schema
 from app.db.session import SessionLocal
-from app.jobs.scheduler import create_scheduler, schedule_next_lock
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -52,25 +55,11 @@ def _validate_startup_schema() -> None:
 
 @asynccontextmanager
 async def lifespan(application: FastAPI):
+    # No in-process scheduler: scheduled jobs run when the external cron calls
+    # POST /api/v1/internal/tick (see app.jobs.tick), which is what lets the
+    # machine sleep between runs.
     _validate_startup_schema()
-    scheduler = create_scheduler() if settings.enable_scheduler else None
-    if scheduler is not None:
-        scheduler.start()
-        # Re-arm the lock job from current DB state; a redeploy loses any
-        # in-memory one-time job the previous process had scheduled. Don't let
-        # a transient DB hiccup here take down app startup -- the 6-hour
-        # safety-net cron and every future sync/import re-arm this anyway.
-        try:
-            schedule_next_lock(scheduler)
-        except Exception:
-            logger.exception("Could not arm the pick-lock job at startup")
-    application.state.scheduler = scheduler
-    application.state.scheduler_enabled = settings.enable_scheduler
-    try:
-        yield
-    finally:
-        if scheduler is not None:
-            scheduler.shutdown(wait=False)
+    yield
 
 
 app = FastAPI(title="NFL Confidence Pool API", version="0.1.0", lifespan=lifespan)
@@ -119,3 +108,21 @@ app.include_router(picks_router, prefix="/api/v1")
 app.include_router(session_router, prefix="/api/v1")
 app.include_router(leaderboard_router, prefix="/api/v1")
 app.include_router(jobs_router)
+app.include_router(internal_router, prefix="/api/v1")
+
+# Serves the built frontend from the same app/port as the API, so the two no
+# longer need separate Fly apps. No-op locally, where this directory doesn't
+# exist and the Vite dev server is used instead.
+FRONTEND_DIST = Path(os.environ.get("FRONTEND_DIST_DIR", "/app/frontend_dist")).resolve()
+if FRONTEND_DIST.is_dir():
+    app.mount("/assets", StaticFiles(directory=FRONTEND_DIST / "assets"), name="assets")
+
+    @app.get("/{full_path:path}")
+    async def serve_frontend(full_path: str) -> FileResponse:
+        if full_path.startswith("api/"):
+            raise HTTPException(status_code=404, detail="Not Found")
+        candidate = (FRONTEND_DIST / full_path).resolve()
+        is_within_dist = candidate == FRONTEND_DIST or FRONTEND_DIST in candidate.parents
+        if full_path and is_within_dist and candidate.is_file():
+            return FileResponse(candidate)
+        return FileResponse(FRONTEND_DIST / "index.html")
