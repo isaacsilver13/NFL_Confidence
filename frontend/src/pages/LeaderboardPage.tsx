@@ -127,7 +127,7 @@ export function LeaderboardPage() {
           <LastRefreshed className="mt-1" />
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          {query.data && query.data.standings.length > 0 && (
+          {query.data && query.data.standings.length > 0 && query.data.picksRevealed && (
             <Button type="button" variant="secondary" onClick={() => setShowAllPicks(true)}>
               See everyone&apos;s picks
             </Button>

@@ -42,6 +42,8 @@ class WeeklyLeaderboardRead(CamelModel):
     week: WeekLabelRead
     standings: list[LeaderboardMemberRead]
     night_games: list[GameLabelRead] = []
+    # True once the week's earliest game has kicked off (all picks lock and become visible).
+    picks_revealed: bool = False
 
 
 class SeasonStandingsRead(CamelModel):
