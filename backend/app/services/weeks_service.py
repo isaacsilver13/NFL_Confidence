@@ -2,13 +2,15 @@
 
 from datetime import datetime, timezone
 
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import NotFoundError
 from app.models.enums import WeekStatus
+from app.models.job_execution import JobExecution
 from app.models.league import League
 from app.models.nfl_week import NflWeek
-from app.repositories import nfl_week_repository
+from app.repositories import nfl_game_repository, nfl_week_repository
 from app.services import league_service
 
 
@@ -27,6 +29,43 @@ def get_current_week(db: Session) -> NflWeek:
     if week is None:
         raise NotFoundError("No current NFL week is available.")
     return week
+
+
+def _has_kicked_off(db: Session, week: NflWeek, at: datetime) -> bool:
+    games = nfl_game_repository.get_by_week_id(db, week.id)
+    return any(game.kickoff_time <= at for game in games)
+
+
+def get_pick_week(db: Session) -> NflWeek:
+    """The week members should be making picks for right now.
+
+    Usually the current week. But the schedule import creates week N+1 on Monday morning
+    while week N is still being played, and `get_current_week` keeps returning N until
+    N's window closes. Once N's first game has kicked off its picks are locked, so if N+1
+    exists, has been released and hasn't started, that is the week to pick for.
+    """
+    current = get_current_week(db)
+    now = datetime.now(timezone.utc)
+    if not _has_kicked_off(db, current, now):
+        return current
+    next_week = nfl_week_repository.get_by_season_and_week(
+        db, season=current.season, week_number=current.week_number + 1
+    )
+    if next_week is None or next_week.start_date > now or _has_kicked_off(db, next_week, now):
+        return current
+    return next_week
+
+
+SCORE_SYNC_JOBS = ("sunday_score_sync", "monday_thursday_score_sync", "overnight_score_sync")
+
+
+def get_last_refreshed_at(db: Session) -> datetime | None:
+    """When a scheduled score sync last finished successfully (None if none has yet)."""
+    return db.execute(
+        select(func.max(JobExecution.completed_at)).where(
+            JobExecution.job_name.in_(SCORE_SYNC_JOBS), JobExecution.status == "success"
+        )
+    ).scalar_one()
 
 
 def list_all_weeks(db: Session) -> list[NflWeek]:

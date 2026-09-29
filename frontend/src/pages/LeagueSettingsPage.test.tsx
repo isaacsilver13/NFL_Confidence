@@ -116,6 +116,7 @@ const submissionStatuses: MemberSubmissionStatuses = {
     role: member.role,
     submittedAt: member.role === 'owner' ? '2026-09-05T12:00:00Z' : null,
     pickCount: member.role === 'owner' ? 5 : 0,
+    isComplete: false,
   })),
 }
 
@@ -238,5 +239,18 @@ describe('LeagueSettingsPage', () => {
     await waitFor(() => expect(mockedFetchMemberSubmissionStatuses).toHaveBeenCalledWith(1))
     expect(await screen.findByText(/Submitted Sep 5/)).toBeInTheDocument()
     expect(screen.getByText('Not submitted')).toBeInTheDocument()
+  })
+
+  it('marks a complete autosaved card that was never formally submitted', async () => {
+    mockedFetchMemberSubmissionStatuses.mockResolvedValue({
+      ...submissionStatuses,
+      members: submissionStatuses.members.map((member) =>
+        member.submittedAt ? member : { ...member, pickCount: 16, isComplete: true },
+      ),
+    })
+    renderPage()
+
+    expect((await screen.findAllByText('Complete (autosaved)')).length).toBeGreaterThan(0)
+    expect(screen.queryByText('Not submitted')).not.toBeInTheDocument()
   })
 })

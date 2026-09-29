@@ -1,6 +1,7 @@
 import type { CompletedWeek } from '@/types/leaderboard'
 import type {
   AllPicks,
+  LastRefreshed,
   NflGame,
   NflPick,
   NflWeek,
@@ -52,6 +53,10 @@ export function submitPicks(week: number): Promise<WeekSubmission> {
   })
 }
 
-export function fetchAllPicksCurrentWeek(): Promise<AllPicks> {
-  return apiFetch<AllPicks>('/picks/all/current')
+export function fetchLastRefreshed(): Promise<LastRefreshed> {
+  return apiFetch<LastRefreshed>('/weeks/last-refreshed')
+}
+
+export function fetchAllPicksForWeek(week: number): Promise<AllPicks> {
+  return apiFetch<AllPicks>(`/picks/all/current?week=${week}`)
 }

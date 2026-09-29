@@ -73,6 +73,7 @@ export interface MemberSubmissionStatus {
   role: LeagueMember['role']
   submittedAt: string | null
   pickCount: number
+  isComplete: boolean
 }
 
 export interface MemberSubmissionStatuses {

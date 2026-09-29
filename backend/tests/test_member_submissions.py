@@ -111,3 +111,28 @@ def test_submission_statuses_reflect_submitted_and_unsubmitted_members(client, d
 
     owner_status = next(s for s in statuses if s["userId"] == str(owner.id))
     assert owner_status["submittedAt"] is None
+
+
+def test_submission_statuses_flag_complete_autosaved_card_without_submit(
+    client, db_session: Session
+):
+    owner, member, week, game = _fixture(db_session, client)
+
+    save_response = client.post(
+        "/api/v1/picks",
+        json={
+            "week": week.week_number,
+            "picks": [{"gameId": str(game.id), "team": game.home_team, "confidence": 1}],
+        },
+        headers=_headers(member),
+    )
+    assert save_response.status_code == 200
+
+    statuses = client.get(
+        f"/api/v1/league/submissions?week={week.week_number}", headers=_headers(owner)
+    ).json()["data"]["members"]
+    member_status = next(s for s in statuses if s["userId"] == str(member.id))
+    assert member_status["submittedAt"] is None
+    assert member_status["isComplete"] is True
+    owner_status = next(s for s in statuses if s["userId"] == str(owner.id))
+    assert owner_status["isComplete"] is False

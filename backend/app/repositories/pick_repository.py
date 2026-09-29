@@ -2,7 +2,7 @@
 
 import uuid
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import distinct, func, or_, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.models.enums import WeekStatus
@@ -74,6 +74,27 @@ def count_active_by_user_and_week(db: Session, *, user_id: uuid.UUID, week_id: u
             )
         ).scalar_one()
     )
+
+
+def list_complete_user_ids_for_week(
+    db: Session, *, week_id: uuid.UUID, game_count: int
+) -> set[uuid.UUID]:
+    """Users whose active picks cover every game with confidences 1..game_count used once."""
+    if game_count <= 0:
+        return set()
+    rows = db.execute(
+        select(Pick.user_id)
+        .join(NflGame, Pick.game_id == NflGame.id)
+        .where(NflGame.week_id == week_id, Pick.voided_at.is_(None))
+        .group_by(Pick.user_id)
+        .having(
+            func.count(distinct(Pick.game_id)) == game_count,
+            func.count(distinct(Pick.confidence_value)) == game_count,
+            func.min(Pick.confidence_value) == 1,
+            func.max(Pick.confidence_value) == game_count,
+        )
+    ).scalars()
+    return set(rows)
 
 
 def list_by_user_and_history_season(

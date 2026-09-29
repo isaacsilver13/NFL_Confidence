@@ -63,6 +63,7 @@ class MemberSubmissionRead(CamelModel):
     role: LeagueRole
     submitted_at: datetime | None = None
     pick_count: int = 0
+    is_complete: bool = False
 
 
 class MemberPaymentUpdateRequest(CamelModel):

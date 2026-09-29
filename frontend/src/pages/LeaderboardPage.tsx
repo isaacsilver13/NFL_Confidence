@@ -4,8 +4,11 @@ import { Trophy } from 'lucide-react'
 import { ApiError } from '@/api/client'
 import { fetchPickBreakdown, fetchWeeklyLeaderboard } from '@/api/leaderboard'
 import { fetchCompletedWeeks, fetchCurrentWeek } from '@/api/nfl'
+import { LastRefreshed } from '@/components/nfl/LastRefreshed'
+import { AllPicksModal } from '@/components/leaderboard/AllPicksModal'
 import { WeeklyPickBreakdown } from '@/components/leaderboard/WeeklyPickBreakdown'
-import type { GameLabel, LeaderboardMember } from '@/types/leaderboard'
+import { Button } from '@/components/ui/Button'
+import type { GameLabel, LeaderboardMember, MemberGamePick } from '@/types/leaderboard'
 
 interface WeekOption {
   weekNumber: number
@@ -23,17 +26,22 @@ function buildWeekOptions(
   return options.sort((a, b) => a.weekNumber - b.weekNumber)
 }
 
-function formatGamePick(pick: { team: string | null; confidence: number | null }): string {
-  return pick.team && pick.confidence !== null ? `${pick.team} (${pick.confidence})` : '—'
+function formatPicksRemaining(picks: MemberGamePick[]): string {
+  const formatted = picks
+    .filter((pick) => pick.team && pick.confidence !== null)
+    .map((pick) => `${pick.team} (${pick.confidence})`)
+  return formatted.length > 0 ? formatted.join(', ') : '—'
 }
 
 function LeaderboardTable({
   standings,
-  lastTwoGames,
+  nightGames,
 }: {
   standings: LeaderboardMember[]
-  lastTwoGames: GameLabel[]
+  nightGames: GameLabel[]
 }) {
+  // The backend sends night games only once Sunday night has kicked off.
+  const showPicksRemaining = nightGames.length > 0
   return (
     <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-surface shadow-sm dark:border-slate-800 dev-dark:border-border dark:bg-slate-900 dev-dark:bg-surface-elevated">
       <table className="w-full min-w-[680px] text-left text-sm">
@@ -45,11 +53,9 @@ function LeaderboardTable({
             <th className="px-5 py-4 text-right">Correct</th>
             <th className="px-5 py-4 text-right">Points</th>
             <th className="px-5 py-4 text-right">Points Left</th>
-            {lastTwoGames.map((game) => (
-              <th key={game.gameId} className="px-5 py-4 text-right whitespace-nowrap">
-                Picks ({game.awayTeam} @ {game.homeTeam})
-              </th>
-            ))}
+            {showPicksRemaining && (
+              <th className="px-5 py-4 text-right whitespace-nowrap">Picks Remaining</th>
+            )}
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-200 dark:divide-slate-800 dev-dark:divide-border">
@@ -68,14 +74,11 @@ function LeaderboardTable({
               <td className="px-5 py-4 text-right">{member.correctPicks}</td>
               <td className="px-5 py-4 text-right font-black text-accent">{member.totalPoints}</td>
               <td className="px-5 py-4 text-right">{member.pointsRemaining}</td>
-              {lastTwoGames.map((game) => {
-                const pick = member.lastTwoGamePicks.find((p) => p.gameId === game.gameId)
-                return (
-                  <td key={game.gameId} className="px-5 py-4 text-right whitespace-nowrap">
-                    {pick ? formatGamePick(pick) : '—'}
-                  </td>
-                )
-              })}
+              {showPicksRemaining && (
+                <td className="px-5 py-4 text-right whitespace-nowrap">
+                  {formatPicksRemaining(member.nightGamePicks)}
+                </td>
+              )}
             </tr>
           ))}
         </tbody>
@@ -86,6 +89,7 @@ function LeaderboardTable({
 
 export function LeaderboardPage() {
   const [week, setWeek] = useState<number>()
+  const [showAllPicks, setShowAllPicks] = useState(false)
   const weeksQuery = useQuery({
     queryKey: ['leaderboard', 'weeks'],
     queryFn: fetchCompletedWeeks,
@@ -120,23 +124,34 @@ export function LeaderboardPage() {
           <h1 className="mt-2 flex items-center gap-2 text-3xl font-black tracking-tight text-primary dark:text-white dev-dark:text-ink">
             <Trophy className="text-gold" size={25} aria-hidden="true" /> Weekly Leaderboard
           </h1>
+          <LastRefreshed className="mt-1" />
         </div>
-        <label className="flex items-center gap-3 text-sm font-bold text-ink-muted dark:text-slate-300 dev-dark:text-text-secondary">
-          Week
-          <select
-            value={selectedWeek ?? ''}
-            onChange={(event) => setWeek(Number(event.target.value))}
-            className="min-h-11 rounded-xl border border-slate-300 bg-surface px-3 text-ink shadow-sm dark:border-slate-700 dev-dark:border-border-hover dark:bg-slate-900 dev-dark:bg-surface-elevated dark:text-slate-100 dev-dark:text-ink"
-          >
-            {weekOptions.map(({ weekNumber, isCurrent }) => (
-              <option key={weekNumber} value={weekNumber}>
-                Week {weekNumber}
-                {isCurrent ? ' — Live' : ''}
-              </option>
-            ))}
-          </select>
-        </label>
+        <div className="flex flex-wrap items-center gap-3">
+          {query.data && query.data.standings.length > 0 && (
+            <Button type="button" variant="secondary" onClick={() => setShowAllPicks(true)}>
+              See everyone&apos;s picks
+            </Button>
+          )}
+          <label className="flex items-center gap-3 text-sm font-bold text-ink-muted dark:text-slate-300 dev-dark:text-text-secondary">
+            Week
+            <select
+              value={selectedWeek ?? ''}
+              onChange={(event) => setWeek(Number(event.target.value))}
+              className="min-h-11 rounded-xl border border-slate-300 bg-surface px-3 text-ink shadow-sm dark:border-slate-700 dev-dark:border-border-hover dark:bg-slate-900 dev-dark:bg-surface-elevated dark:text-slate-100 dev-dark:text-ink"
+            >
+              {weekOptions.map(({ weekNumber, isCurrent }) => (
+                <option key={weekNumber} value={weekNumber}>
+                  Week {weekNumber}
+                  {isCurrent ? ' — Live' : ''}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
       </div>
+      {showAllPicks && selectedWeek !== undefined && (
+        <AllPicksModal week={selectedWeek} onClose={() => setShowAllPicks(false)} />
+      )}
 
       {selectedWeek === undefined && !weeksQuery.isPending && !currentWeekQuery.isPending && (
         <p className="text-slate-600 dark:text-slate-300 dev-dark:text-text-secondary">
@@ -164,7 +179,7 @@ export function LeaderboardPage() {
         </p>
       )}
       {query.data && query.data.standings.length > 0 && (
-        <LeaderboardTable standings={query.data.standings} lastTwoGames={query.data.lastTwoGames} />
+        <LeaderboardTable standings={query.data.standings} nightGames={query.data.nightGames} />
       )}
 
       {selectedWeek !== undefined && (
