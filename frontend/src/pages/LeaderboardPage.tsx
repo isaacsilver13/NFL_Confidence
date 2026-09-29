@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Trophy } from 'lucide-react'
 import { ApiError } from '@/api/client'
 import { fetchPickBreakdown, fetchWeeklyLeaderboard } from '@/api/leaderboard'
-import { fetchCompletedWeeks, fetchCurrentWeek } from '@/api/nfl'
+import { fetchCurrentWeek, fetchStartedWeeks } from '@/api/nfl'
 import { LastRefreshed } from '@/components/nfl/LastRefreshed'
 import { AllPicksModal } from '@/components/leaderboard/AllPicksModal'
 import { WeeklyPickBreakdown } from '@/components/leaderboard/WeeklyPickBreakdown'
@@ -54,7 +54,7 @@ function LeaderboardTable({
             <th className="px-5 py-4 text-right">Points</th>
             <th className="px-5 py-4 text-right">Points Left</th>
             {showPicksRemaining && (
-              <th className="px-5 py-4 text-right whitespace-nowrap">Picks Remaining</th>
+              <th className="px-5 py-4 text-right whitespace-nowrap">SNF/MNF</th>
             )}
           </tr>
         </thead>
@@ -91,8 +91,8 @@ export function LeaderboardPage() {
   const [week, setWeek] = useState<number>()
   const [showAllPicks, setShowAllPicks] = useState(false)
   const weeksQuery = useQuery({
-    queryKey: ['leaderboard', 'weeks'],
-    queryFn: fetchCompletedWeeks,
+    queryKey: ['leaderboard', 'weeks', 'started'],
+    queryFn: fetchStartedWeeks,
     staleTime: 10 * 60_000,
   })
   const currentWeekQuery = useQuery({

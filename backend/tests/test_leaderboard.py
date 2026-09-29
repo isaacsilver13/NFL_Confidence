@@ -647,3 +647,27 @@ def test_pick_breakdown_requires_active_league_membership(db_session: Session) -
 
     with pytest.raises(NotFoundError, match="You are not a member of the active league"):
         leaderboard_service.get_pick_breakdown(db_session, league=league, viewer_id=outsider.id)
+
+
+def test_leaderboard_weeks_lists_started_but_unfinished_weeks_only_when_asked(
+    db_session: Session,
+) -> None:
+    from app.api.leaderboard import get_completed_weeks
+
+    owner = _user(db_session, "Owner")
+    league = _league(db_session, owner)
+    finished, _ = _night_week(db_session, league, 2, sunday=date(2026, 9, 13), final=True)
+    stuck, _ = _night_week(db_session, league, 3, sunday=date(2026, 9, 20), final=False)
+    future, _ = _night_week(db_session, league, 4, sunday=date(2030, 9, 15), final=False)
+
+    def weeks(include_started: bool) -> list[int]:
+        response = get_completed_weeks(
+            include_started=include_started,
+            league_member=(league, None),  # type: ignore[arg-type]
+            db=db_session,
+        )
+        return [week["weekNumber"] for week in response["data"]]
+
+    assert weeks(False) == [finished.week_number]
+    assert weeks(True) == [finished.week_number, stuck.week_number]
+    assert future.week_number not in weeks(True)

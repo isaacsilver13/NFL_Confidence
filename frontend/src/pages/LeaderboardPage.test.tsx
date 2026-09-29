@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fetchPickBreakdown, fetchWeeklyLeaderboard } from '@/api/leaderboard'
 import {
   fetchAllPicksForWeek,
-  fetchCompletedWeeks,
+  fetchStartedWeeks,
   fetchCurrentWeek,
   fetchLastRefreshed,
 } from '@/api/nfl'
@@ -20,14 +20,14 @@ vi.mock('@/api/leaderboard', () => ({
 vi.mock('@/api/nfl', () => ({
   fetchLastRefreshed: vi.fn(),
   fetchAllPicksForWeek: vi.fn(),
-  fetchCompletedWeeks: vi.fn(),
+  fetchStartedWeeks: vi.fn(),
   fetchCurrentWeek: vi.fn(),
 }))
 
 const mockedFetchWeeklyLeaderboard = vi.mocked(fetchWeeklyLeaderboard)
 const mockedFetchPickBreakdown = vi.mocked(fetchPickBreakdown)
 const mockedFetchAllPicksForWeek = vi.mocked(fetchAllPicksForWeek)
-const mockedFetchCompletedWeeks = vi.mocked(fetchCompletedWeeks)
+const mockedFetchStartedWeeks = vi.mocked(fetchStartedWeeks)
 const mockedFetchLastRefreshed = vi.mocked(fetchLastRefreshed)
 const mockedFetchCurrentWeek = vi.mocked(fetchCurrentWeek)
 
@@ -57,7 +57,7 @@ describe('LeaderboardPage', () => {
   })
 
   it('defaults to the live current week when no week has completed yet', async () => {
-    mockedFetchCompletedWeeks.mockResolvedValue([])
+    mockedFetchStartedWeeks.mockResolvedValue([])
     mockedFetchCurrentWeek.mockResolvedValue(currentWeek)
     mockedFetchWeeklyLeaderboard.mockResolvedValue({
       week: { weekNumber: 3, seasonNumber: 2026 },
@@ -91,7 +91,7 @@ describe('LeaderboardPage', () => {
   })
 
   it('lists completed weeks alongside the live current week, sorted ascending', async () => {
-    mockedFetchCompletedWeeks.mockResolvedValue([
+    mockedFetchStartedWeeks.mockResolvedValue([
       { weekNumber: 1, seasonNumber: 2026 },
       { weekNumber: 2, seasonNumber: 2026 },
     ])
@@ -110,7 +110,7 @@ describe('LeaderboardPage', () => {
   })
 
   it('shows a message instead of an endless spinner when no week exists yet', async () => {
-    mockedFetchCompletedWeeks.mockResolvedValue([])
+    mockedFetchStartedWeeks.mockResolvedValue([])
     mockedFetchCurrentWeek.mockRejectedValue(new Error('not found'))
 
     renderPage()
@@ -120,7 +120,7 @@ describe('LeaderboardPage', () => {
   })
 
   it('shows only Rank, Member, Correct, Points, and Points Left columns in that order', async () => {
-    mockedFetchCompletedWeeks.mockResolvedValue([])
+    mockedFetchStartedWeeks.mockResolvedValue([])
     mockedFetchCurrentWeek.mockResolvedValue(currentWeek)
     mockedFetchWeeklyLeaderboard.mockResolvedValue({
       week: { weekNumber: 3, seasonNumber: 2026 },
@@ -151,8 +151,8 @@ describe('LeaderboardPage', () => {
     expect(headers).toEqual(['Rank', 'Member', 'Correct', 'Points', 'Points Left'])
   })
 
-  it('adds one Picks Remaining column listing the night-game picks per member', async () => {
-    mockedFetchCompletedWeeks.mockResolvedValue([])
+  it('adds one SNF/MNF column listing the night-game picks per member', async () => {
+    mockedFetchStartedWeeks.mockResolvedValue([])
     mockedFetchCurrentWeek.mockResolvedValue(currentWeek)
     mockedFetchWeeklyLeaderboard.mockResolvedValue({
       week: { weekNumber: 3, seasonNumber: 2026 },
@@ -203,20 +203,13 @@ describe('LeaderboardPage', () => {
 
     await screen.findByText('Owner')
     const headers = screen.getAllByRole('columnheader').map((header) => header.textContent)
-    expect(headers).toEqual([
-      'Rank',
-      'Member',
-      'Correct',
-      'Points',
-      'Points Left',
-      'Picks Remaining',
-    ])
+    expect(headers).toEqual(['Rank', 'Member', 'Correct', 'Points', 'Points Left', 'SNF/MNF'])
     expect(screen.getByText('KC (10), CHI (5), LAR (2)')).toBeInTheDocument()
     expect(screen.getByText('—')).toBeInTheDocument()
   })
 
   it('gives the week select readable text color in dark mode', async () => {
-    mockedFetchCompletedWeeks.mockResolvedValue([])
+    mockedFetchStartedWeeks.mockResolvedValue([])
     mockedFetchCurrentWeek.mockResolvedValue(currentWeek)
     mockedFetchWeeklyLeaderboard.mockResolvedValue({
       week: { weekNumber: 3, seasonNumber: 2026 },
@@ -231,7 +224,7 @@ describe('LeaderboardPage', () => {
   })
 
   it('shows the pick breakdown for the selected week', async () => {
-    mockedFetchCompletedWeeks.mockResolvedValue([{ weekNumber: 1, seasonNumber: 2026 }])
+    mockedFetchStartedWeeks.mockResolvedValue([{ weekNumber: 1, seasonNumber: 2026 }])
     mockedFetchCurrentWeek.mockResolvedValue(currentWeek)
     mockedFetchWeeklyLeaderboard.mockResolvedValue({
       week: { weekNumber: 3, seasonNumber: 2026 },
@@ -268,7 +261,7 @@ describe('LeaderboardPage', () => {
   })
 
   it("shows a message when the selected week's breakdown isn't available yet", async () => {
-    mockedFetchCompletedWeeks.mockResolvedValue([])
+    mockedFetchStartedWeeks.mockResolvedValue([])
     mockedFetchCurrentWeek.mockResolvedValue(currentWeek)
     mockedFetchWeeklyLeaderboard.mockResolvedValue({
       week: { weekNumber: 3, seasonNumber: 2026 },
@@ -286,7 +279,7 @@ describe('LeaderboardPage', () => {
 
   it('switches the pick breakdown when a different week is selected', async () => {
     const user = userEvent.setup()
-    mockedFetchCompletedWeeks.mockResolvedValue([{ weekNumber: 1, seasonNumber: 2026 }])
+    mockedFetchStartedWeeks.mockResolvedValue([{ weekNumber: 1, seasonNumber: 2026 }])
     mockedFetchCurrentWeek.mockResolvedValue(currentWeek)
     mockedFetchWeeklyLeaderboard.mockResolvedValue({
       week: { weekNumber: 1, seasonNumber: 2026 },
@@ -328,7 +321,7 @@ describe('LeaderboardPage', () => {
 
   it("opens everyone's picks for the selected week in a popup, hidden without standings", async () => {
     const user = userEvent.setup()
-    mockedFetchCompletedWeeks.mockResolvedValue([{ weekNumber: 2, seasonNumber: 2026 }])
+    mockedFetchStartedWeeks.mockResolvedValue([{ weekNumber: 2, seasonNumber: 2026 }])
     mockedFetchCurrentWeek.mockResolvedValue(currentWeek)
     mockedFetchWeeklyLeaderboard.mockImplementation(async (weekNumber = 3) => ({
       week: { weekNumber, seasonNumber: 2026 },

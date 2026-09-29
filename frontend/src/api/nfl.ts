@@ -35,6 +35,10 @@ export function fetchPickHistory(): Promise<PickHistory> {
   return apiFetch<PickHistory>('/picks/history')
 }
 
+export function fetchStartedWeeks(): Promise<CompletedWeek[]> {
+  return apiFetch<CompletedWeek[]>('/leaderboard/weeks?includeStarted=true')
+}
+
 export function fetchCompletedWeeks(): Promise<CompletedWeek[]> {
   return apiFetch<CompletedWeek[]>('/leaderboard/weeks')
 }

@@ -1,6 +1,7 @@
 """Authenticated leaderboard, standings, and pick breakdown routes."""
 
 import uuid
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
@@ -11,8 +12,9 @@ from app.db.session import get_db
 from app.models.enums import WeekStatus
 from app.models.league import League
 from app.models.league_member import LeagueMember
+from app.models.nfl_week import NflWeek
 from app.models.user import User
-from app.repositories import nfl_week_repository
+from app.repositories import nfl_game_repository, nfl_week_repository
 from app.services import leaderboard_service
 
 router = APIRouter(prefix="/leaderboard", tags=["leaderboard"])
@@ -20,16 +22,28 @@ router = APIRouter(prefix="/leaderboard", tags=["leaderboard"])
 
 @router.get("/weeks")
 def get_completed_weeks(
+    include_started: bool = Query(False, alias="includeStarted"),
     league_member: tuple[League, LeagueMember] = Depends(get_active_league_member),
     db: Session = Depends(get_db),
 ) -> dict:
     league, member = league_member
     weeks = nfl_week_repository.list_by_season(db, season=league.season)
+    now = datetime.now(timezone.utc)
+
+    def is_listed(week: NflWeek) -> bool:
+        if week.status == WeekStatus.COMPLETE:
+            return True
+        # A week that has kicked off but isn't scored final yet (e.g. a stuck last game)
+        # would otherwise vanish from the picker once it stops being the current week.
+        return include_started and any(
+            game.kickoff_time <= now for game in nfl_game_repository.get_by_week_id(db, week.id)
+        )
+
     return success(
         [
             {"weekNumber": week.week_number, "seasonNumber": week.season}
             for week in weeks
-            if week.status == WeekStatus.COMPLETE
+            if is_listed(week)
         ]
     )
 
