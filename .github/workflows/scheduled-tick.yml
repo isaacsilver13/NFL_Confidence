@@ -38,7 +38,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Tick dev
-        run: .github/scripts/tick.sh
+        run: bash .github/scripts/tick.sh
         env:
           APP_BASE_URL: ${{ secrets.APP_BASE_URL_DEV }}
           TICK_TOKEN: ${{ secrets.TICK_TOKEN_DEV }}
@@ -56,7 +56,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Tick prod
-        run: .github/scripts/tick.sh
+        run: bash .github/scripts/tick.sh
         env:
           APP_BASE_URL: ${{ secrets.APP_BASE_URL_PROD }}
           TICK_TOKEN: ${{ secrets.TICK_TOKEN_PROD }}
