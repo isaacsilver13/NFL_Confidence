@@ -93,6 +93,35 @@ Body:
 
 ---
 
+## Weekly Report (implemented)
+
+Trigger:
+Tuesday, 9:00 AM Eastern (`weekly_report` scheduled job)
+
+Recipients:
+League commissioners only (league members with the owner role)
+
+Send only if:
+
+- A week has been marked complete.
+- That commissioner hasn't already received this week's report (idempotent
+  per commissioner/week, same pattern as the picks reminder).
+
+Subject:
+`<League Name>: Week X Report`
+
+Body:
+A single-page HTML report (inline-styled for email-client compatibility,
+built by `app/services/report_service.py`) covering, from live data:
+
+- Scoreboard for the week
+- Standings (submitted-and-scored members only, matching the in-app weekly
+  leaderboard)
+- Payment status chips
+- Every member's full pick grid (team + confidence per game)
+
+---
+
 ## Season Update
 
 Trigger:

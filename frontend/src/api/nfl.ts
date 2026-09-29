@@ -1,5 +1,14 @@
 import type { CompletedWeek } from '@/types/leaderboard'
-import type { NflGame, NflPick, NflWeek, PickHistory, SavePicksInput } from '@/types/nfl'
+import type {
+  AllPicks,
+  LastRefreshed,
+  NflGame,
+  NflPick,
+  NflWeek,
+  PickHistory,
+  SavePicksInput,
+  WeekSubmission,
+} from '@/types/nfl'
 import { apiFetch } from './client'
 
 export function fetchCurrentWeek(): Promise<NflWeek> {
@@ -26,6 +35,10 @@ export function fetchPickHistory(): Promise<PickHistory> {
   return apiFetch<PickHistory>('/picks/history')
 }
 
+export function fetchStartedWeeks(): Promise<CompletedWeek[]> {
+  return apiFetch<CompletedWeek[]>('/leaderboard/weeks?includeStarted=true')
+}
+
 export function fetchCompletedWeeks(): Promise<CompletedWeek[]> {
   return apiFetch<CompletedWeek[]>('/leaderboard/weeks')
 }
@@ -35,4 +48,19 @@ export function savePicks(input: SavePicksInput): Promise<NflPick[]> {
     method: 'POST',
     body: JSON.stringify(input),
   })
+}
+
+export function submitPicks(week: number): Promise<WeekSubmission> {
+  return apiFetch<WeekSubmission>('/picks/submit', {
+    method: 'POST',
+    body: JSON.stringify({ week }),
+  })
+}
+
+export function fetchLastRefreshed(): Promise<LastRefreshed> {
+  return apiFetch<LastRefreshed>('/weeks/last-refreshed')
+}
+
+export function fetchAllPicksForWeek(week: number): Promise<AllPicks> {
+  return apiFetch<AllPicks>(`/picks/all/current?week=${week}`)
 }

@@ -32,6 +32,10 @@ def _game_read(game: NflGame) -> dict:
         home_score=game.home_score,
         winning_team=game.winning_team,
         is_tie=game.is_tie,
+        clock=game.clock,
+        period=game.period,
+        away_record=game.away_record,
+        home_record=game.home_record,
     ).model_dump(by_alias=True)
 
 

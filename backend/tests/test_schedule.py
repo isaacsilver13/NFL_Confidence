@@ -108,6 +108,12 @@ def test_default_reminder_is_wednesday_5pm() -> None:
     assert "weekly_picks_reminder" not in names(at(2026, 10, 8, 17, 0))
 
 
+def test_default_weekly_report_is_tuesday_8am() -> None:
+    assert "weekly_report" in names(at(2026, 10, 6, 8, 0))
+    assert "weekly_report" not in names(at(2026, 10, 6, 9, 0))
+    assert "weekly_report" not in names(at(2026, 10, 7, 8, 0))
+
+
 def test_lock_slot_is_due_every_hour() -> None:
     assert all("lock_expired_picks" in names(at(2026, 10, 6, h, 5)) for h in range(24))
 

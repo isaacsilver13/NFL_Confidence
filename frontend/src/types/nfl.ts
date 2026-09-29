@@ -9,6 +9,10 @@ export interface NflWeek {
   isLocked?: boolean
 }
 
+export interface LastRefreshed {
+  lastRefreshedAt: string | null
+}
+
 export interface NflGame {
   id: string
   awayTeam: string
@@ -23,6 +27,10 @@ export interface NflGame {
   homeScore: number | null
   winningTeam: string | null
   isTie: boolean
+  clock: string | null
+  period: number | null
+  awayRecord: string | null
+  homeRecord: string | null
 }
 
 export interface NflPick {
@@ -74,4 +82,20 @@ export interface SavePicksInput {
   week: number
   picks: PickInput[]
   voidedGameIds: string[]
+}
+
+export interface WeekSubmission {
+  submittedAt: string | null
+}
+
+export interface MemberPicks {
+  userId: string
+  displayName: string
+  picks: NflPick[]
+}
+
+export interface AllPicks {
+  week: NflWeek
+  games: NflGame[]
+  members: MemberPicks[]
 }

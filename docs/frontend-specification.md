@@ -16,13 +16,18 @@ Top Navigation
 
 Main Content
 
-Footer
-
-Navigation is sticky.
+Navigation is sticky. No footer.
 
 ---
 
 # Pages
+
+The app is mostly a single-page dashboard, not five separate routed pages.
+`/login`, `/join`, `/` (dashboard), `/picks`, and `/league-settings` are real
+routes. `/leaderboard`, `/standings`, and `/profile` are kept as redirects
+(to `/#leaderboard` etc.) for old links/bookmarks, not pages of their own --
+`/picks` used to redirect the same way but was promoted to its own top-level
+nav tab.
 
 ## Login
 
@@ -34,27 +39,25 @@ Short Description
 
 ---
 
-## Dashboard
+## Join League
 
-Current Week
-
-Countdown
-
-My Rank
-
-Weekly Rank
-
-Season Rank
-
-Upcoming Games
-
-Leaderboard Preview
+Shown after sign-in when the user isn't yet a league member. Accepts a
+league passcode.
 
 ---
 
+## Dashboard
+
+The one page members land on after sign-in. Shows the current league/week
+summary and a link into the Picks tab, then three collapsible accordion
+sections (Weekly Leaderboard, Season Standings, Profile) — expand/collapse
+state persists per user (localStorage) and is deep-linkable via URL hash
+(`/#leaderboard`, `/#standings`, `/#profile`).
+
 ## Picks
 
-One card per game.
+Its own top-level nav tab (`/picks`), not an accordion section. One card per
+game.
 
 Card contains
 
@@ -64,61 +67,50 @@ Home Team
 
 Kickoff
 
-Radio Buttons
+Team Buttons
 
-Confidence Dropdown
+Confidence Buttons
 
 Status
 
 Locked Indicator
 
----
+### Weekly Leaderboard section
 
-## Weekly Leaderboard
+Defaults to the current (possibly in-progress) week, labeled "Live" while
+the week isn't finished. A dropdown also lists every completed week.
 
 Rank
 
-Name
+Member
+
+Correct
 
 Points
 
-Correct Picks
+Points Left (live week only)
 
-Incorrect Picks
-
-Prize Icon
-
----
-
-## Season Leaderboard
+### Season Standings section
 
 Rank
 
 Total Points
 
-Weekly Wins
+Correct / Incorrect Picks
 
-Top Three Finishes
-
----
-
-## Profile
-
-Avatar
+### Profile section
 
 Display Name
 
-Season Statistics
+Current-week pick progress
 
-Historical Picks
-
-Weekly Finishes
+Historical Picks (by completed week)
 
 ---
 
 ## Members
 
-Commissioner-only tab.
+Commissioner-only page, routed at `/league-settings`.
 
 - View league members and their read-only Google email addresses
 - Edit display names
@@ -126,8 +118,9 @@ Commissioner-only tab.
 - Remove members
 - View the shared league passcode
 - Invite members by email
+- Mark weekly payments and void unpaid picks
 
-The tab is shown to every member with the commissioner (`owner`) role. The
+The page is shown to every member with the commissioner (`owner`) role. The
 backend also enforces this permission for direct navigation or API requests.
 
 ---

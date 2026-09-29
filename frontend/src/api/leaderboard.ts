@@ -1,4 +1,9 @@
-import type { PickBreakdown, SeasonStandings, WeeklyLeaderboard } from '@/types/leaderboard'
+import type {
+  GamePicks,
+  PickBreakdown,
+  SeasonStandings,
+  WeeklyLeaderboard,
+} from '@/types/leaderboard'
 import { apiFetch } from './client'
 
 function withQuery(path: string, values: Record<string, string | number | undefined>): string {
@@ -20,4 +25,8 @@ export function fetchSeasonStandings(season?: number): Promise<SeasonStandings> 
 
 export function fetchPickBreakdown(): Promise<PickBreakdown> {
   return apiFetch<PickBreakdown>('/leaderboard/pick-breakdown')
+}
+
+export function fetchGamePicks(gameId: string): Promise<GamePicks> {
+  return apiFetch<GamePicks>(`/leaderboard/games/${gameId}/picks`)
 }

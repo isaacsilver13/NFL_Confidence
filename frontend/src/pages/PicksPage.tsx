@@ -2,11 +2,12 @@ import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } 
 import { AlertTriangle, Check } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError } from '@/api/client'
-import { savePicks } from '@/api/nfl'
+import { savePicks, submitPicks } from '@/api/nfl'
 import { fetchCurrentPicksCard } from '@/api/session'
+import { LastRefreshed } from '@/components/nfl/LastRefreshed'
 import { TeamLogo } from '@/components/nfl/TeamLogo'
 import { getPicksCardRefetchInterval } from '@/features/nfl/picksPolling'
-import type { NflGame, NflPick, NflWeek, PickInput } from '@/types/nfl'
+import type { NflGame, NflPick, NflWeek, PickInput, WeekSubmission } from '@/types/nfl'
 
 const AUTO_SAVE_DEBOUNCE_MS = 400
 
@@ -16,6 +17,16 @@ interface PickDraft {
 }
 
 type PickDrafts = Record<string, PickDraft>
+
+interface PendingSave {
+  drafts: PickDrafts
+  version: number
+}
+
+interface DraftSavePayload {
+  submissions: PickInput[]
+  voidedGameIds: string[]
+}
 
 function formatKickoff(kickoff: string): string {
   return new Intl.DateTimeFormat(undefined, {
@@ -69,17 +80,65 @@ function isCompleteDraft(game: NflGame, draft: PickDraft | undefined, gameCount:
   )
 }
 
-function isValidConfidence(confidence: string | undefined, gameCount: number): boolean {
-  const value = Number(confidence ?? 0)
-  return Number.isInteger(value) && value >= 1 && value <= gameCount
+function draftSavePayload(games: NflGame[], drafts: PickDrafts): DraftSavePayload {
+  const candidates = games.map((game) => {
+    const draft = drafts[game.id]
+    const confidence = Number(draft?.confidence ?? 0)
+    const isComplete = isCompleteDraft(game, draft, games.length)
+    return { game, team: draft?.team ?? '', confidence, isComplete }
+  })
+  const confidenceCounts = new Map<number, number>()
+  for (const candidate of candidates) {
+    if (candidate.isComplete) {
+      confidenceCounts.set(
+        candidate.confidence,
+        (confidenceCounts.get(candidate.confidence) ?? 0) + 1,
+      )
+    }
+  }
+
+  const submissions: PickInput[] = []
+  const voidedGameIds: string[] = []
+  for (const candidate of candidates) {
+    if (candidate.isComplete && confidenceCounts.get(candidate.confidence) === 1) {
+      submissions.push({
+        gameId: candidate.game.id,
+        team: candidate.team,
+        confidence: candidate.confidence,
+      })
+    } else {
+      voidedGameIds.push(candidate.game.id)
+    }
+  }
+  return { submissions, voidedGameIds }
 }
 
-function GamesForm({ week, games, picks }: { week: NflWeek; games: NflGame[]; picks: NflPick[] }) {
+function formatSubmittedAt(submittedAt: string): string {
+  return new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(new Date(submittedAt))
+}
+
+function GamesForm({
+  week,
+  games,
+  picks,
+  submission,
+}: {
+  week: NflWeek
+  games: NflGame[]
+  picks: NflPick[]
+  submission: WeekSubmission
+}) {
   const queryClient = useQueryClient()
   const [drafts, setDrafts] = useState<PickDrafts>(() => initialDrafts(games, picks))
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
   const [voided, setVoided] = useState(false)
+  const [submitPicksError, setSubmitPicksError] = useState<string | null>(null)
   const [now, setNow] = useState(() => Date.now())
   const gameKickoffs = games
     .map((game) => Date.parse(game.kickoff))
@@ -88,14 +147,11 @@ function GamesForm({ week, games, picks }: { week: NflWeek; games: NflGame[]; pi
   const locksAt = week.locksAt ? Date.parse(week.locksAt) : earliestKickoff
   const isLocked = Boolean(week.isLocked || (locksAt !== null && locksAt <= now))
   const draftsRef = useRef(drafts)
+  const draftVersionRef = useRef(0)
   const isLockedRef = useRef(isLocked)
-  const savedGameIdsRef = useRef(
-    new Set(picks.filter((pick) => !pick.isVoided).map((pick) => pick.gameId)),
-  )
-  const gameVersionsRef = useRef(new Map<string, number>())
-  const gameTimersRef = useRef(new Map<string, number>())
-  const gameSavingRef = useRef(new Set<string>())
-  const pendingGameVersionRef = useRef(new Map<string, number>())
+  const saveTimerRef = useRef<number | null>(null)
+  const pendingSaveRef = useRef<PendingSave | null>(null)
+  const savingRef = useRef(false)
 
   useEffect(() => {
     if (locksAt === null || isLocked) return
@@ -108,9 +164,8 @@ function GamesForm({ week, games, picks }: { week: NflWeek; games: NflGame[]; pi
   }, [isLocked])
 
   useEffect(() => {
-    const timers = gameTimersRef.current
     return () => {
-      for (const timer of timers.values()) window.clearTimeout(timer)
+      if (saveTimerRef.current !== null) window.clearTimeout(saveTimerRef.current)
     }
   }, [])
 
@@ -118,7 +173,7 @@ function GamesForm({ week, games, picks }: { week: NflWeek; games: NflGame[]; pi
   const confidenceUsageByValue = useMemo(() => {
     const usage = new Map<number, string[]>()
     for (const game of games) {
-      if (!isValidConfidence(drafts[game.id]?.confidence, games.length)) continue
+      if (!isCompleteDraft(game, drafts[game.id], games.length)) continue
       const confidence = Number(drafts[game.id]?.confidence)
       const gameIds = usage.get(confidence) ?? []
       gameIds.push(game.id)
@@ -142,15 +197,33 @@ function GamesForm({ week, games, picks }: { week: NflWeek; games: NflGame[]; pi
   const saveMutation = useMutation({
     mutationFn: savePicks,
   })
+  const submitMutation = useMutation({
+    mutationFn: submitPicks,
+    onSuccess: async () => {
+      setSubmitPicksError(null)
+      await queryClient.invalidateQueries({ queryKey: ['picks', 'card', 'current'] })
+    },
+    onError: (error: unknown) => {
+      setSubmitPicksError(
+        error instanceof ApiError ? error.message : "Could not submit this week's picks.",
+      )
+    },
+  })
+  const isComplete = pickedCount === games.length && games.length > 0
+  const canSubmit = isComplete && !hasConflicts && !isLocked && !submitMutation.isPending
 
-  async function saveGame(gameId: string, version: number) {
-    if (gameSavingRef.current.has(gameId)) {
-      pendingGameVersionRef.current.set(gameId, version)
+  function handleSubmitPicks() {
+    submitMutation.mutate(week.weekNumber)
+  }
+
+  async function saveDraft(pendingSave: PendingSave) {
+    if (savingRef.current) {
+      pendingSaveRef.current = pendingSave
       return
     }
 
     if (isLockedRef.current) {
-      if (gameVersionsRef.current.get(gameId) === version) {
+      if (pendingSave.version === draftVersionRef.current) {
         setSaved(false)
         setVoided(false)
         setSubmitError('Picks are locked after the earliest game kickoff.')
@@ -158,95 +231,52 @@ function GamesForm({ week, games, picks }: { week: NflWeek; games: NflGame[]; pi
       return
     }
 
-    const game = games.find((candidate) => candidate.id === gameId)
-    const draft = draftsRef.current[gameId]
-    const isComplete = game !== undefined && isCompleteDraft(game, draft, games.length)
+    const { submissions, voidedGameIds } = draftSavePayload(games, pendingSave.drafts)
 
-    let submissions: PickInput[]
-    let voidedGameIds: string[]
-    const conflictingDraftSnapshots = new Map<string, PickDraft | undefined>()
-    if (isComplete) {
-      const confidence = Number(draft?.confidence)
-      for (const other of games) {
-        if (
-          other.id !== gameId &&
-          isCompleteDraft(other, draftsRef.current[other.id], games.length) &&
-          Number(draftsRef.current[other.id]?.confidence) === confidence
-        ) {
-          conflictingDraftSnapshots.set(other.id, draftsRef.current[other.id])
-        }
-      }
-      voidedGameIds = Array.from(conflictingDraftSnapshots.keys())
-      submissions = [{ gameId, team: draft?.team ?? '', confidence }]
-    } else {
-      submissions = []
-      voidedGameIds = [gameId]
-    }
-
-    gameSavingRef.current.add(gameId)
+    savingRef.current = true
     try {
-      await saveMutation.mutateAsync({ week: week.weekNumber, picks: submissions, voidedGameIds })
-      if (gameVersionsRef.current.get(gameId) === version) {
+      await saveMutation.mutateAsync({
+        week: week.weekNumber,
+        picks: submissions,
+        voidedGameIds,
+      })
+      if (pendingSave.version === draftVersionRef.current) {
         await queryClient.invalidateQueries({ queryKey: ['picks', 'card', 'current'] })
-        if (isComplete) {
-          savedGameIdsRef.current.add(gameId)
-        } else {
-          savedGameIdsRef.current.delete(gameId)
-        }
-        for (const voidedId of voidedGameIds) savedGameIdsRef.current.delete(voidedId)
-
-        // Displaced games were voided server-side; clear their local draft too
-        // (unless the user has since changed that game again) so the UI stops
-        // showing them as a live conflict the user still needs to fix.
-        let nextDrafts = draftsRef.current
-        let clearedAny = false
-        for (const [otherId, snapshot] of conflictingDraftSnapshots) {
-          const current = nextDrafts[otherId]
-          if (current?.team === snapshot?.team && current?.confidence === snapshot?.confidence) {
-            if (!clearedAny) {
-              nextDrafts = { ...nextDrafts }
-              clearedAny = true
-            }
-            nextDrafts[otherId] = { team: '', confidence: '' }
-          }
-        }
-        if (clearedAny) {
-          draftsRef.current = nextDrafts
-          setDrafts(nextDrafts)
-        }
-
-        if (gameVersionsRef.current.get(gameId) === version) {
+        if (pendingSave.version === draftVersionRef.current) {
           setSaved(true)
           setVoided(voidedGameIds.length > 0)
           setSubmitError(null)
         }
       }
     } catch (error) {
-      if (gameVersionsRef.current.get(gameId) === version) {
+      if (pendingSave.version === draftVersionRef.current) {
         setSaved(false)
-        setSubmitError(error instanceof ApiError ? error.message : 'Could not save this pick.')
+        setSubmitError(
+          error instanceof ApiError ? error.message : "Could not save this week's picks.",
+        )
       }
       setVoided(false)
     } finally {
-      gameSavingRef.current.delete(gameId)
-      const queuedVersion = pendingGameVersionRef.current.get(gameId)
-      if (queuedVersion !== undefined && queuedVersion > version) {
-        pendingGameVersionRef.current.delete(gameId)
-        void saveGame(gameId, queuedVersion)
+      savingRef.current = false
+      const queuedSave = pendingSaveRef.current
+      if (queuedSave && queuedSave.version > pendingSave.version) {
+        pendingSaveRef.current = null
+        scheduleSave(queuedSave, 0)
+      } else if (draftVersionRef.current > pendingSave.version) {
+        scheduleSave({ drafts: draftsRef.current, version: draftVersionRef.current }, 0)
       }
     }
   }
 
-  function scheduleGameSave(gameId: string, delay = AUTO_SAVE_DEBOUNCE_MS) {
-    const nextVersion = (gameVersionsRef.current.get(gameId) ?? 0) + 1
-    gameVersionsRef.current.set(gameId, nextVersion)
-    const existingTimer = gameTimersRef.current.get(gameId)
-    if (existingTimer !== undefined) window.clearTimeout(existingTimer)
-    const timer = window.setTimeout(() => {
-      gameTimersRef.current.delete(gameId)
-      void saveGame(gameId, nextVersion)
+  function scheduleSave(pendingSave: PendingSave, delay = AUTO_SAVE_DEBOUNCE_MS) {
+    pendingSaveRef.current = pendingSave
+    if (saveTimerRef.current !== null) window.clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = window.setTimeout(() => {
+      saveTimerRef.current = null
+      const nextSave = pendingSaveRef.current
+      pendingSaveRef.current = null
+      if (nextSave) void saveDraft(nextSave)
     }, delay)
-    gameTimersRef.current.set(gameId, timer)
   }
 
   function updateDraft(gameId: string, update: Partial<PickDraft>) {
@@ -262,48 +292,52 @@ function GamesForm({ week, games, picks }: { week: NflWeek; games: NflGame[]; pi
       ...draftsRef.current,
       [gameId]: nextDraft,
     }
+    const nextVersion = draftVersionRef.current + 1
     draftsRef.current = nextDrafts
+    draftVersionRef.current = nextVersion
     setSaved(false)
     setSubmitError(null)
     setDrafts(nextDrafts)
-
-    const game = games.find((candidate) => candidate.id === gameId)
-    const isComplete = game !== undefined && isCompleteDraft(game, nextDraft, games.length)
-    if (isComplete || savedGameIdsRef.current.has(gameId)) {
-      scheduleGameSave(gameId)
-    }
+    scheduleSave({ drafts: nextDrafts, version: nextVersion })
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    for (const [gameId, timer] of Array.from(gameTimersRef.current.entries())) {
-      window.clearTimeout(timer)
-      gameTimersRef.current.delete(gameId)
-      void saveGame(gameId, gameVersionsRef.current.get(gameId) ?? 0)
-    }
+    scheduleSave({ drafts: draftsRef.current, version: draftVersionRef.current }, 0)
   }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="sticky top-0 z-10 -mx-1 space-y-3 rounded-2xl border border-slate-200 bg-surface/95 px-4 py-3 shadow-sm backdrop-blur dark:border-slate-800 dark:bg-slate-900/95 sm:mx-0">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-ink-muted dark:text-slate-400">
-              Pick progress
-            </p>
-            <p className="mt-1 text-lg font-black text-primary dark:text-white">
-              {pickedCount} of {games.length} games picked
-            </p>
+      <div className="-mx-1 space-y-2 rounded-2xl border border-slate-200 bg-surface/95 px-4 py-2 shadow-sm dark:border-slate-800 dev-dark:border-border dark:bg-slate-900/95 dev-dark:bg-surface-elevated/95 sm:mx-0 sm:space-y-3 sm:py-3">
+        <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3">
+          <p className="text-sm font-black text-primary dark:text-white dev-dark:text-ink sm:text-lg">
+            {pickedCount} of {games.length} picked
+          </p>
+          <div className="flex items-center gap-2">
+            {hasConflicts ? (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-danger/10 px-2.5 py-1 text-xs font-black uppercase tracking-[0.1em] text-danger sm:px-3 sm:py-1.5 sm:tracking-[0.12em]">
+                <AlertTriangle size={14} aria-hidden="true" /> Resolve conflicts
+              </span>
+            ) : pickedCount === games.length ? (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-accent/10 px-2.5 py-1 text-xs font-black uppercase tracking-[0.1em] text-accent sm:px-3 sm:py-1.5 sm:tracking-[0.12em]">
+                <Check size={14} aria-hidden="true" /> Complete
+              </span>
+            ) : null}
+            {!isLocked && (
+              <button
+                type="button"
+                onClick={handleSubmitPicks}
+                disabled={!canSubmit}
+                className="rounded-xl bg-primary px-3 py-1.5 text-xs font-black text-white transition-colors disabled:cursor-not-allowed disabled:opacity-40 dark:bg-sky dev-dark:bg-accent dark:text-primary dev-dark:text-white sm:px-4 sm:py-2 sm:text-sm"
+              >
+                {submitMutation.isPending
+                  ? 'Submitting…'
+                  : submission.submittedAt
+                    ? 'Resubmit picks'
+                    : 'Submit picks'}
+              </button>
+            )}
           </div>
-          {hasConflicts ? (
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-danger/10 px-3 py-1.5 text-xs font-black uppercase tracking-[0.12em] text-danger">
-              <AlertTriangle size={14} aria-hidden="true" /> Resolve conflicts
-            </span>
-          ) : pickedCount === games.length ? (
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-accent/10 px-3 py-1.5 text-xs font-black uppercase tracking-[0.12em] text-accent">
-              <Check size={14} aria-hidden="true" /> Complete
-            </span>
-          ) : null}
         </div>
         <div
           role="progressbar"
@@ -311,46 +345,53 @@ function GamesForm({ week, games, picks }: { week: NflWeek; games: NflGame[]; pi
           aria-valuemin={0}
           aria-valuemax={games.length}
           aria-valuenow={pickedCount}
-          className="h-2 overflow-hidden rounded-full bg-surface-muted dark:bg-slate-800"
+          className="h-1.5 overflow-hidden rounded-full bg-surface-muted dark:bg-slate-800 dev-dark:bg-surface-hover sm:h-2"
         >
           <div
             className={`h-full rounded-full transition-[width] ${hasConflicts ? 'bg-danger' : 'bg-accent'}`}
             style={{ width: `${games.length ? (pickedCount / games.length) * 100 : 0}%` }}
           />
         </div>
-        <div>
-          <p className="text-xs font-bold uppercase tracking-[0.14em] text-ink-muted dark:text-slate-400">
-            Confidence values
-          </p>
-          <div className="mt-2 flex flex-wrap gap-1.5" role="list" aria-label="Confidence values">
-            {confidenceValues.map((value) => {
-              const usedBy = confidenceUsageByValue.get(value) ?? []
-              const isConflict = usedBy.length > 1
-              return (
-                <span
-                  key={value}
-                  role="listitem"
-                  aria-label={`Confidence ${value}${usedBy.length ? ' used' : ' available'}${isConflict ? ', conflict' : ''}`}
-                  className={`inline-flex h-7 min-w-7 items-center justify-center gap-0.5 rounded-md border px-1.5 text-xs font-bold ${isConflict ? 'border-danger bg-danger/10 text-danger' : usedBy.length ? 'border-slate-300 bg-surface-muted text-ink-muted line-through dark:border-slate-700 dark:bg-slate-950 dark:text-slate-500' : 'border-accent/40 bg-accent/5 text-accent'}`}
-                >
-                  {usedBy.length > 0 && <Check size={11} aria-hidden="true" />}
-                  {value}
-                </span>
-              )
-            })}
-          </div>
+        <p
+          role="status"
+          className={`text-xs font-semibold sm:text-sm ${submission.submittedAt ? 'text-accent' : 'text-ink-muted dark:text-slate-400 dev-dark:text-text-muted'}`}
+        >
+          {submission.submittedAt
+            ? `Submitted ${formatSubmittedAt(submission.submittedAt)}`
+            : 'Not yet submitted'}
+        </p>
+        <div
+          className="-mx-4 flex gap-1.5 overflow-x-auto px-4 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0"
+          role="list"
+          aria-label="Confidence values"
+        >
+          {confidenceValues.map((value) => {
+            const usedBy = confidenceUsageByValue.get(value) ?? []
+            const isConflict = usedBy.length > 1
+            return (
+              <span
+                key={value}
+                role="listitem"
+                aria-label={`Confidence ${value}${usedBy.length ? ' used' : ' available'}${isConflict ? ', conflict' : ''}`}
+                className={`inline-flex h-6 min-w-6 shrink-0 items-center justify-center gap-0.5 rounded-md border px-1 text-[11px] font-bold sm:h-7 sm:min-w-7 sm:px-1.5 sm:text-xs ${isConflict ? 'border-danger bg-danger/10 text-danger' : usedBy.length ? 'border-slate-300 bg-surface-muted text-ink-muted line-through dark:border-slate-700 dev-dark:border-border-hover dark:bg-slate-950 dev-dark:bg-background dark:text-slate-500 dev-dark:text-text-muted' : 'border-accent/40 bg-accent/5 text-accent'}`}
+              >
+                {usedBy.length > 0 && <Check size={11} aria-hidden="true" />}
+                {value}
+              </span>
+            )
+          })}
         </div>
       </div>
-      <div className="flex flex-wrap items-end justify-between gap-3 border-b border-slate-200 pb-5 dark:border-slate-800">
+      <div className="flex flex-wrap items-end justify-between gap-3 border-b border-slate-200 pb-5 dark:border-slate-800 dev-dark:border-border">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.2em] text-accent">
             {week.status} season {week.season}
           </p>
-          <h1 className="mt-2 text-3xl font-black tracking-tight text-primary dark:text-white">
+          <h1 className="mt-2 text-3xl font-black tracking-tight text-primary dark:text-white dev-dark:text-ink">
             Week {week.weekNumber} picks
           </h1>
         </div>
-        <div className="text-right text-sm text-slate-600 dark:text-slate-300">
+        <div className="text-right text-sm text-slate-600 dark:text-slate-300 dev-dark:text-text-secondary">
           <p>Use each confidence value from 1 to {games.length} once.</p>
           {(week.locksAt || isLocked) && (
             <p className={isLocked ? 'font-bold text-danger' : 'font-semibold text-accent'}>
@@ -361,13 +402,17 @@ function GamesForm({ week, games, picks }: { week: NflWeek; games: NflGame[]; pi
                   : null}
             </p>
           )}
+          <LastRefreshed />
         </div>
       </div>
 
       {isLocked && (
-        <p className="rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm font-semibold text-danger">
-          The earliest game has started. This week&apos;s picks are read-only.
-        </p>
+        <div className="rounded-xl border border-danger/30 bg-danger/10 px-4 py-3">
+          <p className="text-sm font-semibold text-danger">
+            The earliest game has started. This week&apos;s picks are read-only. See everyone&apos;s
+            picks on the Leaderboard.
+          </p>
+        </div>
       )}
 
       {confidenceConflicts.length > 0 && (
@@ -417,63 +462,90 @@ function GamesForm({ week, games, picks }: { week: NflWeek; games: NflGame[]; pi
             key={game.id}
             id={`game-${game.id}`}
             data-testid={`pick-card-${game.id}`}
-            className={`animate-slide-up overflow-hidden rounded-2xl border bg-surface shadow-sm transition-shadow hover:shadow-md dark:bg-slate-900 ${isConflicting ? 'border-danger bg-danger/5 dark:border-danger' : isPicked ? 'border-accent/70 bg-accent/5 dark:border-accent/70' : 'border-slate-200 dark:border-slate-800'}`}
+            className={`animate-slide-up overflow-hidden rounded-2xl border bg-surface shadow-sm transition-shadow hover:shadow-md dark:bg-slate-900 dev-dark:bg-surface-elevated ${isConflicting ? 'border-danger bg-danger/5 dark:border-danger' : isPicked ? 'border-accent/70 bg-accent/5 dark:border-accent/70' : 'border-slate-200 dark:border-slate-800 dev-dark:border-border'}`}
           >
             <legend className="sr-only">
               {game.awayTeam} at {game.homeTeam}
             </legend>
-            <div className="border-b border-slate-200 bg-surface-muted/60 px-4 py-3 dark:border-slate-800 dark:bg-slate-950/50">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-ink-muted dark:text-slate-400">
-                  {formatKickoff(game.kickoff)} · {game.status}
-                </p>
-                <span
-                  className={`inline-flex items-center gap-1 text-xs font-black uppercase tracking-[0.12em] ${isConflicting ? 'text-danger' : isPicked ? 'text-accent' : 'text-ink-muted dark:text-slate-400'}`}
-                >
-                  {isConflicting ? (
-                    <AlertTriangle size={13} aria-hidden="true" />
-                  ) : isPicked ? (
-                    <Check size={13} aria-hidden="true" />
-                  ) : null}
-                  {isConflicting ? 'Conflict' : isPicked ? 'Picked' : 'Not picked'}
-                </span>
-              </div>
-              <p className="mt-2 text-sm text-ink-muted dark:text-slate-400">
-                <span className="font-semibold text-ink dark:text-slate-200">
-                  {game.venueName ?? 'Venue unavailable'}
-                </span>
-                {game.venueLocation && <span> · {game.venueLocation}</span>}
-                <span>
+            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-slate-200 bg-surface-muted/60 px-3 py-2 text-xs dark:border-slate-800 dev-dark:border-border dark:bg-slate-950/50">
+              <p className="font-semibold uppercase tracking-[0.14em] text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
+                {formatKickoff(game.kickoff)} · {game.status}
+                <span className="normal-case tracking-normal text-ink-muted/80 dark:text-slate-500 dev-dark:text-text-muted">
                   {' '}
-                  · Line:{' '}
+                  · {game.venueName ?? 'Venue unavailable'}
+                  {game.venueLocation && ` · ${game.venueLocation}`} · Line:{' '}
                   {game.spreadTeam && game.spread !== null
                     ? `${game.spreadTeam} ${formatSpread(game.spread)}`
                     : 'Not available'}
                 </span>
               </p>
+              <span
+                className={`inline-flex shrink-0 items-center gap-1 text-xs font-black uppercase tracking-[0.12em] ${isConflicting ? 'text-danger' : isPicked ? 'text-accent' : 'text-ink-muted dark:text-slate-400 dev-dark:text-text-muted'}`}
+              >
+                {isConflicting ? (
+                  <AlertTriangle size={13} aria-hidden="true" />
+                ) : isPicked ? (
+                  <Check size={13} aria-hidden="true" />
+                ) : null}
+                {isConflicting ? 'Conflict' : isPicked ? 'Picked' : 'Not picked'}
+              </span>
             </div>
-            <div className="flex flex-col gap-5 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
-              <div className="min-w-0">
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">
-                  Matchup
-                </p>
-                <div className="mt-3 flex items-center gap-3">
+            <div className="flex flex-col gap-3 p-3 sm:p-4 lg:flex-row lg:items-center lg:justify-between lg:gap-6">
+              <div className="min-w-0 lg:w-64 lg:shrink-0">
+                <div className="flex items-center gap-3">
                   <div className="flex min-w-0 items-center gap-2">
                     <TeamLogo code={game.awayTeam} decorative />
-                    <span className="truncate text-base font-bold">{game.awayTeam}</span>
+                    <span
+                      data-testid={`team-name-${game.id}-away`}
+                      className={`truncate text-base font-bold ${game.status === 'final' && !game.isTie && game.winningTeam === game.awayTeam ? 'text-accent' : ''}`}
+                    >
+                      {game.awayTeam}
+                    </span>
+                    {game.awayRecord && (
+                      <span
+                        data-testid={`team-record-${game.id}-away`}
+                        className="text-xs font-semibold text-ink-muted dark:text-slate-400 dev-dark:text-text-muted"
+                      >
+                        ({game.awayRecord})
+                      </span>
+                    )}
                   </div>
-                  <span className="text-sm font-semibold text-ink-muted dark:text-slate-400">
-                    at
-                  </span>
+                  {game.status === 'final' ? (
+                    <div className="flex flex-col items-center">
+                      <span className="text-sm font-black text-primary dark:text-white dev-dark:text-ink">
+                        {game.awayScore ?? 0}–{game.homeScore ?? 0}
+                      </span>
+                      <span className="text-xs font-bold uppercase tracking-[0.08em] text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
+                        {game.isTie ? 'Final · Tie' : 'Final'}
+                      </span>
+                    </div>
+                  ) : (
+                    <span className="text-sm font-semibold text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
+                      at
+                    </span>
+                  )}
                   <div className="flex min-w-0 items-center gap-2">
                     <TeamLogo code={game.homeTeam} decorative />
-                    <span className="truncate text-base font-bold">{game.homeTeam}</span>
+                    <span
+                      data-testid={`team-name-${game.id}-home`}
+                      className={`truncate text-base font-bold ${game.status === 'final' && !game.isTie && game.winningTeam === game.homeTeam ? 'text-accent' : ''}`}
+                    >
+                      {game.homeTeam}
+                    </span>
+                    {game.homeRecord && (
+                      <span
+                        data-testid={`team-record-${game.id}-home`}
+                        className="text-xs font-semibold text-ink-muted dark:text-slate-400 dev-dark:text-text-muted"
+                      >
+                        ({game.homeRecord})
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
-              <div className="flex flex-col gap-4 sm:items-end">
+              <div className="flex flex-col gap-3 sm:items-end lg:flex-row lg:items-center lg:gap-6">
                 <div>
-                  <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-ink-muted dark:text-slate-400">
+                  <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
                     Pick a winner
                   </p>
                   <div
@@ -490,7 +562,7 @@ function GamesForm({ week, games, picks }: { week: NflWeek; games: NflGame[]; pi
                           aria-pressed={isSelected}
                           disabled={isLocked}
                           onClick={() => updateDraft(game.id, { team: isSelected ? '' : team })}
-                          className={`flex min-h-11 items-center gap-2 rounded-xl border px-3 py-2 text-sm font-bold transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-60 ${isSelected ? 'border-primary bg-primary text-white shadow-sm dark:border-sky dark:bg-sky/20 dark:text-sky' : 'border-slate-300 bg-white text-ink hover:border-sky hover:bg-sky/10 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:hover:border-sky'}`}
+                          className={`flex min-h-11 items-center gap-2 rounded-xl border px-3 py-2 text-sm font-bold transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-60 ${isSelected ? 'border-primary bg-primary text-white shadow-sm dark:border-sky dev-dark:border-accent dark:bg-sky/20 dev-dark:bg-accent/20 dark:text-sky dev-dark:text-accent' : 'border-slate-300 bg-white text-ink hover:border-sky hover:bg-sky/10 dark:border-slate-700 dev-dark:border-border-hover dark:bg-slate-950 dev-dark:bg-background dark:text-slate-100 dev-dark:text-ink dark:hover:border-sky dev-dark:hover:border-accent'}`}
                         >
                           <TeamLogo code={team} size="sm" decorative />
                           {team}
@@ -500,11 +572,11 @@ function GamesForm({ week, games, picks }: { week: NflWeek; games: NflGame[]; pi
                   </div>
                 </div>
                 <div>
-                  <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-ink-muted dark:text-slate-400">
+                  <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
                     Confidence
                   </p>
                   <div
-                    className="grid grid-cols-4 gap-2"
+                    className="grid grid-cols-4 gap-1.5"
                     role="group"
                     aria-label={`Confidence for ${game.awayTeam} at ${game.homeTeam}`}
                   >
@@ -528,7 +600,7 @@ function GamesForm({ week, games, picks }: { week: NflWeek; games: NflGame[]; pi
                               confidence: isSelected ? '' : String(value),
                             })
                           }
-                          className={`flex h-11 w-11 items-center justify-center rounded-xl border text-sm font-bold transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-60 ${isSelected ? 'border-gold bg-gold text-white shadow-sm' : isUsedElsewhere ? 'border-gold/60 bg-gold/10 text-gold hover:bg-gold/20' : 'border-slate-300 bg-white text-ink hover:border-gold hover:bg-gold/10 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100'}`}
+                          className={`flex h-11 w-11 items-center justify-center rounded-xl border text-sm font-bold transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-60 ${isSelected ? 'border-gold bg-gold text-white shadow-sm' : isUsedElsewhere ? 'border-gold/60 bg-gold/10 text-gold hover:bg-gold/20' : 'border-slate-300 bg-white text-ink hover:border-gold hover:bg-gold/10 dark:border-slate-700 dev-dark:border-border-hover dark:bg-slate-950 dev-dark:bg-background dark:text-slate-100 dev-dark:text-ink'}`}
                         >
                           {value}
                         </button>
@@ -542,37 +614,46 @@ function GamesForm({ week, games, picks }: { week: NflWeek; games: NflGame[]; pi
         )
       })}
 
-      <div className="sticky bottom-3 z-10 -mx-1 flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-surface/95 p-3 shadow-lg shadow-primary/10 backdrop-blur sm:static sm:mx-0 sm:border-0 sm:bg-transparent sm:p-0 sm:shadow-none sm:backdrop-blur-none dark:border-slate-800 dark:bg-slate-900/95 sm:dark:bg-transparent">
-        {saveMutation.isPending && (
-          <p role="status" className="text-sm font-semibold text-ink-muted dark:text-slate-400">
-            Saving…
-          </p>
-        )}
-        {saved && (
-          <p role="status" className="text-sm font-semibold text-accent">
-            {hasConflicts
-              ? 'Picks saved, but conflicts must be resolved before this week is complete.'
-              : voided
-                ? 'Picks saved. Incomplete or conflicting picks were voided.'
-                : 'Picks saved.'}
-          </p>
-        )}
-        {submitError && (
-          <p role="alert" className="text-sm text-danger">
-            {submitError}
-          </p>
-        )}
-      </div>
+      {(saveMutation.isPending || (saved && (hasConflicts || voided)) || submitError) && (
+        <div className="sticky bottom-3 z-10 -mx-1 flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-surface/95 p-3 shadow-lg shadow-primary/10 backdrop-blur sm:static sm:mx-0 sm:border-0 sm:bg-transparent sm:p-0 sm:shadow-none sm:backdrop-blur-none dark:border-slate-800 dev-dark:border-border dark:bg-slate-900/95 dev-dark:bg-surface-elevated/95 sm:dark:bg-transparent">
+          {saveMutation.isPending && (
+            <p
+              role="status"
+              className="text-sm font-semibold text-ink-muted dark:text-slate-400 dev-dark:text-text-muted"
+            >
+              Saving…
+            </p>
+          )}
+          {saved && hasConflicts && (
+            <p role="status" className="text-sm font-semibold text-accent">
+              Picks saved, but conflicts must be resolved before this week is complete.
+            </p>
+          )}
+          {saved && !hasConflicts && voided && (
+            <p role="status" className="text-sm font-semibold text-accent">
+              Picks saved. Incomplete or conflicting picks were voided.
+            </p>
+          )}
+          {submitError && (
+            <p role="alert" className="text-sm text-danger">
+              {submitError}
+            </p>
+          )}
+        </div>
+      )}
+
+      {submitPicksError && (
+        <p role="alert" className="text-sm text-danger">
+          {submitPicksError}
+        </p>
+      )}
     </form>
   )
 }
 
 function PicksScrollPane({ children }: { children: ReactNode }) {
   return (
-    <div
-      data-testid="picks-scroll-pane"
-      className="h-[calc(100dvh-8rem)] overflow-y-auto overscroll-contain px-1 pb-4 sm:h-auto sm:overflow-visible sm:px-0 sm:pb-0"
-    >
+    <div data-testid="picks-scroll-pane" className="pb-4 sm:pb-0">
       {children}
     </div>
   )
@@ -592,7 +673,7 @@ export function PicksPage() {
 
   if (isPending)
     return (
-      <p className="animate-fade-in text-slate-600 dark:text-slate-300">
+      <p className="animate-fade-in text-slate-600 dark:text-slate-300 dev-dark:text-text-secondary">
         Loading this week&apos;s games…
       </p>
     )
@@ -607,10 +688,11 @@ export function PicksPage() {
   const week = picksCard?.week
   const games = picksCard?.games
   const picks = picksCard?.picks
+  const submission = picksCard?.submission
 
-  if (!week || !games || !picks)
+  if (!week || !games || !picks || !submission)
     return (
-      <p className="animate-fade-in text-slate-600 dark:text-slate-300">
+      <p className="animate-fade-in text-slate-600 dark:text-slate-300 dev-dark:text-text-secondary">
         No current week is available.
       </p>
     )
@@ -618,14 +700,25 @@ export function PicksPage() {
   if (games.length === 0)
     return (
       <div className="animate-fade-in space-y-2">
-        <h1 className="text-3xl font-black text-primary dark:text-white">Week {week.weekNumber}</h1>
-        <p className="text-slate-600 dark:text-slate-300">No games are scheduled for this week.</p>
+        <h1 className="text-3xl font-black text-primary dark:text-white dev-dark:text-ink">
+          Week {week.weekNumber}
+        </h1>
+        <p className="text-slate-600 dark:text-slate-300 dev-dark:text-text-secondary">
+          No games are scheduled for this week.
+        </p>
       </div>
     )
 
+  const picksKey = picks.map((pick) => `${pick.gameId}:${pick.team}:${pick.confidence}`).join('|')
   return (
     <PicksScrollPane>
-      <GamesForm key={week.id} week={week} games={games} picks={picks} />
+      <GamesForm
+        key={`${week.id}:${picksKey}`}
+        week={week}
+        games={games}
+        picks={picks}
+        submission={submission}
+      />
     </PicksScrollPane>
   )
 }

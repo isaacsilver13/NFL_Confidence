@@ -2,10 +2,13 @@
 
 import uuid
 from collections import defaultdict
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import desc, distinct, func, select
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.core.exceptions import NotFoundError
 from app.models.enums import GameStatus, WeekStatus
 from app.models.league import League
@@ -17,12 +20,19 @@ from app.models.weekly_result import WeeklyResult
 from app.repositories import (
     league_member_repository,
     league_repository,
+    nfl_game_repository,
+    pick_repository,
     season_result_repository,
+    week_submission_repository,
     weekly_result_repository,
 )
 from app.schemas.leaderboard import (
+    GameLabelRead,
     GamePickBreakdownRead,
+    GamePickDetailRead,
+    GamePicksRead,
     LeaderboardMemberRead,
+    MemberGamePickRead,
     PickBreakdownRead,
     SeasonStandingsRead,
     TeamPickCountRead,
@@ -30,6 +40,7 @@ from app.schemas.leaderboard import (
     WeeklyLeaderboardRead,
     WeeklyPickBreakdownRead,
 )
+from app.services import picks_service
 
 
 def _weekly_payout_cents(*, rank: int, member_count: int) -> int:
@@ -66,8 +77,10 @@ def _ranked_members(
     season: bool = False,
     member_count: int = 0,
     points_remaining_by_user: dict[uuid.UUID, int] | None = None,
+    night_game_picks_by_user: dict[uuid.UUID, list[MemberGamePickRead]] | None = None,
 ) -> list[LeaderboardMemberRead]:
     points_remaining_by_user = points_remaining_by_user or {}
+    night_game_picks_by_user = night_game_picks_by_user or {}
     usable_results = [result for result in results if result.user is not None]
     ordered = sorted(
         usable_results,
@@ -116,6 +129,7 @@ def _ranked_members(
                     else 0
                 ),
                 points_remaining=points_remaining_by_user.get(result.user_id, 0),
+                night_game_picks=night_game_picks_by_user.get(result.user_id, []),
             )
         )
     return members
@@ -149,6 +163,46 @@ def _get_week(db: Session, league: League, week_number: int | None) -> NflWeek:
     return week
 
 
+_SUNDAY_NIGHT_START_HOUR = 18  # local; the afternoon slate never starts this late
+
+
+def _is_night_game(game: NflGame, tz: ZoneInfo) -> bool:
+    """Sunday night or Monday night: any Monday kickoff, or a Sunday kickoff at 6pm+ local."""
+    local = game.kickoff_time.astimezone(tz)
+    return local.weekday() == 0 or (local.weekday() == 6 and local.hour >= _SUNDAY_NIGHT_START_HOUR)
+
+
+def _night_games_picks(
+    db: Session, *, week_id: uuid.UUID, user_ids: set[uuid.UUID]
+) -> tuple[list, dict[uuid.UUID, list[MemberGamePickRead]]]:
+    """The week's Sunday-night and Monday-night games (in kickoff order) and each member's
+    picks for them. Empty until the first of those games kicks off, so nobody sees a
+    rival's late-game picks while they can still change their own."""
+    tz = ZoneInfo(get_settings().scheduler_timezone)
+    games = sorted(nfl_game_repository.get_by_week_id(db, week_id), key=lambda g: g.kickoff_time)
+    night_games = [game for game in games if _is_night_game(game, tz)]
+    if not night_games or night_games[0].kickoff_time > datetime.now(timezone.utc):
+        return [], {}
+
+    night_game_ids = {game.id for game in night_games}
+    picks = pick_repository.list_by_week_and_users(db, week_id=week_id, user_ids=user_ids)
+    picks_by_user_game = {
+        (pick.user_id, pick.game_id): pick
+        for pick in picks
+        if pick.voided_at is None and pick.game_id in night_game_ids
+    }
+    picks_by_user: dict[uuid.UUID, list[MemberGamePickRead]] = {}
+    for user_id in user_ids:
+        picks_by_user[user_id] = [
+            MemberGamePickRead(
+                game_id=game.id, team=pick.picked_team, confidence=pick.confidence_value
+            )
+            for game in night_games
+            if (pick := picks_by_user_game.get((user_id, game.id))) is not None
+        ]
+    return night_games, picks_by_user
+
+
 def get_weekly_leaderboard(
     db: Session, *, league: League, week_number: int | None = None
 ) -> WeeklyLeaderboardRead:
@@ -156,16 +210,33 @@ def get_weekly_leaderboard(
     results = weekly_result_repository.list_by_league_and_week(
         db, league_id=league.id, week_id=week.id
     )
+    # Submit is the formal entry, but a complete autosaved card counts too.
+    submitted_user_ids = week_submission_repository.list_user_ids_for_week(
+        db, week_id=week.id
+    ) | picks_service.list_complete_card_user_ids(db, week_id=week.id)
+    results = [result for result in results if result.user_id in submitted_user_ids]
+    night_games, night_game_picks_by_user = _night_games_picks(
+        db,
+        week_id=week.id,
+        user_ids={result.user_id for result in results if result.user_id is not None},
+    )
     standings = _ranked_members(
         results,
         member_count=league_repository.count_members(db, league.id),
         points_remaining_by_user=_points_remaining_by_user(db, week_id=week.id),
+        night_game_picks_by_user=night_game_picks_by_user,
     )
     if not standings:
         raise NotFoundError(f"Week {week.week_number} has no leaderboard data.")
+    kickoffs = [game.kickoff_time for game in nfl_game_repository.get_by_week_id(db, week.id)]
     return WeeklyLeaderboardRead(
         week=WeekLabelRead(week_number=week.week_number, season_number=week.season),
         standings=standings,
+        night_games=[
+            GameLabelRead(game_id=game.id, away_team=game.away_team, home_team=game.home_team)
+            for game in night_games
+        ],
+        picks_revealed=bool(kickoffs) and min(kickoffs) <= datetime.now(timezone.utc),
     )
 
 
@@ -200,6 +271,8 @@ def get_pick_breakdown(db: Session, *, league: League, viewer_id: uuid.UUID) -> 
             NflGame.id,
             NflGame.away_team,
             NflGame.home_team,
+            NflGame.away_record,
+            NflGame.home_record,
         )
         .select_from(NflGame)
         .join(NflWeek, NflGame.week_id == NflWeek.id)
@@ -250,7 +323,7 @@ def get_pick_breakdown(db: Session, *, league: League, viewer_id: uuid.UUID) -> 
         confidences_by_game[game_id].append(confidence)
 
     games_by_week: dict[int, list[GamePickBreakdownRead]] = defaultdict(list)
-    for week_number, game_id, away_team, home_team in game_rows:
+    for week_number, game_id, away_team, home_team, away_record, home_record in game_rows:
         confidences = sorted(confidences_by_game[game_id])
         median_confidence: float | None = None
         if confidences:
@@ -265,6 +338,8 @@ def get_pick_breakdown(db: Session, *, league: League, viewer_id: uuid.UUID) -> 
                 game_id=game_id,
                 away_team=away_team,
                 home_team=home_team,
+                away_record=away_record,
+                home_record=home_record,
                 median_confidence=median_confidence,
                 team_counts=[
                     TeamPickCountRead(team=away_team, user_count=counts.get(away_team, 0)),
@@ -281,5 +356,53 @@ def get_pick_breakdown(db: Session, *, league: League, viewer_id: uuid.UUID) -> 
                 games=games_by_week[week.week_number],
             )
             for week in completed_weeks
+        ],
+    )
+
+
+def get_game_picks(
+    db: Session, *, league: League, viewer_id: uuid.UUID, game_id: uuid.UUID
+) -> GamePicksRead:
+    """Every league member's pick for one completed-week game, for the leaderboard's
+    per-game "View Picks" modal."""
+    membership = league_member_repository.get_by_league_and_user(db, league.id, viewer_id)
+    if membership is None:
+        raise NotFoundError("You are not a member of the active league.")
+
+    game = db.execute(
+        select(NflGame)
+        .join(NflWeek, NflGame.week_id == NflWeek.id)
+        .where(
+            NflGame.id == game_id,
+            NflWeek.season == league.season,
+            NflWeek.status == WeekStatus.COMPLETE,
+        )
+    ).scalar_one_or_none()
+    if game is None:
+        raise NotFoundError("This game's picks aren't available yet.")
+
+    rows = db.execute(
+        select(Pick, LeagueMember)
+        .join(LeagueMember, LeagueMember.user_id == Pick.user_id)
+        .where(
+            Pick.game_id == game.id,
+            LeagueMember.league_id == league.id,
+            Pick.voided_at.is_(None),
+        )
+        .order_by(Pick.confidence_value.desc())
+    ).all()
+
+    return GamePicksRead(
+        game_id=game.id,
+        away_team=game.away_team,
+        home_team=game.home_team,
+        picks=[
+            GamePickDetailRead(
+                member_name=member.user.display_name,
+                team=pick.picked_team,
+                confidence=pick.confidence_value,
+                is_correct=(pick.points_earned > 0) if pick.points_earned is not None else None,
+            )
+            for pick, member in rows
         ],
     )

@@ -15,11 +15,12 @@ const JoinLeaguePage = lazy(() =>
 const LeagueSettingsPage = lazy(() =>
   import('./pages/LeagueSettingsPage').then((m) => ({ default: m.LeagueSettingsPage })),
 )
+const PicksPage = lazy(() => import('./pages/PicksPage').then((m) => ({ default: m.PicksPage })))
 
 function PageLoader() {
   return (
     <div className="flex min-h-screen items-center justify-center" role="status">
-      <div className="flex items-center gap-2 text-sm font-semibold text-ink-muted dark:text-slate-400">
+      <div className="flex items-center gap-2 text-sm font-semibold text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
         <LoaderCircle className="h-5 w-5 animate-spin" aria-hidden="true" />
         Loading...
       </div>
@@ -49,7 +50,14 @@ function App() {
               </Suspense>
             }
           />
-          <Route path="/picks" element={<Navigate to="/#picks" replace />} />
+          <Route
+            path="/picks"
+            element={
+              <Suspense fallback={<PageLoader />}>
+                <PicksPage />
+              </Suspense>
+            }
+          />
           <Route path="/leaderboard" element={<Navigate to="/#leaderboard" replace />} />
           <Route path="/standings" element={<Navigate to="/#standings" replace />} />
           <Route path="/profile" element={<Navigate to="/#profile" replace />} />

@@ -4,13 +4,19 @@ import type {
   League,
   LeagueMember,
   LeagueMemberUpdateInput,
+  LeaguePot,
   MemberPaymentStatuses,
+  MemberSubmissionStatuses,
   VoidUnpaidPicksResult,
 } from '@/types/league'
 import { apiFetch } from './client'
 
 export async function fetchLeague(): Promise<League> {
   return apiFetch<League>('/league')
+}
+
+export async function fetchLeaguePot(): Promise<LeaguePot> {
+  return apiFetch<LeaguePot>('/league/pot')
 }
 
 export async function fetchLeagueMembers(): Promise<LeagueMember[]> {
@@ -70,4 +76,10 @@ export async function voidUnpaidPicks(week: number): Promise<VoidUnpaidPicksResu
     method: 'POST',
     body: JSON.stringify({ week }),
   })
+}
+
+export async function fetchMemberSubmissionStatuses(
+  week: number,
+): Promise<MemberSubmissionStatuses> {
+  return apiFetch<MemberSubmissionStatuses>(`/league/submissions?week=${week}`)
 }

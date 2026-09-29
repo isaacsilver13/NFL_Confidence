@@ -198,10 +198,11 @@ describe('TeamLogo Component', () => {
     expect(img).toHaveClass('h-14', 'w-14')
   })
 
-  it('should maintain border and shadow styling on images', () => {
+  it('should preserve the logo aspect ratio instead of stretching it', () => {
     render(<TeamLogo code="PHI" />)
     const element = screen.getByAltText('Philadelphia Eagles')
-    expect(element).toHaveClass('border-2', 'border-white/70', 'shadow-sm', 'rounded-full')
+    expect(element).toHaveClass('object-contain')
+    expect(element).not.toHaveClass('rounded-full')
   })
 
   it('should fall back to badge when image load fails', () => {

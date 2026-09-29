@@ -1,17 +1,19 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
-import { ArrowUpRight, CalendarDays, KeyRound, Users } from 'lucide-react'
+import { ArrowUpRight, CalendarDays, KeyRound, LoaderCircle, Users } from 'lucide-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { ApiError } from '@/api/client'
-import { createLeague, joinLeagueWithCode } from '@/api/league'
+import { createLeague, fetchLeaguePot, joinLeagueWithCode } from '@/api/league'
 import { fetchCompletedWeeks, fetchPickHistory } from '@/api/nfl'
 import { fetchWeeklyLeaderboard, fetchSeasonStandings } from '@/api/leaderboard'
 import { fetchCurrentPicksCard, fetchSessionBootstrap } from '@/api/session'
 import { Button } from '@/components/ui/Button'
 import { AccordionSection } from '@/components/ui/AccordionSection'
 
-const PicksPage = lazy(() =>
-  import('./PicksPage').then((module) => ({ default: module.PicksPage })),
+const WeeklyGameBreakdownSection = lazy(() =>
+  import('@/components/leaderboard/WeeklyGameBreakdownSection').then((module) => ({
+    default: module.WeeklyGameBreakdownSection,
+  })),
 )
 const LeaderboardPage = lazy(() =>
   import('./LeaderboardPage').then((module) => ({ default: module.LeaderboardPage })),
@@ -23,7 +25,7 @@ const ProfilePage = lazy(() =>
   import('./ProfilePage').then((module) => ({ default: module.ProfilePage })),
 )
 
-const SECTION_IDS = ['picks', 'leaderboard', 'standings', 'profile'] as const
+const SECTION_IDS = ['leaderboard', 'breakdown', 'standings', 'profile'] as const
 type SectionId = (typeof SECTION_IDS)[number]
 const OPEN_SECTIONS_STORAGE_PREFIX = 'nfl-confidence:open-sections:'
 
@@ -33,25 +35,21 @@ function sectionFromHash(): SectionId | null {
   return SECTION_IDS.includes(hash as SectionId) ? (hash as SectionId) : null
 }
 
-function initialOpenSections(userId: string): SectionId[] {
-  let storedSections: SectionId[] = ['picks']
+function storedOpenSections(userId: string): SectionId[] {
   try {
     const stored = window.localStorage.getItem(`${OPEN_SECTIONS_STORAGE_PREFIX}${userId}`)
     if (stored) {
       const parsed = JSON.parse(stored) as unknown
       if (Array.isArray(parsed)) {
-        storedSections = parsed.filter((section): section is SectionId =>
+        return parsed.filter((section): section is SectionId =>
           SECTION_IDS.includes(section as SectionId),
         )
       }
     }
   } catch {
-    storedSections = ['picks']
+    // fall through to the default below
   }
-  const hashSection = sectionFromHash()
-  return hashSection && !storedSections.includes(hashSection)
-    ? [...storedSections, hashSection]
-    : storedSections
+  return ['leaderboard']
 }
 
 function sectionSummary(value: string | undefined, fallback: string): string {
@@ -65,8 +63,15 @@ function DashboardSections({
   userId: string
   currentWeekNumber: number | undefined
 }) {
-  const [openSections, setOpenSections] = useState<SectionId[]>(() => initialOpenSections(userId))
-  const isOpen = (section: SectionId) => openSections.includes(section)
+  // `openSections` tracks the user's own manual expand/collapse choices and is
+  // persisted per-user. `hashSection` tracks the *current* URL hash and always
+  // forces that one section open, independent of history — so navigating to a
+  // new hash (including a direct/bookmarked link) always opens the right
+  // section instead of only ever adding to whatever happened to be open when
+  // this component first mounted.
+  const [openSections, setOpenSections] = useState<SectionId[]>(() => storedOpenSections(userId))
+  const [hashSection, setHashSection] = useState<SectionId | null>(() => sectionFromHash())
+  const isOpen = (section: SectionId) => openSections.includes(section) || section === hashSection
 
   useEffect(() => {
     try {
@@ -81,26 +86,25 @@ function DashboardSections({
 
   useEffect(() => {
     function handleHashChange() {
-      const section = sectionFromHash()
-      if (section) {
-        setOpenSections((current) => (current.includes(section) ? current : [...current, section]))
-      }
+      setHashSection(sectionFromHash())
     }
     window.addEventListener('hashchange', handleHashChange)
     return () => window.removeEventListener('hashchange', handleHashChange)
   }, [])
 
   function toggleSection(section: SectionId) {
+    const opening = !isOpen(section)
     setOpenSections((current) => {
-      const next = current.includes(section)
-        ? current.filter((currentSection) => currentSection !== section)
-        : [...current, section]
-      const nextLocation = current.includes(section)
-        ? `${window.location.pathname}${window.location.search}`
-        : `${window.location.pathname}${window.location.search}#${section}`
-      window.history.replaceState(null, '', nextLocation)
-      return next
+      if (opening) return current.includes(section) ? current : [...current, section]
+      return current.filter((currentSection) => currentSection !== section)
     })
+    if (!opening && section === hashSection) {
+      setHashSection(null)
+    }
+    const nextLocation = opening
+      ? `${window.location.pathname}${window.location.search}#${section}`
+      : `${window.location.pathname}${window.location.search}`
+    window.history.replaceState(null, '', nextLocation)
   }
 
   const leaderboardWeeksQuery = useQuery({
@@ -126,7 +130,7 @@ function DashboardSections({
   const picksQuery = useQuery({
     queryKey: ['picks', 'card', 'current'],
     queryFn: fetchCurrentPicksCard,
-    enabled: isOpen('picks') || isOpen('profile'),
+    enabled: isOpen('profile'),
     staleTime: 10_000,
   })
   const historyQuery = useQuery({
@@ -141,16 +145,11 @@ function DashboardSections({
   const currentPickCount = picksQuery.data?.picks.filter((pick) => !pick.isVoided).length
   const currentGameCount = picksQuery.data?.games.length ?? 16
   const summaries: Record<SectionId, string> = {
-    picks: sectionSummary(
-      picksQuery.data
-        ? `${currentPickCount ?? 0} of ${currentGameCount} picked this week`
-        : undefined,
-      "Make this week's picks",
-    ),
     leaderboard: sectionSummary(
       weeklyMember ? `Your current rank is #${weeklyMember.rank}` : undefined,
       'See the weekly race and your current rank',
     ),
+    breakdown: 'See how the league split its picks on each completed game',
     standings: sectionSummary(
       seasonMember
         ? `Your season pick record is ${seasonMember.correctPicks}-${seasonMember.incorrectPicks}`
@@ -168,16 +167,16 @@ function DashboardSections({
   }
 
   const sectionContent: Record<SectionId, React.ReactNode> = {
-    picks: <PicksPage />,
     leaderboard: <LeaderboardPage />,
+    breakdown: <WeeklyGameBreakdownSection />,
     standings: <StandingsPage />,
     profile: <ProfilePage />,
   }
   const sectionTitles: Record<SectionId, string> = {
-    picks: 'Picks',
-    leaderboard: 'Leaderboard',
-    standings: 'Standings',
-    profile: 'Profile Picks',
+    leaderboard: 'Weekly Leaderboard',
+    breakdown: 'Weekly Game Breakdown',
+    standings: 'Season Standings',
+    profile: 'My Picks',
   }
 
   return (
@@ -193,7 +192,10 @@ function DashboardSections({
         >
           <Suspense
             fallback={
-              <p className="text-slate-600 dark:text-slate-300" aria-live="polite">
+              <p
+                className="text-slate-600 dark:text-slate-300 dev-dark:text-text-secondary"
+                aria-live="polite"
+              >
                 Loading {sectionTitles[section].toLowerCase()}...
               </p>
             }
@@ -222,8 +224,12 @@ function CreateLeagueForm() {
     try {
       await createLeague({ name: name.trim(), season })
       await queryClient.invalidateQueries({ queryKey: ['session', 'bootstrap'] })
-    } catch {
-      setError('Could not create the league. Please try again.')
+    } catch (error) {
+      setError(
+        error instanceof ApiError
+          ? error.message
+          : 'Could not create the league. Please try again.',
+      )
     } finally {
       setIsSubmitting(false)
     }
@@ -241,7 +247,7 @@ function CreateLeagueForm() {
           required
           value={name}
           onChange={(event) => setName(event.target.value)}
-          className="min-h-11 w-full rounded-md border border-slate-300 px-3 py-2 dark:border-slate-700 dark:bg-slate-900"
+          className="min-h-11 w-full rounded-md border border-slate-300 px-3 py-2 dark:border-slate-700 dev-dark:border-border-hover dark:bg-slate-900 dev-dark:bg-surface-elevated"
         />
       </div>
       <div>
@@ -254,13 +260,15 @@ function CreateLeagueForm() {
           required
           value={season}
           onChange={(event) => setSeason(Number(event.target.value))}
-          className="min-h-11 w-full rounded-md border border-slate-300 px-3 py-2 dark:border-slate-700 dark:bg-slate-900"
+          className="min-h-11 w-full rounded-md border border-slate-300 px-3 py-2 dark:border-slate-700 dev-dark:border-border-hover dark:bg-slate-900 dev-dark:bg-surface-elevated"
         />
       </div>
       <Button type="submit" disabled={isSubmitting} fullWidth>
         {isSubmitting ? 'Creating…' : 'Create league'}
       </Button>
-      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+      {error && (
+        <p className="text-sm text-red-600 dark:text-red-400 dev-dark:text-error">{error}</p>
+      )}
     </form>
   )
 }
@@ -303,15 +311,62 @@ function JoinLeagueForm() {
           required
           value={code}
           onChange={(event) => setCode(event.target.value)}
-          className="min-h-11 w-full rounded-md border border-slate-300 px-3 py-2 dark:border-slate-700 dark:bg-slate-900"
+          className="min-h-11 w-full rounded-md border border-slate-300 px-3 py-2 dark:border-slate-700 dev-dark:border-border-hover dark:bg-slate-900 dev-dark:bg-surface-elevated"
         />
       </div>
       <Button type="submit" disabled={isSubmitting} fullWidth>
         <KeyRound size={16} aria-hidden="true" />
         {isSubmitting ? 'Joining…' : 'Join league'}
       </Button>
-      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+      {error && (
+        <p className="text-sm text-red-600 dark:text-red-400 dev-dark:text-error">{error}</p>
+      )}
     </form>
+  )
+}
+
+function formatCents(cents: number): string {
+  return `$${Math.round(cents / 100)}`
+}
+
+function LeaguePotCard() {
+  const { data: pot } = useQuery({
+    queryKey: ['league', 'pot'],
+    queryFn: fetchLeaguePot,
+    staleTime: 60_000,
+  })
+
+  if (!pot || !pot.isVisible) return null
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-surface p-5 shadow-sm dark:border-slate-800 dev-dark:border-border dark:bg-slate-900 dev-dark:bg-surface-elevated">
+      <p className="text-xs font-bold uppercase tracking-[0.16em] text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
+        League pot
+      </p>
+      <p className="mt-1 text-2xl font-black text-primary dark:text-white dev-dark:text-ink">
+        {formatCents(pot.potCents)}
+      </p>
+      <div className="mt-3 flex flex-wrap gap-4 text-sm">
+        <span className="inline-flex items-center gap-1.5">
+          <span aria-hidden="true">🥇</span>
+          <span className="font-bold text-primary dark:text-white dev-dark:text-ink">
+            {formatCents(pot.firstPlaceCents)}
+          </span>
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span aria-hidden="true">🥈</span>
+          <span className="font-bold text-primary dark:text-white dev-dark:text-ink">
+            {formatCents(pot.secondPlaceCents)}
+          </span>
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span aria-hidden="true">🥉</span>
+          <span className="font-bold text-primary dark:text-white dev-dark:text-ink">
+            {formatCents(pot.thirdPlaceCents)}
+          </span>
+        </span>
+      </div>
+    </div>
   )
 }
 
@@ -333,7 +388,15 @@ export function DashboardPage() {
   const user = bootstrapData?.user
 
   if (isLoading) {
-    return null
+    return (
+      <div
+        className="flex items-center gap-2 py-10 text-sm font-semibold text-ink-muted dark:text-slate-400 dev-dark:text-text-muted"
+        role="status"
+      >
+        <LoaderCircle className="h-5 w-5 animate-spin" aria-hidden="true" />
+        Loading...
+      </div>
+    )
   }
 
   if (
@@ -346,14 +409,14 @@ export function DashboardPage() {
           <p className="text-xs font-bold uppercase tracking-[0.2em] text-accent">
             Your season starts here
           </p>
-          <h1 className="mt-2 text-3xl font-black tracking-tight text-primary dark:text-white">
+          <h1 className="mt-2 text-3xl font-black tracking-tight text-primary dark:text-white dev-dark:text-ink">
             Welcome to the pool.
           </h1>
         </div>
-        <p className="text-slate-600 dark:text-slate-300">
+        <p className="text-slate-600 dark:text-slate-300 dev-dark:text-text-secondary">
           No league has been created yet. Create one to get started.
         </p>
-        <div className="max-w-md rounded-2xl border border-slate-200 bg-surface p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="max-w-md rounded-2xl border border-slate-200 bg-surface p-5 shadow-sm dark:border-slate-800 dev-dark:border-border dark:bg-slate-900 dev-dark:bg-surface-elevated">
           <CreateLeagueForm />
         </div>
       </div>
@@ -365,15 +428,15 @@ export function DashboardPage() {
       <div className="animate-fade-in space-y-6">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.2em] text-accent">League access</p>
-          <h1 className="mt-2 text-3xl font-black tracking-tight text-primary dark:text-white">
+          <h1 className="mt-2 text-3xl font-black tracking-tight text-primary dark:text-white dev-dark:text-ink">
             Join your pool.
           </h1>
         </div>
-        <p className="text-slate-600 dark:text-slate-300">
+        <p className="text-slate-600 dark:text-slate-300 dev-dark:text-text-secondary">
           You are signed in, but you are not a member yet. Ask the commissioner for the league
           passcode to join.
         </p>
-        <div className="max-w-md rounded-2xl border border-slate-200 bg-surface p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="max-w-md rounded-2xl border border-slate-200 bg-surface p-5 shadow-sm dark:border-slate-800 dev-dark:border-border dark:bg-slate-900 dev-dark:bg-surface-elevated">
           <JoinLeagueForm />
         </div>
       </div>
@@ -387,11 +450,11 @@ export function DashboardPage() {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.2em] text-accent">League hub</p>
-          <h1 className="mt-2 text-3xl font-black tracking-tight text-primary dark:text-white">
+          <h1 className="mt-2 text-3xl font-black tracking-tight text-primary dark:text-white dev-dark:text-ink">
             Dashboard
           </h1>
         </div>
-        <Button variant="secondary" onClick={() => void navigate('/#picks')}>
+        <Button variant="secondary" onClick={() => void navigate('/picks')}>
           Make picks <ArrowUpRight size={16} aria-hidden="true" />
         </Button>
       </div>
@@ -412,14 +475,15 @@ export function DashboardPage() {
           </div>
         </div>
       )}
-      <div className="rounded-2xl border border-slate-200 bg-surface p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <p className="text-xs font-bold uppercase tracking-[0.16em] text-ink-muted dark:text-slate-400">
+      <div className="rounded-2xl border border-slate-200 bg-surface p-5 shadow-sm dark:border-slate-800 dev-dark:border-border dark:bg-slate-900 dev-dark:bg-surface-elevated">
+        <p className="text-xs font-bold uppercase tracking-[0.16em] text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
           Current week
         </p>
-        <p className="mt-2 text-2xl font-black text-primary dark:text-white">
+        <p className="mt-2 text-2xl font-black text-primary dark:text-white dev-dark:text-ink">
           {currentWeek ? `Week ${currentWeek.weekNumber}` : 'Unavailable'}
         </p>
       </div>
+      <LeaguePotCard />
       <DashboardSections userId={user.id} currentWeekNumber={currentWeek?.weekNumber} />
     </div>
   )

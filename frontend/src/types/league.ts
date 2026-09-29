@@ -49,8 +49,34 @@ export interface MemberPaymentStatuses {
   members: MemberPaymentStatus[]
 }
 
+export interface LeaguePot {
+  weekNumber: number
+  locksAt: string | null
+  isVisible: boolean
+  paidMemberCount: number
+  potCents: number
+  firstPlaceCents: number
+  secondPlaceCents: number
+  thirdPlaceCents: number
+}
+
 export interface VoidUnpaidPicksResult {
   week: number
   voidedPickCount: number
   affectedMemberCount: number
+}
+
+export interface MemberSubmissionStatus {
+  userId: string
+  displayName: string
+  email: string
+  role: LeagueMember['role']
+  submittedAt: string | null
+  pickCount: number
+  isComplete: boolean
+}
+
+export interface MemberSubmissionStatuses {
+  week: number
+  members: MemberSubmissionStatus[]
 }

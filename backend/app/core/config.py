@@ -28,6 +28,8 @@ class Settings(BaseSettings):
     import_hour: int = 9
     reminder_day: str = "wed"
     reminder_hour: int = 17
+    report_day: str = "tue"
+    report_hour: int = 8
 
     database_url: str = (
         "postgresql+psycopg://nfl_confidence:nfl_confidence@localhost:5432/nfl_confidence"

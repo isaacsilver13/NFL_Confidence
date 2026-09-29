@@ -43,11 +43,14 @@ class ScheduleConfig:
     import_hour: int = 9
     reminder_day: str = "wed"
     reminder_hour: int = 17
+    report_day: str = "tue"
+    report_hour: int = 8
 
     def __post_init__(self) -> None:
         # Fail at construction, not at the first tick, on a mistyped day name.
         _weekday(self.import_day)
         _weekday(self.reminder_day)
+        _weekday(self.report_day)
 
     @classmethod
     def from_settings(cls, settings) -> "ScheduleConfig":
@@ -62,6 +65,8 @@ class ScheduleConfig:
             import_hour=settings.import_hour,
             reminder_day=settings.reminder_day,
             reminder_hour=settings.reminder_hour,
+            report_day=settings.report_day,
+            report_hour=settings.report_hour,
         )
 
 
@@ -72,7 +77,7 @@ class Slot:
 
 
 def due_slots(now: datetime, cfg: ScheduleConfig) -> list[Slot]:
-    """Slots due at `now`, in run order (import -> syncs -> reminder -> pick lock)."""
+    """Slots due at `now`, in run order (import -> syncs -> reminder/report -> pick lock)."""
     if now.tzinfo is None:
         raise ValueError("due_slots needs a timezone-aware datetime")
 
@@ -91,6 +96,8 @@ def due_slots(now: datetime, cfg: ScheduleConfig) -> list[Slot]:
         due.append("overnight_score_sync")
     if weekday == _weekday(cfg.reminder_day) and hour == cfg.reminder_hour:
         due.append("weekly_picks_reminder")
+    if weekday == _weekday(cfg.report_day) and hour == cfg.report_hour:
+        due.append("weekly_report")
     # Stamps locked_at once a kickoff has passed; cheap and idempotent. Bookkeeping only:
     # pick writes enforce the lock at kickoff themselves.
     due.append("lock_expired_picks")

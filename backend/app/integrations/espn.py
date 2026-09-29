@@ -25,10 +25,14 @@ class EspnGame:
     home_score: int | None
     winning_team: str | None
     is_tie: bool
+    clock: str | None
+    period: int | None
     venue_name: str | None
     venue_location: str | None
     spread_team: str | None
     spread: float | None
+    away_record: str | None = None
+    home_record: str | None = None
 
 
 def _team_code(competitor: dict[str, Any]) -> str | None:
@@ -42,6 +46,14 @@ def _score(competitor: dict[str, Any]) -> int | None:
         return int(value) if value is not None and value != "" else None
     except (TypeError, ValueError):
         return None
+
+
+def _record(competitor: dict[str, Any]) -> str | None:
+    for record in competitor.get("records") or []:
+        if record.get("type") == "total":
+            summary = record.get("summary")
+            return summary if isinstance(summary, str) and summary else None
+    return None
 
 
 def _status(event: dict[str, Any], competition: dict[str, Any]) -> str:
@@ -58,6 +70,21 @@ def _status(event: dict[str, Any], competition: dict[str, Any]) -> str:
     if "cancel" in name:
         return "cancelled"
     return "scheduled"
+
+
+def _clock(event: dict[str, Any], competition: dict[str, Any]) -> tuple[str | None, int | None]:
+    # Same nesting level as `_status()`: ESPN carries displayClock/period on the
+    # competition-level status object (falling back to the event-level status).
+    status = competition.get("status") or event.get("status") or {}
+    clock = status.get("displayClock")
+    if not clock:
+        clock = None
+    period = status.get("period")
+    try:
+        period = int(period) if period is not None and period != "" else None
+    except (TypeError, ValueError):
+        period = None
+    return clock, period
 
 
 def _venue(competition: dict[str, Any]) -> tuple[str | None, str | None]:
@@ -113,6 +140,9 @@ def normalize_event(event: dict[str, Any], *, season: int, week_number: int) -> 
             winning_team = away_team if away_score > home_score else home_team
     spread_team, spread = _spread(competition, away_team, home_team)
     venue_name, venue_location = _venue(competition)
+    clock, period = _clock(event, competition)
+    away_record = _record(away)
+    home_record = _record(home)
     return EspnGame(
         espn_game_id=str(event["id"]),
         season=season,
@@ -125,10 +155,14 @@ def normalize_event(event: dict[str, Any], *, season: int, week_number: int) -> 
         home_score=home_score,
         winning_team=winning_team,
         is_tie=is_tie,
+        clock=clock,
+        period=period,
         venue_name=venue_name,
         venue_location=venue_location,
         spread_team=spread_team,
         spread=spread,
+        away_record=away_record,
+        home_record=home_record,
     )
 
 

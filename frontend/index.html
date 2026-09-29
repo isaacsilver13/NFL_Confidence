@@ -5,6 +5,23 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>NFL Confidence Pool</title>
+    <script>
+      // Runs synchronously before first paint to avoid a flash of the wrong theme.
+      // Keep this string literal in sync with ThemeProvider.tsx's THEME_STORAGE_KEY.
+      if (localStorage.getItem('nfl-confidence:theme') !== 'light') {
+        document.documentElement.classList.add('dark')
+      }
+      // The placeholder below is replaced at build time by Vite's HTML env
+      // interpolation (see frontend/fly.dev.toml's [build.args] and
+      // docker/Dockerfile.frontend). Local `npm run dev` has no env var set
+      // here, so ThemeProvider.tsx separately applies this class via
+      // import.meta.env.DEV. NOTE: do not write that env var's name literally
+      // in this comment — Vite replaces every occurrence of "%NAME%" in this
+      // file, comments included.
+      if ('%VITE_APP_ENV%' === 'dev') {
+        document.documentElement.classList.add('dev-theme')
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

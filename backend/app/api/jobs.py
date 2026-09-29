@@ -50,6 +50,7 @@ _SCHEDULER_JOBS: dict[str, timedelta | None] = {
     "monday_thursday_score_sync": None,
     "overnight_score_sync": timedelta(hours=36),
     "weekly_picks_reminder": None,
+    "weekly_report": None,
 }
 
 

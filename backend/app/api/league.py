@@ -26,13 +26,15 @@ from app.schemas.league import (
     LeagueJoinRequest,
     LeagueMemberRead,
     LeagueMemberUpdateRequest,
+    LeaguePotRead,
     LeagueRead,
     MemberPaymentRead,
     MemberPaymentUpdateRequest,
+    MemberSubmissionRead,
     VoidUnpaidPicksRead,
     VoidUnpaidPicksRequest,
 )
-from app.services import league_service, member_payment_service
+from app.services import league_service, member_payment_service, picks_service
 
 router = APIRouter(prefix="/league", tags=["league"])
 
@@ -130,6 +132,27 @@ def update_member(
     )
 
 
+@router.get("/pot")
+def get_league_pot(
+    league_member: tuple[League, LeagueMember] = Depends(get_active_league_member),
+    db: Session = Depends(get_db),
+) -> dict:
+    league, _ = league_member
+    pot = member_payment_service.get_league_pot(db, league=league)
+    return success(
+        LeaguePotRead(
+            week_number=pot.week_number,
+            locks_at=pot.locks_at,
+            is_visible=pot.is_visible,
+            paid_member_count=pot.paid_member_count,
+            pot_cents=pot.pot_cents,
+            first_place_cents=pot.first_place_cents,
+            second_place_cents=pot.second_place_cents,
+            third_place_cents=pot.third_place_cents,
+        ).model_dump(by_alias=True)
+    )
+
+
 @router.get("/payments")
 def get_payment_statuses(
     week: int = Query(..., ge=1, le=22),
@@ -154,6 +177,35 @@ def get_payment_statuses(
                     voided_pick_count=voided_pick_count,
                 ).model_dump(by_alias=True)
                 for payment_member, payment, voided_pick_count in statuses
+            ],
+        }
+    )
+
+
+@router.get("/submissions")
+def get_submission_statuses(
+    week: int = Query(..., ge=1, le=22),
+    league_member: tuple[League, LeagueMember] = Depends(get_active_league_owner),
+    db: Session = Depends(get_db),
+) -> dict:
+    league, _ = league_member
+    week_number, statuses = picks_service.list_submission_statuses(
+        db, league=league, week_number=week
+    )
+    return success(
+        {
+            "week": week_number,
+            "members": [
+                MemberSubmissionRead(
+                    user_id=submission_member.user_id,
+                    display_name=submission_member.user.display_name,
+                    email=submission_member.user.email,
+                    role=submission_member.role,
+                    submitted_at=submission.submitted_at if submission else None,
+                    pick_count=pick_count,
+                    is_complete=is_complete,
+                ).model_dump(by_alias=True)
+                for submission_member, submission, pick_count, is_complete in statuses
             ],
         }
     )

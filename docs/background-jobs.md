@@ -24,8 +24,9 @@ for the rules.
 | Sunday score sync | Sun, hourly 10:00-23:00 (23:00 included) | `SUNDAY_SYNC_START_HOUR`, `SUNDAY_SYNC_END_HOUR` |
 | Mon/Thu score sync | Mon and Thu, hourly 19:00-22:00 | `MONTHU_SYNC_START_HOUR`, `MONTHU_SYNC_END_HOUR` |
 | Overnight score sync | Daily 02:00 | `OVERNIGHT_SYNC_HOUR` |
-| Next-week import | Tue 09:00 | `IMPORT_DAY`, `IMPORT_HOUR` |
+| Next-week import | Tue 09:00 (dev overrides to Mon 10:00 in `fly.dev.toml`) | `IMPORT_DAY`, `IMPORT_HOUR` |
 | Weekly picks reminder | Wed 17:00 | `REMINDER_DAY`, `REMINDER_HOUR` |
+| Weekly report (commissioner email; dev only for now) | Tue 08:00 | `REPORT_DAY`, `REPORT_HOUR` |
 | Pick lock | Every hour | |
 
 The sections below describe each job's purpose; the cadences written in them are the
@@ -37,7 +38,7 @@ original design, and the table above is what runs.
 
 Runs
 
-Tuesday
+Monday
 
 Imports
 
@@ -123,6 +124,23 @@ Sunday
 9 AM
 
 30 Minutes Before Kickoff
+
+---
+
+## Weekly Report
+
+Runs
+
+Tuesday, 9 AM Eastern
+
+Emails
+
+Commissioners only
+
+A live-data report (scoreboard, standings, payment status, every member's
+full pick grid) for the most recently completed week. Skips sending if no
+week is complete yet, and is idempotent per commissioner/week (won't resend
+on a redeploy or scheduler restart).
 
 ---
 

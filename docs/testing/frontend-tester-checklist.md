@@ -8,8 +8,8 @@ specifically says prod.
 ## Target
 
 - Primary: `https://nfl-confidence-web-dev.fly.dev` (dev frontend)
-- API: `https://nfl-confidence-api-dev.fly.dev` (dev backend — for direct
-  health/readiness checks only, not for driving the browser against)
+- API: same origin as the frontend, `https://nfl-confidence-web-dev.fly.dev/api/v1`
+  (dev is one merged Fly app; frontend and API share a host)
 - This is the **dev** environment, safe to click through with test data —
   it has its own database (confirmed separate `DATABASE_URL` from prod),
   so nothing here can affect production data.
@@ -34,7 +34,7 @@ a new bug — don't report it as one.
    like `/api/v1/...` on the same origin (`nfl-confidence-web-dev.fly.dev`),
    and that the response doesn't contain production league/user data you
    don't recognize.
-2. **Health/readiness.** `GET https://nfl-confidence-api-dev.fly.dev/api/v1/health/ready`
+2. **Health/readiness.** `GET https://nfl-confidence-web-dev.fly.dev/api/v1/health/ready`
    should return `200` with a JSON body reporting `"status":"ready"`,
    `"database":"healthy"`, `"scheduler":"running"`.
 3. **Sign-in and session persistence.** Sign in with Google. Confirm the
@@ -49,7 +49,7 @@ a new bug — don't report it as one.
    the member list.
 5. **Import a week's schedule**, if dev's database doesn't already have
    current-week data. This requires shell access to the dev machine, not
-   the browser: `fly ssh console --app nfl-confidence-api-dev -C "python -m scripts.run_job sync"`.
+   the browser: `fly ssh console --app nfl-confidence-web-dev -C "python -m scripts.run_job sync"`.
    If you don't have `fly` CLI access, skip this and report it as
    `BLOCKED` rather than guessing — everything downstream (picks, standings,
    leaderboard) depends on this data existing.
@@ -81,7 +81,7 @@ week's last game kicked off, because the app's notion of "the current NFL
 week" was tied to kickoff time rather than finish time.
 
 10. Import and let a full week play out (or manually trigger sync after
-    games finish: `fly ssh console --app nfl-confidence-api-dev -C "python -m scripts.run_job sync"`).
+    games finish: `fly ssh console --app nfl-confidence-web-dev -C "python -m scripts.run_job sync"`).
 11. Confirm **every** game's pick shows a resolved outcome (Correct/
     Incorrect) on the Profile pick-history page — including the last game
     of the week, not just the earlier ones.

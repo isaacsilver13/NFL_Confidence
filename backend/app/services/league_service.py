@@ -40,12 +40,18 @@ def _ensure_season_result(db: Session, *, league: League, user_id: uuid.UUID) ->
         db.add(SeasonResult(league_id=league.id, user_id=user_id, season=league.season))
 
 
-def create_league(db: Session, *, owner: User, name: str, season: int) -> League:
-    """Create the app's single league. Fails if a league already exists."""
+def create_league(
+    db: Session, *, owner: User, name: str, season: int, invite_code: str | None = None
+) -> League:
+    """Create the app's single league. Fails if a league already exists.
+
+    `invite_code` lets callers (currently only the local dev seed script) pin a
+    known passcode instead of a random one; normal league creation never passes it.
+    """
     if league_repository.get_active(db) is not None:
         raise ConflictError("A league already exists. This application supports only one league.")
 
-    invite_code = secrets.token_urlsafe(8)
+    invite_code = invite_code or secrets.token_urlsafe(8)
     try:
         league = league_repository.create(
             db, name=name, season=season, owner_id=owner.id, invite_code=invite_code

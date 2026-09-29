@@ -1,5 +1,8 @@
 """Authenticated leaderboard, standings, and pick breakdown routes."""
 
+import uuid
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
@@ -9,8 +12,9 @@ from app.db.session import get_db
 from app.models.enums import WeekStatus
 from app.models.league import League
 from app.models.league_member import LeagueMember
+from app.models.nfl_week import NflWeek
 from app.models.user import User
-from app.repositories import nfl_week_repository
+from app.repositories import nfl_game_repository, nfl_week_repository
 from app.services import leaderboard_service
 
 router = APIRouter(prefix="/leaderboard", tags=["leaderboard"])
@@ -18,16 +22,28 @@ router = APIRouter(prefix="/leaderboard", tags=["leaderboard"])
 
 @router.get("/weeks")
 def get_completed_weeks(
+    include_started: bool = Query(False, alias="includeStarted"),
     league_member: tuple[League, LeagueMember] = Depends(get_active_league_member),
     db: Session = Depends(get_db),
 ) -> dict:
     league, member = league_member
     weeks = nfl_week_repository.list_by_season(db, season=league.season)
+    now = datetime.now(timezone.utc)
+
+    def is_listed(week: NflWeek) -> bool:
+        if week.status == WeekStatus.COMPLETE:
+            return True
+        # A week that has kicked off but isn't scored final yet (e.g. a stuck last game)
+        # would otherwise vanish from the picker once it stops being the current week.
+        return include_started and any(
+            game.kickoff_time <= now for game in nfl_game_repository.get_by_week_id(db, week.id)
+        )
+
     return success(
         [
             {"weekNumber": week.week_number, "seasonNumber": week.season}
             for week in weeks
-            if week.status == WeekStatus.COMPLETE
+            if is_listed(week)
         ]
     )
 
@@ -62,4 +78,18 @@ def get_pick_breakdown(
 ) -> dict:
     league, member = league_member
     result = leaderboard_service.get_pick_breakdown(db, league=league, viewer_id=current_user.id)
+    return success(result.model_dump(mode="json", by_alias=True))
+
+
+@router.get("/games/{game_id}/picks")
+def get_game_picks(
+    game_id: uuid.UUID,
+    league_member: tuple[League, LeagueMember] = Depends(get_active_league_member),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    league, member = league_member
+    result = leaderboard_service.get_game_picks(
+        db, league=league, viewer_id=current_user.id, game_id=game_id
+    )
     return success(result.model_dump(mode="json", by_alias=True))

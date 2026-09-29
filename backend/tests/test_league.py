@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from app.auth.jwt import create_access_token
 from app.models.invite import Invite
 from app.models.user import User
+from app.services import league_service
 
 
 def _make_user(db_session: Session, *, google_id: str, email: str, display_name: str) -> User:
@@ -38,6 +39,25 @@ def test_create_league_makes_creator_the_owner(client, db_session: Session) -> N
     assert body["memberCount"] == 1
     assert body["commissionerName"] == "Owner"
     assert body["inviteCode"]
+
+
+def test_create_league_accepts_a_pinned_invite_code(db_session: Session) -> None:
+    """The public API never exposes this -- only internal callers like the local
+    dev seed script pass a custom invite_code."""
+    owner = _make_user(
+        db_session, google_id="g-owner-dev", email="dev-owner@example.com", display_name="Owner"
+    )
+    db_session.commit()
+
+    league = league_service.create_league(
+        db_session,
+        owner=owner,
+        name="Dev League",
+        season=2026,
+        invite_code="DevinTester23",
+    )
+
+    assert league.invite_code == "DevinTester23"
 
 
 def test_create_league_fails_when_one_already_exists(client, db_session: Session) -> None:
