@@ -73,7 +73,7 @@ export function TeamLogo({
         loading="lazy"
         decoding="async"
         onError={() => setImageError(true)}
-        className={`inline-block shrink-0 rounded-full border-2 border-white/70 shadow-sm ${sizeClasses[size]}`}
+        className={`inline-block shrink-0 object-contain ${sizeClasses[size]}`}
         {...imgProps}
       />
     )
