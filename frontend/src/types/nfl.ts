@@ -9,6 +9,10 @@ export interface NflWeek {
   isLocked?: boolean
 }
 
+export interface LastRefreshed {
+  lastRefreshedAt: string | null
+}
+
 export interface NflGame {
   id: string
   awayTeam: string

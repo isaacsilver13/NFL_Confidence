@@ -17,7 +17,7 @@ export interface LeaderboardMember {
   thirdPlaceFinishes: number
   payoutCents: number
   pointsRemaining: number
-  lastTwoGamePicks: MemberGamePick[]
+  nightGamePicks: MemberGamePick[]
 }
 
 export interface CompletedWeek {
@@ -37,7 +37,7 @@ export interface WeeklyLeaderboard {
     seasonNumber: number
   }
   standings: LeaderboardMember[]
-  lastTwoGames: GameLabel[]
+  nightGames: GameLabel[]
 }
 
 export interface SeasonStandings {

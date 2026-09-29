@@ -2,10 +2,13 @@
 
 import uuid
 from collections import defaultdict
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import desc, distinct, func, select
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.core.exceptions import NotFoundError
 from app.models.enums import GameStatus, WeekStatus
 from app.models.league import League
@@ -37,6 +40,7 @@ from app.schemas.leaderboard import (
     WeeklyLeaderboardRead,
     WeeklyPickBreakdownRead,
 )
+from app.services import picks_service
 
 
 def _weekly_payout_cents(*, rank: int, member_count: int) -> int:
@@ -73,10 +77,10 @@ def _ranked_members(
     season: bool = False,
     member_count: int = 0,
     points_remaining_by_user: dict[uuid.UUID, int] | None = None,
-    last_two_game_picks_by_user: dict[uuid.UUID, list[MemberGamePickRead]] | None = None,
+    night_game_picks_by_user: dict[uuid.UUID, list[MemberGamePickRead]] | None = None,
 ) -> list[LeaderboardMemberRead]:
     points_remaining_by_user = points_remaining_by_user or {}
-    last_two_game_picks_by_user = last_two_game_picks_by_user or {}
+    night_game_picks_by_user = night_game_picks_by_user or {}
     usable_results = [result for result in results if result.user is not None]
     ordered = sorted(
         usable_results,
@@ -125,7 +129,7 @@ def _ranked_members(
                     else 0
                 ),
                 points_remaining=points_remaining_by_user.get(result.user_id, 0),
-                last_two_game_picks=last_two_game_picks_by_user.get(result.user_id, []),
+                night_game_picks=night_game_picks_by_user.get(result.user_id, []),
             )
         )
     return members
@@ -159,39 +163,44 @@ def _get_week(db: Session, league: League, week_number: int | None) -> NflWeek:
     return week
 
 
-def _last_two_games_picks(
+_SUNDAY_NIGHT_START_HOUR = 18  # local; the afternoon slate never starts this late
+
+
+def _is_night_game(game: NflGame, tz: ZoneInfo) -> bool:
+    """Sunday night or Monday night: any Monday kickoff, or a Sunday kickoff at 6pm+ local."""
+    local = game.kickoff_time.astimezone(tz)
+    return local.weekday() == 0 or (local.weekday() == 6 and local.hour >= _SUNDAY_NIGHT_START_HOUR)
+
+
+def _night_games_picks(
     db: Session, *, week_id: uuid.UUID, user_ids: set[uuid.UUID]
 ) -> tuple[list, dict[uuid.UUID, list[MemberGamePickRead]]]:
-    """The week's last two games by kickoff (e.g. SNF/MNF) and each member's pick for
-    them. Safe to reveal alongside the leaderboard -- any week with leaderboard data
-    has already locked (see get_weekly_leaderboard)."""
-    games = nfl_game_repository.get_by_week_id(db, week_id)
-    last_two_games = sorted(games, key=lambda game: game.kickoff_time)[-2:]
-    last_two_game_ids = {game.id for game in last_two_games}
-    if not last_two_game_ids:
-        return last_two_games, {}
+    """The week's Sunday-night and Monday-night games (in kickoff order) and each member's
+    picks for them. Empty until the first of those games kicks off, so nobody sees a
+    rival's late-game picks while they can still change their own."""
+    tz = ZoneInfo(get_settings().scheduler_timezone)
+    games = sorted(nfl_game_repository.get_by_week_id(db, week_id), key=lambda g: g.kickoff_time)
+    night_games = [game for game in games if _is_night_game(game, tz)]
+    if not night_games or night_games[0].kickoff_time > datetime.now(timezone.utc):
+        return [], {}
 
+    night_game_ids = {game.id for game in night_games}
     picks = pick_repository.list_by_week_and_users(db, week_id=week_id, user_ids=user_ids)
     picks_by_user_game = {
         (pick.user_id, pick.game_id): pick
         for pick in picks
-        if pick.voided_at is None and pick.game_id in last_two_game_ids
+        if pick.voided_at is None and pick.game_id in night_game_ids
     }
     picks_by_user: dict[uuid.UUID, list[MemberGamePickRead]] = {}
     for user_id in user_ids:
         picks_by_user[user_id] = [
-            (
-                MemberGamePickRead(
-                    game_id=game.id,
-                    team=pick.picked_team,
-                    confidence=pick.confidence_value,
-                )
-                if (pick := picks_by_user_game.get((user_id, game.id))) is not None
-                else MemberGamePickRead(game_id=game.id)
+            MemberGamePickRead(
+                game_id=game.id, team=pick.picked_team, confidence=pick.confidence_value
             )
-            for game in last_two_games
+            for game in night_games
+            if (pick := picks_by_user_game.get((user_id, game.id))) is not None
         ]
-    return last_two_games, picks_by_user
+    return night_games, picks_by_user
 
 
 def get_weekly_leaderboard(
@@ -201,9 +210,12 @@ def get_weekly_leaderboard(
     results = weekly_result_repository.list_by_league_and_week(
         db, league_id=league.id, week_id=week.id
     )
-    submitted_user_ids = week_submission_repository.list_user_ids_for_week(db, week_id=week.id)
+    # Submit is the formal entry, but a complete autosaved card counts too.
+    submitted_user_ids = week_submission_repository.list_user_ids_for_week(
+        db, week_id=week.id
+    ) | picks_service.list_complete_card_user_ids(db, week_id=week.id)
     results = [result for result in results if result.user_id in submitted_user_ids]
-    last_two_games, last_two_game_picks_by_user = _last_two_games_picks(
+    night_games, night_game_picks_by_user = _night_games_picks(
         db,
         week_id=week.id,
         user_ids={result.user_id for result in results if result.user_id is not None},
@@ -212,16 +224,16 @@ def get_weekly_leaderboard(
         results,
         member_count=league_repository.count_members(db, league.id),
         points_remaining_by_user=_points_remaining_by_user(db, week_id=week.id),
-        last_two_game_picks_by_user=last_two_game_picks_by_user,
+        night_game_picks_by_user=night_game_picks_by_user,
     )
     if not standings:
         raise NotFoundError(f"Week {week.week_number} has no leaderboard data.")
     return WeeklyLeaderboardRead(
         week=WeekLabelRead(week_number=week.week_number, season_number=week.season),
         standings=standings,
-        last_two_games=[
+        night_games=[
             GameLabelRead(game_id=game.id, away_team=game.away_team, home_team=game.home_team)
-            for game in last_two_games
+            for game in night_games
         ],
     )
 

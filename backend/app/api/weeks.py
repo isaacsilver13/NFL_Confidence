@@ -10,7 +10,7 @@ from app.core.responses import success
 from app.db.session import get_db
 from app.models.league import League
 from app.models.league_member import LeagueMember
-from app.schemas.nfl import WeekRead
+from app.schemas.nfl import LastRefreshedRead, WeekRead
 from app.services import weeks_service
 
 router = APIRouter(prefix="/weeks", tags=["weeks"])
@@ -37,6 +37,19 @@ def get_current_week(
 ) -> dict:
     league, member = league_member
     return success(_week_read(weeks_service.get_current_week(db)))
+
+
+@router.get("/last-refreshed")
+def get_last_refreshed(
+    league_member: tuple[League, LeagueMember] = Depends(get_active_league_member),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Time of the last successful score sync, so the UI can show how fresh scores are."""
+    return success(
+        LastRefreshedRead(last_refreshed_at=weeks_service.get_last_refreshed_at(db)).model_dump(
+            by_alias=True
+        )
+    )
 
 
 @router.get("")

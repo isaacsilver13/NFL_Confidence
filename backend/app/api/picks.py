@@ -1,6 +1,6 @@
 """Authenticated confidence-pick routes."""
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import get_active_league_member, get_current_user
@@ -122,8 +122,8 @@ def get_current_card(
     """
     league, member = league_member
 
-    # Get current week
-    week = weeks_service.get_current_week(db)
+    # The week members are picking for (next week once this week has locked)
+    week = weeks_service.get_pick_week(db)
     week_data = WeekRead(
         id=week.id,
         season=week.season,
@@ -179,21 +179,24 @@ def get_current_card(
 
 @router.get("/all/current")
 def get_all_picks_current_week(
+    week: int | None = Query(None, ge=1, le=22),
     league_member: tuple[League, LeagueMember] = Depends(get_active_league_member),
     db: Session = Depends(get_db),
 ) -> dict:
-    """Every league member's picks for the current week, once it has locked."""
+    """Every league member's picks for a week (default: current), once it has locked."""
     league, member = league_member
-    week, games, member_picks = picks_service.get_all_picks_for_current_week(db, league=league)
+    week_row, games, member_picks = picks_service.get_all_picks_for_week(
+        db, league=league, week_number=week
+    )
     return success(
         AllPicksRead(
             week=WeekRead(
-                id=week.id,
-                season=week.season,
-                week_number=week.week_number,
-                start_date=week.start_date,
-                end_date=week.end_date,
-                status=week.status,
+                id=week_row.id,
+                season=week_row.season,
+                week_number=week_row.week_number,
+                start_date=week_row.start_date,
+                end_date=week_row.end_date,
+                status=week_row.status,
             ),
             games=[
                 GameRead(

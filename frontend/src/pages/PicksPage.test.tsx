@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ApiError } from '@/api/client'
-import { fetchAllPicksCurrentWeek, savePicks, submitPicks } from '@/api/nfl'
+import { fetchLastRefreshed, savePicks, submitPicks } from '@/api/nfl'
 import { fetchCurrentPicksCard } from '@/api/session'
 import {
   getPicksCardRefetchInterval,
@@ -13,9 +13,9 @@ import type { NflGame, NflPick, NflWeek } from '@/types/nfl'
 import { PicksPage } from './PicksPage'
 
 vi.mock('@/api/nfl', () => ({
+  fetchLastRefreshed: vi.fn(),
   savePicks: vi.fn(),
   submitPicks: vi.fn(),
-  fetchAllPicksCurrentWeek: vi.fn(),
 }))
 
 vi.mock('@/api/session', () => ({
@@ -24,8 +24,8 @@ vi.mock('@/api/session', () => ({
 
 const mockedFetchCurrentPicksCard = vi.mocked(fetchCurrentPicksCard)
 const mockedSavePicks = vi.mocked(savePicks)
+const mockedFetchLastRefreshed = vi.mocked(fetchLastRefreshed)
 const mockedSubmitPicks = vi.mocked(submitPicks)
-const mockedFetchAllPicksCurrentWeek = vi.mocked(fetchAllPicksCurrentWeek)
 
 const week: NflWeek = {
   id: 'week-1',
@@ -91,6 +91,7 @@ function renderPage() {
 describe('PicksPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockedFetchLastRefreshed.mockResolvedValue({ lastRefreshedAt: '2026-09-27T21:12:00Z' })
     const picksCard = {
       week,
       games,
@@ -195,6 +196,7 @@ describe('PicksPage', () => {
 
     expect(await screen.findByText('Picks locked')).toBeInTheDocument()
     expect(screen.getByText(/This week's picks are read-only/)).toBeInTheDocument()
+    expect(await screen.findByText(/Last refreshed Sun, Sep 27, 4:12 PM CDT/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'BUF' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'KC' })).toBeDisabled()
     expect(screen.getAllByRole('button', { name: '1' })[0]).toBeDisabled()
@@ -202,41 +204,6 @@ describe('PicksPage', () => {
 
     await user.click(screen.getByRole('button', { name: 'KC' }))
     expect(mockedSavePicks).not.toHaveBeenCalled()
-  })
-
-  it("reveals every member's picks once locked, on demand", async () => {
-    const user = userEvent.setup()
-    mockedFetchCurrentPicksCard.mockResolvedValueOnce({
-      week,
-      games: [{ ...games[0], kickoff: '2026-08-25T19:00:00Z' }, games[1]],
-      picks: [],
-      submission: { submittedAt: null },
-    })
-    mockedFetchAllPicksCurrentWeek.mockResolvedValue({
-      week,
-      games,
-      members: [
-        {
-          userId: 'user-1',
-          displayName: 'Alex',
-          picks: [{ id: 'p1', gameId: 'game-1', team: 'KC', confidence: 3, submittedAt: '' }],
-        },
-        { userId: 'user-2', displayName: 'Sam', picks: [] },
-      ],
-    })
-    renderPage()
-
-    await screen.findByText('Picks locked')
-    expect(screen.queryByText('Alex')).not.toBeInTheDocument()
-
-    await user.click(screen.getByRole('button', { name: /see everyone's picks/i }))
-
-    expect(await screen.findByText('Alex')).toBeInTheDocument()
-    expect(screen.getByText('KC (3)')).toBeInTheDocument()
-    expect(screen.getByText('Sam')).toBeInTheDocument()
-
-    await user.click(screen.getByRole('button', { name: /hide all picks/i }))
-    expect(screen.queryByText('Alex')).not.toBeInTheDocument()
   })
 
   it('voids incomplete and conflicting drafts while keeping the save flow live', async () => {

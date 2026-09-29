@@ -203,8 +203,9 @@ def get_submission_statuses(
                     role=submission_member.role,
                     submitted_at=submission.submitted_at if submission else None,
                     pick_count=pick_count,
+                    is_complete=is_complete,
                 ).model_dump(by_alias=True)
-                for submission_member, submission, pick_count in statuses
+                for submission_member, submission, pick_count, is_complete in statuses
             ],
         }
     )

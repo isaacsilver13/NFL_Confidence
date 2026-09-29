@@ -316,6 +316,10 @@ function SubmissionStatus() {
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-accent/10 px-3 py-1.5 text-xs font-black uppercase tracking-[0.12em] text-accent">
                   Submitted {formatSubmittedAt(member.submittedAt)}
                 </span>
+              ) : member.isComplete ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-accent/10 px-3 py-1.5 text-xs font-black uppercase tracking-[0.12em] text-accent">
+                  Complete (autosaved)
+                </span>
               ) : (
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-danger/10 px-3 py-1.5 text-xs font-black uppercase tracking-[0.12em] text-danger">
                   Not submitted{member.pickCount > 0 ? ` (${member.pickCount} saved)` : ''}

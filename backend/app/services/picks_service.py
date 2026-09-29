@@ -34,7 +34,7 @@ class PickSubmission:
 
 
 def get_user_picks(db: Session, *, user: User) -> list[Pick]:
-    week = weeks_service.get_current_week(db)
+    week = weeks_service.get_pick_week(db)
     return pick_repository.list_by_user_and_week(db, user_id=user.id, week_id=week.id)
 
 
@@ -118,7 +118,7 @@ def create_picks(
     # Serialize a user's submission while allowing different users to proceed.
     pick_repository.lock_user(db, user_id=user.id)
 
-    week = weeks_service.get_current_week(db)
+    week = weeks_service.get_pick_week(db)
     if week.week_number != week_number:
         raise ValidationError("Picks must be submitted for the current NFL week.")
 
@@ -228,7 +228,7 @@ def create_picks(
 
 
 def get_week_submission(db: Session, *, user: User, week_number: int) -> WeekSubmission | None:
-    week = weeks_service.get_current_week(db)
+    week = weeks_service.get_pick_week(db)
     if week.week_number != week_number:
         return None
     return week_submission_repository.get_by_user_and_week(db, user_id=user.id, week_id=week.id)
@@ -241,7 +241,7 @@ def submit_picks(db: Session, *, user: User, week_number: int) -> WeekSubmission
     1..N each used exactly once) and that the week hasn't locked yet. Calling this
     again before lock resubmits/overwrites the submission timestamp.
     """
-    week = weeks_service.get_current_week(db)
+    week = weeks_service.get_pick_week(db)
     if week.week_number != week_number:
         raise ValidationError("Picks must be submitted for the current NFL week.")
 
@@ -271,15 +271,35 @@ def submit_picks(db: Session, *, user: User, week_number: int) -> WeekSubmission
     return submission
 
 
-def get_all_picks_for_current_week(
-    db: Session, *, league: League
+def list_complete_card_user_ids(db: Session, *, week_id: uuid.UUID) -> set[uuid.UUID]:
+    """Users whose saved picks form a complete, conflict-free card for the week.
+
+    Autosave is the fallback for the Submit button: a member with a complete card counts
+    as submitted even if they never pressed Submit.
+    """
+    game_count = len(nfl_game_repository.get_by_week_id(db, week_id))
+    return pick_repository.list_complete_user_ids_for_week(
+        db, week_id=week_id, game_count=game_count
+    )
+
+
+def get_all_picks_for_week(
+    db: Session, *, league: League, week_number: int | None = None
 ) -> tuple[NflWeek, list[NflGame], list[tuple[LeagueMember, list[Pick]]]]:
-    """Every league member's picks for the current week, once it has locked.
+    """Every league member's picks for a week (default: the current week), once it has locked.
 
     Raises ValidationError while the week is still open, so members can't see
     each other's picks before the earliest kickoff.
     """
-    week = weeks_service.get_current_week(db)
+    if week_number is None:
+        week = weeks_service.get_current_week(db)
+    else:
+        found = nfl_week_repository.get_by_season_and_week(
+            db, season=league.season, week_number=week_number
+        )
+        if found is None:
+            raise NotFoundError(f"Week {week_number} does not exist for this league's season.")
+        week = found
     games = nfl_game_repository.get_by_week_id(db, week.id)
     if not games:
         raise ValidationError("There are no games to reveal picks for this week.")
@@ -307,7 +327,7 @@ def get_all_picks_for_current_week(
 
 def list_submission_statuses(
     db: Session, *, league: League, week_number: int
-) -> tuple[int, list[tuple[LeagueMember, WeekSubmission | None, int]]]:
+) -> tuple[int, list[tuple[LeagueMember, WeekSubmission | None, int, bool]]]:
     """Per-member submission status for a week, for the commissioner's submitted-picks view."""
     week = nfl_week_repository.get_by_season_and_week(
         db, season=league.season, week_number=week_number
@@ -320,6 +340,7 @@ def list_submission_statuses(
         submission.user_id: submission
         for submission in week_submission_repository.list_by_week(db, week_id=week.id)
     }
+    complete_user_ids = list_complete_card_user_ids(db, week_id=week.id)
     return week_number, [
         (
             member,
@@ -327,6 +348,7 @@ def list_submission_statuses(
             pick_repository.count_active_by_user_and_week(
                 db, user_id=member.user_id, week_id=week.id
             ),
+            member.user_id in complete_user_ids,
         )
         for member in members
     ]

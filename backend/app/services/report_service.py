@@ -81,7 +81,7 @@ def render_weekly_report_html(db: Session, *, league: League, week_number: int) 
         leaderboard = WeeklyLeaderboardRead(
             week=WeekLabelRead(week_number=week.week_number, season_number=week.season),
             standings=[],
-            last_two_games=[],
+            night_games=[],
         )
     _, payment_statuses = member_payment_service.list_payment_statuses(
         db, league=league, week_number=week_number

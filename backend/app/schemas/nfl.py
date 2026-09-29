@@ -19,6 +19,10 @@ class WeekRead(CamelModel):
     is_locked: bool = False
 
 
+class LastRefreshedRead(CamelModel):
+    last_refreshed_at: datetime | None = None
+
+
 class GameRead(CamelModel):
     id: uuid.UUID
     away_team: str

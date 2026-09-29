@@ -28,7 +28,7 @@ const standings: SeasonStandings = {
       thirdPlaceFinishes: 0,
       payoutCents: 0,
       pointsRemaining: 0,
-      lastTwoGamePicks: [],
+      nightGamePicks: [],
     },
   ],
 }

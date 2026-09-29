@@ -2,8 +2,9 @@ import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } 
 import { AlertTriangle, Check } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError } from '@/api/client'
-import { fetchAllPicksCurrentWeek, savePicks, submitPicks } from '@/api/nfl'
+import { savePicks, submitPicks } from '@/api/nfl'
 import { fetchCurrentPicksCard } from '@/api/session'
+import { LastRefreshed } from '@/components/nfl/LastRefreshed'
 import { TeamLogo } from '@/components/nfl/TeamLogo'
 import { getPicksCardRefetchInterval } from '@/features/nfl/picksPolling'
 import type { NflGame, NflPick, NflWeek, PickInput, WeekSubmission } from '@/types/nfl'
@@ -121,71 +122,6 @@ function formatSubmittedAt(submittedAt: string): string {
   }).format(new Date(submittedAt))
 }
 
-function AllPicksTable() {
-  const { data, isPending, error } = useQuery({
-    queryKey: ['picks', 'all', 'current'],
-    queryFn: fetchAllPicksCurrentWeek,
-    staleTime: 60_000,
-  })
-
-  if (isPending) {
-    return (
-      <p className="text-sm text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
-        Loading everyone's picks…
-      </p>
-    )
-  }
-  if (error) {
-    return (
-      <p className="text-sm text-danger">
-        {error instanceof ApiError ? error.message : "Could not load everyone's picks."}
-      </p>
-    )
-  }
-
-  return (
-    <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-800 dev-dark:border-border">
-      <table className="w-full min-w-[640px] border-collapse text-sm">
-        <thead>
-          <tr className="bg-surface-muted dark:bg-slate-900 dev-dark:bg-surface-elevated">
-            <th className="sticky left-0 z-10 bg-surface-muted px-3 py-2 text-left font-bold dark:bg-slate-900 dev-dark:bg-surface-elevated">
-              Member
-            </th>
-            {data.games.map((game) => (
-              <th key={game.id} className="px-3 py-2 text-center font-bold whitespace-nowrap">
-                {game.awayTeam} @ {game.homeTeam}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {data.members.map((member) => {
-            const picksByGame = new Map(member.picks.map((pick) => [pick.gameId, pick]))
-            return (
-              <tr
-                key={member.userId}
-                className="border-t border-slate-200 dark:border-slate-800 dev-dark:border-border"
-              >
-                <td className="sticky left-0 z-10 bg-surface px-3 py-2 font-semibold whitespace-nowrap dark:bg-slate-950 dev-dark:bg-background">
-                  {member.displayName}
-                </td>
-                {data.games.map((game) => {
-                  const pick = picksByGame.get(game.id)
-                  return (
-                    <td key={game.id} className="px-3 py-2 text-center whitespace-nowrap">
-                      {pick ? `${pick.team} (${pick.confidence})` : '—'}
-                    </td>
-                  )
-                })}
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
-    </div>
-  )
-}
-
 function GamesForm({
   week,
   games,
@@ -203,7 +139,6 @@ function GamesForm({
   const [saved, setSaved] = useState(false)
   const [voided, setVoided] = useState(false)
   const [submitPicksError, setSubmitPicksError] = useState<string | null>(null)
-  const [showAllPicks, setShowAllPicks] = useState(false)
   const [now, setNow] = useState(() => Date.now())
   const gameKickoffs = games
     .map((game) => Date.parse(game.kickoff))
@@ -467,24 +402,16 @@ function GamesForm({
                   : null}
             </p>
           )}
+          <LastRefreshed />
         </div>
       </div>
 
       {isLocked && (
-        <div className="space-y-3 rounded-xl border border-danger/30 bg-danger/10 px-4 py-3">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-sm font-semibold text-danger">
-              The earliest game has started. This week&apos;s picks are read-only.
-            </p>
-            <button
-              type="button"
-              onClick={() => setShowAllPicks((current) => !current)}
-              className="rounded-xl border border-danger/40 px-3 py-1.5 text-sm font-black text-danger"
-            >
-              {showAllPicks ? 'Hide all picks' : "See everyone's picks"}
-            </button>
-          </div>
-          {showAllPicks && <AllPicksTable />}
+        <div className="rounded-xl border border-danger/30 bg-danger/10 px-4 py-3">
+          <p className="text-sm font-semibold text-danger">
+            The earliest game has started. This week&apos;s picks are read-only. See everyone&apos;s
+            picks on the Leaderboard.
+          </p>
         </div>
       )}
 

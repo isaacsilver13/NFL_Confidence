@@ -24,7 +24,7 @@ class LeaderboardMemberRead(CamelModel):
     third_place_finishes: int = 0
     payout_cents: int = 0
     points_remaining: int = 0
-    last_two_game_picks: list[MemberGamePickRead] = []
+    night_game_picks: list[MemberGamePickRead] = []
 
 
 class WeekLabelRead(CamelModel):
@@ -41,7 +41,7 @@ class GameLabelRead(CamelModel):
 class WeeklyLeaderboardRead(CamelModel):
     week: WeekLabelRead
     standings: list[LeaderboardMemberRead]
-    last_two_games: list[GameLabelRead] = []
+    night_games: list[GameLabelRead] = []
 
 
 class SeasonStandingsRead(CamelModel):
