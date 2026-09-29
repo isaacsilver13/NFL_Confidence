@@ -13,7 +13,21 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     environment: str = "local"
-    enable_scheduler: bool = True
+
+    # Scheduled jobs are triggered externally (a GitHub Actions cron calls
+    # POST /api/v1/internal/tick), so the app can sleep between runs. The tick
+    # endpoint stays disabled (503) until TICK_TOKEN is set.
+    tick_token: str = ""
+    scheduler_timezone: str = "America/Chicago"
+    sunday_sync_start_hour: int = 10
+    sunday_sync_end_hour: int = 23  # inclusive
+    monthu_sync_start_hour: int = 19
+    monthu_sync_end_hour: int = 22  # inclusive
+    overnight_sync_hour: int = 2
+    import_day: str = "tue"
+    import_hour: int = 9
+    reminder_day: str = "wed"
+    reminder_hour: int = 17
 
     database_url: str = (
         "postgresql+psycopg://nfl_confidence:nfl_confidence@localhost:5432/nfl_confidence"

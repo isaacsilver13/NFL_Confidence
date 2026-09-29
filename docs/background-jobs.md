@@ -10,6 +10,29 @@ Automate every repetitive task.
 
 ---
 
+## How jobs are triggered
+
+The app does not run its own cron. It sleeps between requests (Fly auto-stop), so a
+GitHub Actions workflow calls `POST /api/v1/internal/tick` every hour, which also wakes
+the machine. The app then runs whichever jobs are due at that moment, in
+`America/Chicago`, and each job runs at most once per clock-hour slot. See
+`docs/deployment.md` ("Scheduled jobs") for setup, and `backend/app/jobs/schedule.py`
+for the rules.
+
+| Job | When (America/Chicago) | Setting(s) |
+|---|---|---|
+| Sunday score sync | Sun, hourly 10:00-23:00 (23:00 included) | `SUNDAY_SYNC_START_HOUR`, `SUNDAY_SYNC_END_HOUR` |
+| Mon/Thu score sync | Mon and Thu, hourly 19:00-22:00 | `MONTHU_SYNC_START_HOUR`, `MONTHU_SYNC_END_HOUR` |
+| Overnight score sync | Daily 02:00 | `OVERNIGHT_SYNC_HOUR` |
+| Next-week import | Tue 09:00 | `IMPORT_DAY`, `IMPORT_HOUR` |
+| Weekly picks reminder | Wed 17:00 | `REMINDER_DAY`, `REMINDER_HOUR` |
+| Pick lock | Every hour | |
+
+The sections below describe each job's purpose; the cadences written in them are the
+original design, and the table above is what runs.
+
+---
+
 ## Import Schedule
 
 Runs
