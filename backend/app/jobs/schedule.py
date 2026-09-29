@@ -98,7 +98,8 @@ def due_slots(now: datetime, cfg: ScheduleConfig) -> list[Slot]:
         due.append("weekly_picks_reminder")
     if weekday == _weekday(cfg.report_day) and hour == cfg.report_hour:
         due.append("weekly_report")
-    # Stamps locked_at once a kickoff has passed; cheap and idempotent, so hourly.
+    # Stamps locked_at once a kickoff has passed; cheap and idempotent. Bookkeeping only:
+    # pick writes enforce the lock at kickoff themselves.
     due.append("lock_expired_picks")
 
     return [Slot(name, f"{name}:{bucket}") for name in due]

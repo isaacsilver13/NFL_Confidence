@@ -4,15 +4,30 @@ name: Scheduled tick
 # wakes it and calls POST /api/v1/internal/tick, and the app decides in
 # America/Chicago time which jobs are due (see backend/app/jobs/schedule.py).
 #
-# The cron is UTC and runs hourly at :05, which covers both CDT and CST; jobs are
-# hour-bucketed and claimed once, so a late or repeated run is a no-op.
+# The cron is UTC and only fires when a job could be due: hourly inside the game
+# windows, a few times a day otherwise. Each entry covers both CDT and CST (the
+# app applies the exact Chicago windows, so the extra hour is a harmless no-op).
+# Jobs are hour-bucketed and claimed once, so a late or repeated run is a no-op.
+# If you change a window or day in the app settings, change the matching line here.
 #
 # GitHub only fires `schedule` from the default branch. To test a branch, run this
 # workflow manually (workflow_dispatch) against dev.
 
 on:
   schedule:
-    - cron: "5 * * * *"
+    # Sunday games, 10:00-23:00 CT (Sun 15:00 UTC through Mon 05:00 UTC)
+    - cron: "5 15-23 * * 0"
+    - cron: "5 0-5 * * 1"
+    # Monday / Thursday night games, 19:00-22:00 CT (Tue and Fri 00:00-04:00 UTC)
+    - cron: "5 0-4 * * 2,5"
+    # Overnight sync, 02:00 CT daily
+    - cron: "5 7,8 * * *"
+    # Tuesday import 09:00 CT; Monday import 10:00 CT (dev); Tuesday report 08:00 CT (dev)
+    - cron: "5 14,15 * * 2"
+    - cron: "5 15,16 * * 1"
+    - cron: "5 13,14 * * 2"
+    # Wednesday reminder, 17:00 CT
+    - cron: "5 22,23 * * 3"
   workflow_dispatch:
     inputs:
       environment:

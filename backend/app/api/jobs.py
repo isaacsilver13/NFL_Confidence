@@ -45,7 +45,7 @@ JOB_FUNCTIONS = {
 # day.
 _SCHEDULER_JOBS: dict[str, timedelta | None] = {
     "schedule_import": None,
-    "lock_expired_picks": timedelta(minutes=10),
+    "lock_expired_picks": None,
     "sunday_score_sync": None,
     "monday_thursday_score_sync": None,
     "overnight_score_sync": timedelta(hours=36),
