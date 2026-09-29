@@ -36,8 +36,8 @@ JOB_FUNCTIONS = {
     "send_reminders": send_reminders,
 }
 
-# The scheduler (app.jobs.scheduler) is what actually runs in production, and
-# it logs each run to `JobExecution` under these job ids — distinct from the
+# The scheduled tick (app.jobs.tick, called by the external cron) is what actually
+# runs in production, and it logs each run to `JobExecution` under these job ids — distinct from the
 # `JOB_LOCK_IDS` names used by the manual admin-trigger path (`JobRun`).
 # `is_overdue` is only meaningful for jobs with a tight, predictable cadence;
 # jobs that only run on specific days of the week are reported without one
@@ -73,8 +73,8 @@ def get_job_status(
 ) -> dict:
     """Get status of all scheduled background jobs - recent runs and health.
 
-    Reads from `JobExecution`, the table the production scheduler
-    (app.jobs.scheduler) actually writes to on every cron run. This is
+    Reads from `JobExecution`, the table the scheduled tick
+    (app.jobs.tick) actually writes to on every run. This is
     distinct from `/admin/jobs/runs`, which tracks manually-triggered runs
     recorded in `JobRun`.
     """

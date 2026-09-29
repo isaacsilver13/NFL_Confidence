@@ -3,7 +3,7 @@
 import logging
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from sqlalchemy import desc, select, text
 from sqlalchemy.orm import Session
@@ -23,7 +23,7 @@ def health_check() -> dict:
 
 
 @router.get("/health/ready", response_model=None)
-def readiness_check(request: Request, db: Session = Depends(get_db)) -> dict | JSONResponse:
+def readiness_check(db: Session = Depends(get_db)) -> dict | JSONResponse:
     """Report whether dependencies needed to serve production traffic are ready."""
 
     try:
@@ -54,21 +54,12 @@ def readiness_check(request: Request, db: Session = Depends(get_db)) -> dict | J
             ),
         )
 
-    scheduler_enabled = getattr(request.app.state, "scheduler_enabled", True)
-    scheduler = getattr(request.app.state, "scheduler", None)
-    if scheduler_enabled and (scheduler is None or not scheduler.running):
-        return JSONResponse(
-            status_code=503,
-            content=error("SERVICE_UNAVAILABLE", "The application is not ready."),
-        )
-
-    scheduler_status = "running" if scheduler_enabled else "disabled"
     return success(
         {
             "status": "ready",
             "database": "healthy",
             "schema": "valid",
-            "scheduler": scheduler_status,
+            "scheduler": "external",
         }
     )
 

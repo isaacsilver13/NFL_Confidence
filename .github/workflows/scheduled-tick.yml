@@ -1,0 +1,62 @@
+name: Scheduled tick
+
+# The app has no in-process scheduler (it sleeps between requests). This cron
+# wakes it and calls POST /api/v1/internal/tick, and the app decides in
+# America/Chicago time which jobs are due (see backend/app/jobs/schedule.py).
+#
+# The cron is UTC and runs hourly at :05, which covers both CDT and CST; jobs are
+# hour-bucketed and claimed once, so a late or repeated run is a no-op.
+#
+# GitHub only fires `schedule` from the default branch. To test a branch, run this
+# workflow manually (workflow_dispatch) against dev.
+
+on:
+  schedule:
+    - cron: "5 * * * *"
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Which app to tick
+        type: choice
+        options: [dev, prod]
+        default: dev
+
+permissions:
+  contents: read
+
+jobs:
+  tick-dev:
+    # Scheduled runs need the repository variable TICK_DEV_ENABLED=true.
+    if: >-
+      (github.event_name == 'schedule' && vars.TICK_DEV_ENABLED == 'true') ||
+      (github.event_name == 'workflow_dispatch' && inputs.environment == 'dev')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    concurrency:
+      group: scheduled-tick-dev
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tick dev
+        run: .github/scripts/tick.sh
+        env:
+          APP_BASE_URL: ${{ secrets.APP_BASE_URL_DEV }}
+          TICK_TOKEN: ${{ secrets.TICK_TOKEN_DEV }}
+
+  tick-prod:
+    # Off until you flip the repository variable TICK_PROD_ENABLED=true at promotion.
+    if: >-
+      (github.event_name == 'schedule' && vars.TICK_PROD_ENABLED == 'true') ||
+      (github.event_name == 'workflow_dispatch' && inputs.environment == 'prod')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    concurrency:
+      group: scheduled-tick-prod
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tick prod
+        run: .github/scripts/tick.sh
+        env:
+          APP_BASE_URL: ${{ secrets.APP_BASE_URL_PROD }}
+          TICK_TOKEN: ${{ secrets.TICK_TOKEN_PROD }}
