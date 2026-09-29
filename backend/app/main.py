@@ -5,11 +5,14 @@ Routes must stay thin: validate request -> call service -> return response.
 """
 
 import logging
+import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from starlette.middleware.sessions import SessionMiddleware
@@ -119,3 +122,20 @@ app.include_router(picks_router, prefix="/api/v1")
 app.include_router(session_router, prefix="/api/v1")
 app.include_router(leaderboard_router, prefix="/api/v1")
 app.include_router(jobs_router)
+
+# Serves the built frontend from the same app/port as the API, so the two no
+# longer need separate Fly apps. No-op locally, where this directory doesn't
+# exist and the Vite dev server is used instead.
+FRONTEND_DIST = Path(os.environ.get("FRONTEND_DIST_DIR", "/app/frontend_dist")).resolve()
+if FRONTEND_DIST.is_dir():
+    app.mount("/assets", StaticFiles(directory=FRONTEND_DIST / "assets"), name="assets")
+
+    @app.get("/{full_path:path}")
+    async def serve_frontend(full_path: str) -> FileResponse:
+        if full_path.startswith("api/"):
+            raise HTTPException(status_code=404, detail="Not Found")
+        candidate = (FRONTEND_DIST / full_path).resolve()
+        is_within_dist = candidate == FRONTEND_DIST or FRONTEND_DIST in candidate.parents
+        if full_path and is_within_dist and candidate.is_file():
+            return FileResponse(candidate)
+        return FileResponse(FRONTEND_DIST / "index.html")

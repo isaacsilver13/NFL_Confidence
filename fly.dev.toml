@@ -1,8 +1,12 @@
-app = "nfl-confidence-api"
+app = "nfl-confidence-web-dev"
 primary_region = "iad"
 
 [build]
-dockerfile = "../docker/Dockerfile.backend"
+dockerfile = "docker/Dockerfile"
+
+[build.args]
+VITE_API_URL = "/api/v1"
+VITE_APP_ENV = "dev"
 
 [deploy]
 release_command = "alembic upgrade head"
@@ -27,13 +31,13 @@ cpus = 1
 cpu_kind = "shared"
 
 [env]
-ENVIRONMENT = "production"
+ENVIRONMENT = "development"
 ENABLE_SCHEDULER = "true"
 NFL_API_BASE_URL = "https://site.api.espn.com/apis/site/v2/sports/football/nfl"
 NFL_API_TIMEOUT_SECONDS = "10"
 GOOGLE_OAUTH_TIMEOUT_SECONDS = "8"
-APP_URL = "https://nfl-confidence-web.fly.dev"
-CORS_ORIGINS = "https://nfl-confidence-web.fly.dev"
+APP_URL = "https://nfl-confidence-web-dev.fly.dev"
+CORS_ORIGINS = "https://nfl-confidence-web-dev.fly.dev"
 JWT_ACCESS_TOKEN_EXPIRE_MINUTES = "15"
 JWT_REFRESH_TOKEN_EXPIRE_DAYS = "30"
-EMAIL_FROM = "NFL Confidence Pool <pickspoolnfl@gmail.com>"
+EMAIL_FROM = "NFL Confidence Pool (dev) <pickspoolnfl@gmail.com>"

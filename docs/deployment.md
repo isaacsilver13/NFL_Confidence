@@ -12,14 +12,16 @@ Hosting Platform
 
 Fly.io
 
-The checked-in Fly configs use these default app names:
+Prod and dev are each a single Fly app that serves the API and the built
+frontend from one image (`docker/Dockerfile`). The checked-in configs use these
+app names:
 
-- API: `nfl-confidence-api`
-- Frontend: `nfl-confidence-web`
+- Prod: `nfl-confidence-web` (`fly.toml`)
+- Dev: `nfl-confidence-web-dev` (`fly.dev.toml`)
 
-Fly app names are globally unique. Change the `app` value in
-`backend/fly.toml` or `frontend/fly.toml` if either name is already taken, and
-update the frontend `VITE_API_URL` build argument and the URLs below to match.
+Fly app names are globally unique. Change the `app` value in `fly.toml` or
+`fly.dev.toml` if a name is already taken, and update `APP_URL`,
+`CORS_ORIGINS`, and the URLs below to match.
 
 ---
 
@@ -260,19 +262,17 @@ single API machine. A 503 means the machine must not receive traffic; inspect
 `fly logs` before proceeding. The deployment release command is safe to rerun
 because Alembic tracks the applied revision.
 
-Then deploy the frontend:
+Then deploy (the single image contains the API and the built frontend):
 
 ```powershell
-fly deploy .\frontend --config .\frontend\fly.toml
+fly deploy . --config .\fly.toml
 fly status --app nfl-confidence-web
 Invoke-WebRequest https://nfl-confidence-web.fly.dev/
 ```
 
-The frontend config builds against `/api/v1`; Nginx proxies that path to the API.
-If either Fly app name changes, update `frontend/fly.toml` and
-`frontend/nginx.frontend.conf`, deploy the frontend again, and set the backend
-`APP_URL`, `CORS_ORIGINS`, and `GOOGLE_OAUTH_REDIRECT_URL` to the final frontend
-URL.
+The build uses `/api/v1` as the API path on the same origin. If the Fly app
+name changes, update `fly.toml`, deploy again, and set `APP_URL`,
+`CORS_ORIGINS`, and `GOOGLE_OAUTH_REDIRECT_URL` to the final URL.
 
 ## Deployment smoke test
 
