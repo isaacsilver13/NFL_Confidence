@@ -203,14 +203,7 @@ describe('LeaderboardPage', () => {
 
     await screen.findByText('Owner')
     const headers = screen.getAllByRole('columnheader').map((header) => header.textContent)
-    expect(headers).toEqual([
-      'Rank',
-      'Member',
-      'Correct',
-      'Points',
-      'Points Left',
-      'SNF/MNF',
-    ])
+    expect(headers).toEqual(['Rank', 'Member', 'Correct', 'Points', 'Points Left', 'SNF/MNF'])
     expect(screen.getByText('KC (10), CHI (5), LAR (2)')).toBeInTheDocument()
     expect(screen.getByText('—')).toBeInTheDocument()
   })
