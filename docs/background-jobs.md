@@ -13,8 +13,8 @@ Automate every repetitive task.
 ## How jobs are triggered
 
 The app does not run its own cron. It sleeps between requests (Fly auto-stop), so a
-GitHub Actions workflow calls `POST /api/v1/internal/tick` every hour, which also wakes
-the machine. The app then runs whichever jobs are due at that moment, in
+GitHub Actions workflow calls `POST /api/v1/internal/tick` (hourly inside the game windows, a few times a day
+otherwise; see the workflow's cron lines), which also wakes the machine. The app then runs whichever jobs are due at that moment, in
 `America/Chicago`, and each job runs at most once per clock-hour slot. See
 `docs/deployment.md` ("Scheduled jobs") for setup, and `backend/app/jobs/schedule.py`
 for the rules.

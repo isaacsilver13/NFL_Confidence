@@ -337,8 +337,9 @@ for database connectivity or migration errors.
 ## Scheduled jobs
 
 Fly stops the machine when it is idle, so nothing inside the app can run a cron. A
-GitHub Actions workflow (`.github/workflows/scheduled-tick.yml`) runs hourly at :05
-(UTC cron), sends a request that wakes the machine, and calls
+GitHub Actions workflow (`.github/workflows/scheduled-tick.yml`) runs at :05 past the hour
+(UTC cron) only when a job could be due (hourly in the game windows, a few times a day
+otherwise), sends a request that wakes the machine, and calls
 `POST /api/v1/internal/tick` with `Authorization: Bearer <TICK_TOKEN>`. The app then
 decides, in `SCHEDULER_TIMEZONE` (default `America/Chicago`), which jobs are due and
 runs them. Each job runs at most once per clock-hour slot (`job_executions.slot_key`
@@ -354,7 +355,7 @@ fly secrets set TICK_TOKEN=<long random string> --app <app>
 and in GitHub (Settings -> Secrets and variables -> Actions): secrets
 `TICK_TOKEN_DEV`/`TICK_TOKEN_PROD` (same values as the Fly secrets) and
 `APP_BASE_URL_DEV`/`APP_BASE_URL_PROD` (`https://<app>.fly.dev`), plus repository
-variables `TICK_DEV_ENABLED` / `TICK_PROD_ENABLED` set to `true` to turn on the hourly
+variables `TICK_DEV_ENABLED` / `TICK_PROD_ENABLED` set to `true` to turn on the
 schedule for that environment. Without `TICK_TOKEN` the endpoint answers `503`; with a
 wrong one, `401`. GitHub only fires scheduled workflows from the default branch; use
 "Run workflow" (`workflow_dispatch`) to tick an environment by hand.
