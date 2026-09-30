@@ -562,7 +562,7 @@ function GamesForm({
                           aria-pressed={isSelected}
                           disabled={isLocked}
                           onClick={() => updateDraft(game.id, { team: isSelected ? '' : team })}
-                          className={`flex min-h-11 items-center gap-2 rounded-xl border px-3 py-2 text-sm font-bold transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-60 ${isSelected ? 'border-primary bg-primary text-white shadow-sm dark:border-sky dev-dark:border-accent dark:bg-sky/20 dev-dark:bg-accent/20 dark:text-sky dev-dark:text-accent' : 'border-slate-300 bg-white text-ink hover:border-sky hover:bg-sky/10 dark:border-slate-700 dev-dark:border-border-hover dark:bg-slate-950 dev-dark:bg-background dark:text-slate-100 dev-dark:text-ink dark:hover:border-sky dev-dark:hover:border-accent'}`}
+                          className={`flex min-h-11 items-center gap-2 rounded-xl border px-3 py-2 text-sm font-bold transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-60 ${isSelected ? 'border-2 border-white bg-primary text-white shadow-sm dark:border-sky dev-dark:border-accent dark:bg-sky/20 dev-dark:bg-accent/20 dark:text-sky dev-dark:text-accent' : 'border-slate-300 bg-white text-ink hover:border-sky hover:bg-sky/10 dark:border-slate-700 dev-dark:border-border-hover dark:bg-slate-950 dev-dark:bg-background dark:text-slate-100 dev-dark:text-ink dark:hover:border-sky dev-dark:hover:border-accent'}`}
                         >
                           <TeamLogo code={team} size="sm" decorative />
                           {team}
