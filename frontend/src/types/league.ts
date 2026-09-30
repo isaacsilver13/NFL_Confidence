@@ -66,6 +66,11 @@ export interface VoidUnpaidPicksResult {
   affectedMemberCount: number
 }
 
+export interface ScoreRefreshResult {
+  weeksRefreshed: number
+  gamesFinal: number
+}
+
 export interface MemberSubmissionStatus {
   userId: string
   displayName: string

@@ -81,6 +81,11 @@ class VoidUnpaidPicksRead(CamelModel):
     affected_member_count: int
 
 
+class ScoreRefreshRead(CamelModel):
+    weeks_refreshed: int
+    games_final: int
+
+
 class SessionMembershipRead(CamelModel):
     status: Literal["no_league", "not_member", "member"]
     role: LeagueRole | None = None

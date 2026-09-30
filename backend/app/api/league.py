@@ -31,10 +31,16 @@ from app.schemas.league import (
     MemberPaymentRead,
     MemberPaymentUpdateRequest,
     MemberSubmissionRead,
+    ScoreRefreshRead,
     VoidUnpaidPicksRead,
     VoidUnpaidPicksRequest,
 )
-from app.services import league_service, member_payment_service, picks_service
+from app.services import (
+    league_service,
+    member_payment_service,
+    picks_service,
+    score_refresh_service,
+)
 
 router = APIRouter(prefix="/league", tags=["league"])
 
@@ -247,6 +253,21 @@ def void_unpaid_member_picks(
             affected_member_count=affected_member_count,
         ).model_dump(by_alias=True),
         message="Unpaid picks were voided.",
+    )
+
+
+@router.post("/refresh")
+def refresh_scores(
+    league_member: tuple[League, LeagueMember] = Depends(get_active_league_owner),
+    db: Session = Depends(get_db),
+) -> dict:
+    league, _ = league_member
+    result = score_refresh_service.refresh_league_scores(db, league=league)
+    return success(
+        ScoreRefreshRead(
+            weeks_refreshed=result.weeks_refreshed, games_final=result.games_final
+        ).model_dump(by_alias=True),
+        message="Scores and standings refreshed.",
     )
 
 
