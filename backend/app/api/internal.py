@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 @router.post("/tick", response_model=None)
 def run_scheduled_tick(authorization: str | None = Header(default=None)) -> dict | JSONResponse:
-    """Run whichever scheduled jobs are due. Called by the GitHub Actions cron.
+    """Run whichever scheduled jobs are due. Called hourly by cron-job.org.
 
     Auth is a shared secret (`TICK_TOKEN`), separate from user JWTs, because the
     caller is a cron with no user. With no token configured the endpoint is

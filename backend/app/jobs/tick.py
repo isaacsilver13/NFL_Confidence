@@ -1,7 +1,7 @@
 """Run whichever scheduled jobs are due right now.
 
-Called by `POST /api/v1/internal/tick`, which an external cron (GitHub Actions)
-hits on a fixed cadence. The Fly machine sleeps between calls; the request
+Called by `POST /api/v1/internal/tick`, which an external cron (cron-job.org)
+hits hourly. The Fly machine sleeps between calls; the request
 itself wakes it. Each job slot (see `app.jobs.schedule`) is claimed by inserting
 a `job_executions` row with a unique `(job_name, slot_key)`, so a duplicate or
 late call in the same hour is a no-op and results are never double-counted. A failed or

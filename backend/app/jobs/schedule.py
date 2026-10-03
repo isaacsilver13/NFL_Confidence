@@ -1,15 +1,15 @@
 """Pure schedule logic: which job slots are due at a given moment.
 
-The app no longer runs its own cron. An external trigger (a GitHub Actions
-cron, see `.github/workflows/scheduled-tick.yml`) wakes the machine and calls
-the tick endpoint; `due_slots` then decides, in the app's timezone, which jobs
-are due. Nothing here touches the database or the clock, so every window edge
-can be unit tested.
+The app has no cron of its own. An external scheduler (cron-job.org) wakes the
+machine hourly and calls the tick endpoint; `due_slots` then decides, in the
+app's timezone, which jobs are due. Nothing here touches the database or the
+clock, so every window edge can be unit tested.
 
-A slot is one hour bucket of one job (`sunday_score_sync:2026-10-04T10`). It is
-due for the whole clock hour, so a tick that arrives late but inside the hour
-still fires it, and the claim step makes a repeat call inside the same hour a
-no-op.
+A slot is one bucket of one job. The score syncs and the pick lock are hourly:
+due for their local clock hour, keyed by hour (`sunday_score_sync:2026-10-04T10`).
+The single-shot jobs (import, reminder, report, overnight sync) are due from their
+hour until the end of that local day and keyed by date, so a tick that arrives hours
+late still runs them once. The claim step makes any repeat call a no-op.
 """
 
 from dataclasses import dataclass
@@ -73,7 +73,7 @@ class ScheduleConfig:
 @dataclass(frozen=True)
 class Slot:
     job_name: str
-    key: str  # unique per job per local clock hour
+    key: str  # unique per job per local hour (or day for single-shot jobs)
 
 
 def due_slots(now: datetime, cfg: ScheduleConfig) -> list[Slot]:
@@ -83,23 +83,39 @@ def due_slots(now: datetime, cfg: ScheduleConfig) -> list[Slot]:
 
     local = now.astimezone(ZoneInfo(cfg.timezone))
     bucket = local.strftime("%Y-%m-%dT%H")
+    day = local.strftime("%Y-%m-%d")
     weekday, hour = local.weekday(), local.hour
 
-    due: list[str] = []
-    if weekday == _weekday(cfg.import_day) and hour == cfg.import_hour:
-        due.append("schedule_import")
+    hourly: list[str] = []
     if weekday == 6 and cfg.sunday_sync_start_hour <= hour <= cfg.sunday_sync_end_hour:
-        due.append("sunday_score_sync")
+        hourly.append("sunday_score_sync")
     if weekday in (0, 3) and cfg.monthu_sync_start_hour <= hour <= cfg.monthu_sync_end_hour:
-        due.append("monday_thursday_score_sync")
-    if hour == cfg.overnight_sync_hour:
-        due.append("overnight_score_sync")
-    if weekday == _weekday(cfg.reminder_day) and hour == cfg.reminder_hour:
-        due.append("weekly_picks_reminder")
-    if weekday == _weekday(cfg.report_day) and hour == cfg.report_hour:
-        due.append("weekly_report")
+        hourly.append("monday_thursday_score_sync")
+
+    # Due from their hour to the end of the local day (catch-up for a late tick).
+    daily: list[str] = []
+    if weekday == _weekday(cfg.import_day) and hour >= cfg.import_hour:
+        daily.append("schedule_import")
+    if hour >= cfg.overnight_sync_hour:
+        daily.append("overnight_score_sync")
+    if weekday == _weekday(cfg.reminder_day) and hour >= cfg.reminder_hour:
+        daily.append("weekly_picks_reminder")
+    if weekday == _weekday(cfg.report_day) and hour >= cfg.report_hour:
+        daily.append("weekly_report")
+
+    slots = [Slot(name, f"{name}:{day}") for name in daily]
+    slots += [Slot(name, f"{name}:{bucket}") for name in hourly]
+    # Run order: import -> syncs -> reminder/report -> pick lock.
+    order = [
+        "schedule_import",
+        "sunday_score_sync",
+        "monday_thursday_score_sync",
+        "overnight_score_sync",
+        "weekly_picks_reminder",
+        "weekly_report",
+    ]
+    slots.sort(key=lambda slot: order.index(slot.job_name))
     # Stamps locked_at once a kickoff has passed; cheap and idempotent. Bookkeeping only:
     # pick writes enforce the lock at kickoff themselves.
-    due.append("lock_expired_picks")
-
-    return [Slot(name, f"{name}:{bucket}") for name in due]
+    slots.append(Slot("lock_expired_picks", f"lock_expired_picks:{bucket}"))
+    return slots

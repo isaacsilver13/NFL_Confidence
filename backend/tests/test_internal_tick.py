@@ -105,9 +105,10 @@ def test_run_tick_runs_due_slots_once_and_records_them(db_session, calls) -> Non
 
     assert [(j["job"], j["status"]) for j in summary["jobs"]] == [
         ("sunday_score_sync", "success"),
+        ("overnight_score_sync", "success"),  # catch-up: due all day after 02:00
         ("lock_expired_picks", "success"),
     ]
-    assert calls == {"sunday_score_sync": 1, "lock_expired_picks": 1}
+    assert calls == {"sunday_score_sync": 1, "overnight_score_sync": 1, "lock_expired_picks": 1}
     rows = {(e.job_name, e.slot_key): e for e in executions(db_session)}
     row = rows[("sunday_score_sync", "sunday_score_sync:2026-10-04T10")]
     assert row.status == "success"
@@ -120,8 +121,8 @@ def test_duplicate_call_in_the_same_hour_is_a_no_op(db_session, calls) -> None:
     second = tick.run_tick(sunday(10, 5))
 
     assert {j["status"] for j in second["jobs"]} == {"skipped"}
-    assert calls == {"sunday_score_sync": 1, "lock_expired_picks": 1}
-    assert len(executions(db_session)) == 2
+    assert calls == {"sunday_score_sync": 1, "overnight_score_sync": 1, "lock_expired_picks": 1}
+    assert len(executions(db_session)) == 3
 
 
 def test_late_call_inside_the_hour_does_not_rerun_a_claimed_slot(db_session, calls) -> None:
@@ -167,7 +168,11 @@ def test_a_failing_job_is_recorded_and_does_not_stop_the_tick(
     summary = tick.run_tick(sunday(10))
 
     statuses = {j["job"]: j["status"] for j in summary["jobs"]}
-    assert statuses == {"sunday_score_sync": "failed", "lock_expired_picks": "success"}
+    assert statuses == {
+        "sunday_score_sync": "failed",
+        "overnight_score_sync": "success",
+        "lock_expired_picks": "success",
+    }
     failed = next(e for e in executions(db_session) if e.job_name == "sunday_score_sync")
     assert failed.status == "failed"
     assert failed.error_message == "espn is down"
@@ -216,3 +221,12 @@ def test_cold_start_flag_reflects_process_age(db_session, calls, monkeypatch) ->
         tick, "_PROCESS_STARTED", tick.time.monotonic() - tick.COLD_START_WINDOW_SECONDS - 1
     )
     assert tick.run_tick(sunday(15))["cold_start"] is False
+
+
+def test_late_tick_still_runs_the_overnight_sync_once_that_day(db_session, calls) -> None:
+    tick.run_tick(sunday(7, 20))  # GitHub-style late tick: well after the 02:00 hour
+    tick.run_tick(sunday(8, 5))
+
+    assert calls["overnight_score_sync"] == 1
+    slots = {e.slot_key for e in executions(db_session) if e.job_name == "overnight_score_sync"}
+    assert slots == {"overnight_score_sync:2026-10-04"}
