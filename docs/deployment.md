@@ -149,11 +149,9 @@ fly apps create nfl-confidence-web
 ```
 
 If an app already exists, the corresponding `fly apps create` command can be
-skipped. The backend is intentionally configured with one always-on machine.
-The FastAPI process owns the only APScheduler instance, and the Fly config does
-not declare a second worker process. Do not scale the API to multiple machines
-until the scheduler has moved to a dedicated worker or has a platform-level
-singleton.
+skipped. The backend runs on one machine that Fly stops when idle. It has no
+in-process scheduler: an external cron wakes it (see "Scheduled jobs"). Multiple
+machines are safe for scheduling because each job slot is claimed once in the database.
 
 ### Provision Postgres
 
@@ -336,15 +334,21 @@ for database connectivity or migration errors.
 
 ## Scheduled jobs
 
-Fly stops the machine when it is idle, so nothing inside the app can run a cron. A
-GitHub Actions workflow (`.github/workflows/scheduled-tick.yml`) runs at :05 past the hour
-(UTC cron) only when a job could be due (hourly in the game windows, a few times a day
-otherwise), sends a request that wakes the machine, and calls
-`POST /api/v1/internal/tick` with `Authorization: Bearer <TICK_TOKEN>`. The app then
-decides, in `SCHEDULER_TIMEZONE` (default `America/Chicago`), which jobs are due and
-runs them. Each job runs at most once per clock-hour slot (`job_executions.slot_key`
-is unique per job), so duplicate or late calls are no-ops. The machine goes back to
-sleep on Fly's idle timeout.
+Fly stops the machine when it is idle, so nothing inside the app can run a cron.
+[cron-job.org](https://cron-job.org) (free) hits the app hourly with two jobs:
+
+| Job | Schedule | Request |
+|---|---|---|
+| `wake` | :03 every hour | `GET https://<app>.fly.dev/api/v1/health` (absorbs the Fly cold start) |
+| `tick` | :05 every hour | `POST https://<app>.fly.dev/api/v1/internal/tick` with header `Authorization: Bearer <TICK_TOKEN>` |
+
+Enable failure notifications on the `tick` job. The app decides, in
+`SCHEDULER_TIMEZONE` (default `America/Chicago`), which jobs are due and runs them.
+Each job is claimed once per slot (`job_executions.slot_key`, unique per job): the
+score syncs and pick lock are hourly slots, while the single-shot jobs (import,
+reminder, weekly report, overnight sync) are due from their hour until the end of that
+local day and keyed by date, so a late tick still runs them once. A `failed` slot, or
+one stuck `running` for 10+ minutes, is retried by the next tick.
 
 Setup, per app:
 
@@ -352,13 +356,9 @@ Setup, per app:
 fly secrets set TICK_TOKEN=<long random string> --app <app>
 ```
 
-and in GitHub (Settings -> Secrets and variables -> Actions): secrets
-`TICK_TOKEN_DEV`/`TICK_TOKEN_PROD` (same values as the Fly secrets) and
-`APP_BASE_URL_DEV`/`APP_BASE_URL_PROD` (`https://<app>.fly.dev`), plus repository
-variables `TICK_DEV_ENABLED` / `TICK_PROD_ENABLED` set to `true` to turn on the
-schedule for that environment. Without `TICK_TOKEN` the endpoint answers `503`; with a
-wrong one, `401`. GitHub only fires scheduled workflows from the default branch; use
-"Run workflow" (`workflow_dispatch`) to tick an environment by hand.
+Without `TICK_TOKEN` the endpoint answers `503`; with a wrong one, `401`. The GitHub
+workflow `.github/workflows/scheduled-tick.yml` (`workflow_dispatch` only) ticks an
+environment by hand using the `TICK_TOKEN_*` / `APP_BASE_URL_*` repository secrets.
 
 Windows and days are settings, not code (`SUNDAY_SYNC_START_HOUR`/`_END_HOUR`
 inclusive, `MONTHU_SYNC_START_HOUR`/`_END_HOUR`, `OVERNIGHT_SYNC_HOUR`, `IMPORT_DAY`,
@@ -437,9 +437,9 @@ Readiness endpoint
 /api/v1/health/ready
 
 The liveness endpoint only confirms that the FastAPI process is responding. The
-readiness endpoint also verifies the database connection and embedded scheduler;
-configure Fly's HTTP health check against `/api/v1/health/ready` so traffic is not
-routed to an instance that cannot run the scheduled pool jobs.
+readiness endpoint also verifies the database connection; configure Fly's HTTP health check
+against `/api/v1/health/ready` so traffic is not routed to an instance that cannot
+reach the database.
 
 Application logs
 
@@ -469,10 +469,10 @@ Rollback requires:
 
 ## Operational schedule
 
-The API process owns one APScheduler instance. It imports the next unimported
-week on Monday at 8:00 AM Eastern, checks for expired picks every minute,
-syncs scores hourly during the configured Sunday and Monday/Thursday windows,
-sends weekly reminders on Wednesday at 6:00 PM Eastern, and emails commissioners
-a weekly report on Tuesday at 9:00 AM Eastern. A fresh production database must
-be migrated and seeded with the active league before the Monday import can run;
+Jobs run when the hourly tick finds them due (Chicago time): the next-week import on
+Tuesday from 9:00 AM, an expired-pick check every tick, score syncs hourly during the
+Sunday (10:00-23:00) and Monday/Thursday (19:00-22:00) windows, an overnight sync from
+2:00 AM, weekly reminders on Wednesday from 5:00 PM, and a commissioner report on
+Tuesday from 8:00 AM. A fresh production database must be migrated and seeded with the
+active league before the import can run;
 use the backend schedule import CLI for the initial week.
