@@ -24,7 +24,8 @@ for attempt in 1 2 3; do
     -H "Authorization: Bearer ${TICK_TOKEN}" "${base}/api/v1/internal/tick")" || code=000
   echo "tick responded HTTP ${code}"
 
-  if [ "$code" = "200" ]; then
+  # A 200 can still carry failed jobs; the app re-claims failed slots, so retry those too.
+  if [ "$code" = "200" ] && ! grep -Eq '"status": ?"failed"' "$body"; then
     break
   fi
   # Wrong/missing token or an unconfigured app will not fix itself: don't retry.
@@ -43,6 +44,8 @@ if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
   } >> "$GITHUB_STEP_SUMMARY"
 fi
 
-[ "$code" = "200" ] && exit 0
-echo "::error::Tick failed after retries (last HTTP ${code})"
+if [ "$code" = "200" ] && ! grep -Eq '"status": ?"failed"' "$body"; then
+  exit 0
+fi
+echo "::error::Tick failed after retries (last HTTP ${code}, or a job reported failed)"
 exit 1
