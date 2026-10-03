@@ -5,7 +5,7 @@ Score idempotency itself (a repeated sync never double-counts points) is covered
 the tick's own guarantee that a duplicate or late call never re-runs a claimed slot.
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -172,9 +172,40 @@ def test_a_failing_job_is_recorded_and_does_not_stop_the_tick(
     assert failed.status == "failed"
     assert failed.error_message == "espn is down"
     assert failed.completed_at is not None
-    # The slot stays claimed, so a repeat call does not hammer a failing upstream.
-    again = tick.run_tick(sunday(10, 30))
-    assert {j["status"] for j in again["jobs"]} == {"skipped"}
+
+
+def test_a_failed_slot_is_retried_until_it_succeeds(db_session, calls, monkeypatch) -> None:
+    def boom() -> int:
+        raise RuntimeError("espn is down")
+
+    monkeypatch.setitem(tick.JOB_FUNCTIONS, "sunday_score_sync", boom)
+    tick.run_tick(sunday(10))
+    monkeypatch.setitem(tick.JOB_FUNCTIONS, "sunday_score_sync", lambda: 7)
+
+    retry = tick.run_tick(sunday(10, 30))
+
+    statuses = {j["job"]: j["status"] for j in retry["jobs"]}
+    assert statuses["sunday_score_sync"] == "success"
+    assert statuses["lock_expired_picks"] == "skipped"  # already succeeded, not re-run
+    row = next(e for e in executions(db_session) if e.job_name == "sunday_score_sync")
+    assert (row.status, row.error_message) == ("success", None)
+
+
+def test_stale_running_slot_is_reclaimed_but_a_fresh_one_is_not(db_session, calls) -> None:
+    tick.run_tick(sunday(10))
+    row = next(e for e in executions(db_session) if e.job_name == "sunday_score_sync")
+    row.status = "running"
+    row.completed_at = None
+    row.started_at = datetime.now(timezone.utc) - timedelta(minutes=3)
+    db_session.flush()
+
+    fresh = tick.run_tick(sunday(10, 8))  # presumed still running
+    assert next(j for j in fresh["jobs"] if j["job"] == "sunday_score_sync")["status"] == "skipped"
+
+    row.started_at = datetime.now(timezone.utc) - timedelta(minutes=30)
+    db_session.flush()
+    stale = tick.run_tick(sunday(10, 30))  # the run died
+    assert next(j for j in stale["jobs"] if j["job"] == "sunday_score_sync")["status"] == "success"
 
 
 def test_cold_start_flag_reflects_process_age(db_session, calls, monkeypatch) -> None:

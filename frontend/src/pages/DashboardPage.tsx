@@ -149,7 +149,7 @@ function DashboardSections({
       weeklyMember ? `Your current rank is #${weeklyMember.rank}` : undefined,
       'See the weekly race and your current rank',
     ),
-    breakdown: 'See how the league split its picks on each completed game',
+    breakdown: 'See how the league split its picks on each game once picks lock',
     standings: sectionSummary(
       seasonMember
         ? `Your season pick record is ${seasonMember.correctPicks}-${seasonMember.incorrectPicks}`

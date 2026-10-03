@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { fetchPickBreakdown } from '@/api/leaderboard'
-import { fetchCompletedWeeks } from '@/api/nfl'
+import { fetchStartedWeeks } from '@/api/nfl'
 import { WeeklyPickBreakdown } from '@/components/leaderboard/WeeklyPickBreakdown'
 
 const mutedText = 'text-sm text-ink-muted dark:text-slate-400 dev-dark:text-text-muted'
@@ -9,8 +9,8 @@ const mutedText = 'text-sm text-ink-muted dark:text-slate-400 dev-dark:text-text
 export function WeeklyGameBreakdownSection() {
   const [week, setWeek] = useState<number>()
   const weeksQuery = useQuery({
-    queryKey: ['leaderboard', 'weeks'],
-    queryFn: fetchCompletedWeeks,
+    queryKey: ['leaderboard', 'weeks', 'started'],
+    queryFn: fetchStartedWeeks,
     staleTime: 10 * 60_000,
   })
   const breakdownQuery = useQuery({
@@ -18,8 +18,8 @@ export function WeeklyGameBreakdownSection() {
     queryFn: fetchPickBreakdown,
     staleTime: 10 * 60_000,
   })
-  // The breakdown only exists for completed weeks, so offer exactly those.
-  const weekNumbers = (weeksQuery.data ?? []).map((completed) => completed.weekNumber)
+  // The breakdown exists once a week's picks are locked (first kickoff), so offer exactly those.
+  const weekNumbers = (weeksQuery.data ?? []).map((started) => started.weekNumber)
   const selectedWeek = week ?? weekNumbers.at(-1)
   const weekBreakdown = breakdownQuery.data?.weeks.find(
     (entry) => entry.weekNumber === selectedWeek,
@@ -63,11 +63,11 @@ export function WeeklyGameBreakdownSection() {
         </p>
       )}
       {!isPending && !weeksQuery.error && !breakdownQuery.error && selectedWeek === undefined && (
-        <p className={mutedText}>The breakdown appears once a week is complete.</p>
+        <p className={mutedText}>The breakdown appears once a week is locked.</p>
       )}
       {!isPending && !breakdownQuery.error && selectedWeek !== undefined && !weekBreakdown && (
         <p className={mutedText}>
-          Pick breakdown isn&apos;t available until Week {selectedWeek} is complete.
+          Pick breakdown isn&apos;t available until Week {selectedWeek} is locked.
         </p>
       )}
       {weekBreakdown && <WeeklyPickBreakdown games={weekBreakdown.games} />}

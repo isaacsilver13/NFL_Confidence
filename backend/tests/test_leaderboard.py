@@ -603,8 +603,8 @@ def test_get_game_picks_not_found_for_incomplete_week(db_session: Session) -> No
     week = NflWeek(
         season=league.season,
         week_number=9,
-        start_date=datetime(2026, 11, 1, tzinfo=timezone.utc),
-        end_date=datetime(2026, 11, 8, tzinfo=timezone.utc),
+        start_date=datetime(2030, 11, 1, tzinfo=timezone.utc),
+        end_date=datetime(2030, 11, 8, tzinfo=timezone.utc),
         status=WeekStatus.REGULAR,
     )
     db_session.add(week)
@@ -623,6 +623,22 @@ def test_get_game_picks_not_found_for_incomplete_week(db_session: Session) -> No
     with pytest.raises(NotFoundError):
         leaderboard_service.get_game_picks(
             db_session, league=league, viewer_id=owner.id, game_id=game.id
+        )
+
+
+def test_pick_breakdown_includes_started_week_but_not_future_week(db_session: Session) -> None:
+    owner = _user(db_session, "Owner")
+    league = _league(db_session, owner)
+    db_session.add(LeagueMember(league_id=league.id, user_id=owner.id, role=LeagueRole.OWNER))
+    started, _ = _night_week(db_session, league, 3, sunday=date(2026, 9, 20), final=False)
+    future, future_games = _night_week(db_session, league, 4, sunday=date(2030, 9, 15), final=False)
+
+    result = leaderboard_service.get_pick_breakdown(db_session, league=league, viewer_id=owner.id)
+
+    assert [week.week_number for week in result.weeks] == [started.week_number]
+    with pytest.raises(NotFoundError):
+        leaderboard_service.get_game_picks(
+            db_session, league=league, viewer_id=owner.id, game_id=future_games[0].id
         )
 
 

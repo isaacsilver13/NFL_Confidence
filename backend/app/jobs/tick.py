@@ -4,15 +4,17 @@ Called by `POST /api/v1/internal/tick`, which an external cron (GitHub Actions)
 hits on a fixed cadence. The Fly machine sleeps between calls; the request
 itself wakes it. Each job slot (see `app.jobs.schedule`) is claimed by inserting
 a `job_executions` row with a unique `(job_name, slot_key)`, so a duplicate or
-late call in the same hour is a no-op and results are never double-counted.
+late call in the same hour is a no-op and results are never double-counted. A failed or
+abandoned (stale `running`) slot can be re-claimed by a later call.
 """
 
 import logging
 import time
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from sqlalchemy import and_, or_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.core.config import get_settings
@@ -32,6 +34,8 @@ logger = logging.getLogger(__name__)
 # A process younger than this when a tick arrives was (almost certainly) started
 # by that tick's request, i.e. the machine was asleep.
 COLD_START_WINDOW_SECONDS = 120
+# A `running` row older than this belongs to a run that died (machine stopped mid-job).
+STALE_RUNNING_AFTER = timedelta(minutes=10)
 _PROCESS_STARTED = time.monotonic()
 
 # Resolved at call time (not import time) so tests can swap entries.
@@ -47,18 +51,33 @@ JOB_FUNCTIONS: dict[str, Callable[[], Any]] = {
 
 
 def _claim_slot(job_name: str, slot_key: str, started_at: datetime) -> Any | None:
-    """Insert the running row for a slot. Returns its id, or None if already claimed."""
+    """Claim a slot for this run. Returns the row id, or None if it is taken.
+
+    A slot is taken by a `success` row or a recent `running` row. A `failed` row or a
+    stale `running` row (the run died) is re-claimed so the slot gets another attempt.
+    """
     with SessionLocal() as db:
+        stmt = pg_insert(JobExecution).values(
+            job_name=job_name, slot_key=slot_key, started_at=started_at, status="running"
+        )
         claimed = db.execute(
-            pg_insert(JobExecution)
-            .values(
-                job_name=job_name,
-                slot_key=slot_key,
-                started_at=started_at,
-                status="running",
-            )
-            .on_conflict_do_nothing(index_elements=["job_name", "slot_key"])
-            .returning(JobExecution.id)
+            stmt.on_conflict_do_update(
+                index_elements=["job_name", "slot_key"],
+                set_={
+                    "started_at": started_at,
+                    "status": "running",
+                    "completed_at": None,
+                    "result_count": None,
+                    "error_message": None,
+                },
+                where=or_(
+                    JobExecution.status == "failed",
+                    and_(
+                        JobExecution.status == "running",
+                        JobExecution.started_at < started_at - STALE_RUNNING_AFTER,
+                    ),
+                ),
+            ).returning(JobExecution.id)
         ).scalar_one_or_none()
         db.commit()
         return claimed

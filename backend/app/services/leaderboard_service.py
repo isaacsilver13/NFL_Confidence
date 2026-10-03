@@ -5,8 +5,8 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import desc, distinct, func, select
-from sqlalchemy.orm import Session
+from sqlalchemy import ColumnElement, desc, distinct, exists, func, or_, select
+from sqlalchemy.orm import Session, aliased
 
 from app.core.config import get_settings
 from app.core.exceptions import NotFoundError
@@ -253,6 +253,18 @@ def get_season_standings(
     return SeasonStandingsRead(season=target_season, standings=standings)
 
 
+def _week_revealed() -> ColumnElement[bool]:
+    """Week is scored final, or its first game has kicked off (picks are locked/revealed)."""
+    started = aliased(NflGame)
+    return or_(
+        NflWeek.status == WeekStatus.COMPLETE,
+        exists().where(
+            started.week_id == NflWeek.id,
+            started.kickoff_time <= datetime.now(timezone.utc),
+        ),
+    )
+
+
 def get_pick_breakdown(db: Session, *, league: League, viewer_id: uuid.UUID) -> PickBreakdownRead:
     membership = league_member_repository.get_by_league_and_user(db, league.id, viewer_id)
     if membership is None:
@@ -261,7 +273,7 @@ def get_pick_breakdown(db: Session, *, league: League, viewer_id: uuid.UUID) -> 
     completed_weeks = list(
         db.execute(
             select(NflWeek)
-            .where(NflWeek.season == league.season, NflWeek.status == WeekStatus.COMPLETE)
+            .where(NflWeek.season == league.season, _week_revealed())
             .order_by(NflWeek.week_number)
         ).scalars()
     )
@@ -278,7 +290,7 @@ def get_pick_breakdown(db: Session, *, league: League, viewer_id: uuid.UUID) -> 
         .join(NflWeek, NflGame.week_id == NflWeek.id)
         .where(
             NflWeek.season == league.season,
-            NflWeek.status == WeekStatus.COMPLETE,
+            _week_revealed(),
         )
         .order_by(NflWeek.week_number, NflGame.kickoff_time)
     ).all()
@@ -296,7 +308,7 @@ def get_pick_breakdown(db: Session, *, league: League, viewer_id: uuid.UUID) -> 
         .where(
             LeagueMember.league_id == league.id,
             NflWeek.season == league.season,
-            NflWeek.status == WeekStatus.COMPLETE,
+            _week_revealed(),
         )
         .group_by(NflWeek.week_number, NflGame.id, Pick.picked_team)
         .order_by(NflWeek.week_number, NflGame.id, Pick.picked_team)
@@ -310,7 +322,7 @@ def get_pick_breakdown(db: Session, *, league: League, viewer_id: uuid.UUID) -> 
         .where(
             LeagueMember.league_id == league.id,
             NflWeek.season == league.season,
-            NflWeek.status == WeekStatus.COMPLETE,
+            _week_revealed(),
         )
         .order_by(NflWeek.week_number, NflGame.id, Pick.confidence_value)
     ).all()
@@ -363,7 +375,7 @@ def get_pick_breakdown(db: Session, *, league: League, viewer_id: uuid.UUID) -> 
 def get_game_picks(
     db: Session, *, league: League, viewer_id: uuid.UUID, game_id: uuid.UUID
 ) -> GamePicksRead:
-    """Every league member's pick for one completed-week game, for the leaderboard's
+    """Every league member's pick for one locked-week game, for the leaderboard's
     per-game "View Picks" modal."""
     membership = league_member_repository.get_by_league_and_user(db, league.id, viewer_id)
     if membership is None:
@@ -375,7 +387,7 @@ def get_game_picks(
         .where(
             NflGame.id == game_id,
             NflWeek.season == league.season,
-            NflWeek.status == WeekStatus.COMPLETE,
+            _week_revealed(),
         )
     ).scalar_one_or_none()
     if game is None:
