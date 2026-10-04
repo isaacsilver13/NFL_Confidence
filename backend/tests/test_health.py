@@ -7,7 +7,7 @@ from app.api import health
 from app.core.config import Settings
 from app.db.schema_validator import _validate_table
 from app.db.session import Base
-from app.main import app
+from app.main import _safe_validate, app
 
 client = TestClient(app)
 
@@ -73,15 +73,19 @@ def test_validate_schema_reports_missing_objects(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_startup_schema_drift_prevents_app_startup(monkeypatch) -> None:
+async def test_startup_schema_drift_is_logged_without_blocking_startup(monkeypatch, caplog) -> None:
     monkeypatch.setattr(
         "app.main.validate_schema",
         lambda _db: [{"kind": "missing_column", "table": "users", "column": "email"}],
     )
 
-    with pytest.raises(RuntimeError, match="schema drift"):
-        async with app.router.lifespan_context(app):
-            pass
+    # Validation runs off the boot path, so startup must succeed even with drift...
+    async with app.router.lifespan_context(app):
+        pass
+
+    # ...and the check itself still reports the drift (swallowed by _safe_validate).
+    _safe_validate()
+    assert "schema drift" in caplog.text
 
 
 def test_settings_normalize_fly_postgres_urls() -> None:
