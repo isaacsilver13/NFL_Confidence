@@ -1,5 +1,8 @@
 """Basic smoke test for the health endpoint."""
 
+import uuid
+from datetime import datetime, timezone
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -8,6 +11,8 @@ from app.core.config import Settings
 from app.db.schema_validator import _validate_table
 from app.db.session import Base
 from app.main import app
+from app.models import NflGame, NflWeek, Pick, User
+from app.models.enums import WeekStatus
 
 client = TestClient(app)
 
@@ -17,6 +22,57 @@ def test_health_check_returns_healthy_status() -> None:
 
     assert response.status_code == 200
     assert response.json() == {"data": {"status": "healthy"}, "message": None}
+
+
+def test_metrics_on_an_empty_database_are_null_and_zero(client) -> None:
+    response = client.get("/api/v1/health/metrics")
+
+    assert response.status_code == 200
+    assert response.json()["data"] == {
+        "last_activity_at": None,
+        "data_freshness_at": None,
+        "picks_total": 0,
+        "games_total": 0,
+    }
+
+
+def test_metrics_expose_only_aggregates(client, db_session) -> None:
+    synced = datetime(2026, 9, 14, 18, 30, tzinfo=timezone.utc)
+    user = User(
+        google_id=f"m-{uuid.uuid4().hex}",
+        email=f"{uuid.uuid4().hex}@example.com",
+        display_name="Secret Name",
+    )
+    week = NflWeek(
+        season=2026,
+        week_number=1,
+        start_date=synced,
+        end_date=synced,
+        status=WeekStatus.COMPLETE,
+    )
+    db_session.add_all([user, week])
+    db_session.flush()
+    game = NflGame(
+        week_id=week.id,
+        espn_game_id=f"m-{uuid.uuid4().hex}",
+        kickoff_time=synced,
+        away_team="BUF",
+        home_team="KC",
+        last_synced=synced,
+    )
+    db_session.add(game)
+    db_session.flush()
+    db_session.add(Pick(user_id=user.id, game_id=game.id, picked_team="KC", confidence_value=7))
+    db_session.flush()
+
+    response = client.get("/api/v1/health/metrics")
+
+    data = response.json()["data"]
+    assert set(data) == {"last_activity_at", "data_freshness_at", "picks_total", "games_total"}
+    assert data["picks_total"] == 1 and data["games_total"] == 1
+    assert data["data_freshness_at"] == synced.isoformat()
+    assert data["last_activity_at"] is not None
+    assert "Secret Name" not in response.text and "KC" not in response.text
 
 
 def test_readiness_check_verifies_database_and_reports_external_scheduler(client) -> None:
