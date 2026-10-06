@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fetchWeeklyLeaderboard } from '@/api/leaderboard'
+import { fetchWeeklyLeaderboard, fetchWeeklyOutcomeScenarios } from '@/api/leaderboard'
 import {
   fetchAllPicksForWeek,
   fetchStartedWeeks,
@@ -14,6 +14,7 @@ import { LeaderboardPage } from './LeaderboardPage'
 
 vi.mock('@/api/leaderboard', () => ({
   fetchWeeklyLeaderboard: vi.fn(),
+  fetchWeeklyOutcomeScenarios: vi.fn(),
 }))
 
 vi.mock('@/api/nfl', () => ({
@@ -24,6 +25,7 @@ vi.mock('@/api/nfl', () => ({
 }))
 
 const mockedFetchWeeklyLeaderboard = vi.mocked(fetchWeeklyLeaderboard)
+const mockedFetchWeeklyOutcomeScenarios = vi.mocked(fetchWeeklyOutcomeScenarios)
 const mockedFetchAllPicksForWeek = vi.mocked(fetchAllPicksForWeek)
 const mockedFetchStartedWeeks = vi.mocked(fetchStartedWeeks)
 const mockedFetchLastRefreshed = vi.mocked(fetchLastRefreshed)
@@ -85,7 +87,6 @@ describe('LeaderboardPage', () => {
     expect(await screen.findByText(/Last refreshed Sun, Sep 27, 4:12 PM CDT/)).toBeInTheDocument()
     expect(mockedFetchWeeklyLeaderboard).toHaveBeenCalledWith(3)
     expect(screen.getByRole('option', { name: 'Week 3 — Live' })).toBeInTheDocument()
-    expect(screen.getByText('5')).toBeInTheDocument()
   })
 
   it('lists completed weeks alongside the live current week, sorted ascending', async () => {
@@ -118,7 +119,7 @@ describe('LeaderboardPage', () => {
     expect(mockedFetchWeeklyLeaderboard).not.toHaveBeenCalled()
   })
 
-  it('shows only Rank, Member, Correct, Points, and Points Left columns in that order', async () => {
+  it('shows only Rank, Member, Correct, and Points columns in that order', async () => {
     mockedFetchStartedWeeks.mockResolvedValue([])
     mockedFetchCurrentWeek.mockResolvedValue(currentWeek)
     mockedFetchWeeklyLeaderboard.mockResolvedValue({
@@ -148,7 +149,7 @@ describe('LeaderboardPage', () => {
 
     await screen.findByText('Owner')
     const headers = screen.getAllByRole('columnheader').map((header) => header.textContent)
-    expect(headers).toEqual(['Rank', 'Member', 'Correct', 'Points', 'Points Left'])
+    expect(headers).toEqual(['Rank', 'Member', 'Correct', 'Points'])
   })
 
   it('adds one SNF/MNF column listing the night-game picks per member', async () => {
@@ -204,7 +205,7 @@ describe('LeaderboardPage', () => {
 
     await screen.findByText('Owner')
     const headers = screen.getAllByRole('columnheader').map((header) => header.textContent)
-    expect(headers).toEqual(['Rank', 'Member', 'Correct', 'Points', 'Points Left', 'SNF/MNF'])
+    expect(headers).toEqual(['Rank', 'Member', 'Correct', 'Points', 'SNF/MNF'])
     expect(screen.getByText('KC (10), CHI (5), LAR (2)')).toBeInTheDocument()
     expect(screen.getByText('—')).toBeInTheDocument()
   })
@@ -321,5 +322,82 @@ describe('LeaderboardPage', () => {
 
     expect(await screen.findByText('Owner')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /see everyone's picks/i })).not.toBeInTheDocument()
+  })
+
+  it('opens possible finishes only for the live week when the scenario window is available', async () => {
+    const user = userEvent.setup()
+    mockedFetchStartedWeeks.mockResolvedValue([{ weekNumber: 2, seasonNumber: 2026 }])
+    mockedFetchCurrentWeek.mockResolvedValue(currentWeek)
+    mockedFetchWeeklyLeaderboard.mockResolvedValue({
+      week: { weekNumber: 3, seasonNumber: 2026 },
+      standings: [
+        {
+          rank: 1,
+          memberId: 'user-1',
+          memberName: 'Owner',
+          totalPoints: 10,
+          correctPicks: 1,
+          incorrectPicks: 0,
+          weeklyWins: 0,
+          firstPlaceFinishes: 0,
+          secondPlaceFinishes: 0,
+          thirdPlaceFinishes: 0,
+          payoutCents: 0,
+          pointsRemaining: 12,
+          nightGamePicks: [],
+        },
+      ],
+      nightGames: [],
+      picksRevealed: true,
+      outcomeScenariosAvailable: true,
+    })
+    mockedFetchWeeklyOutcomeScenarios.mockResolvedValue({
+      sundayGame: { gameId: 'snf', awayTeam: 'BUF', homeTeam: 'KC' },
+      mondayGame: { gameId: 'mnf', awayTeam: 'DAL', homeTeam: 'LAR' },
+      scenarios: [
+        {
+          sundayWinner: 'BUF',
+          mondayWinner: 'DAL',
+          firstPlace: ['Alex'],
+          secondPlace: ['Sam'],
+          thirdPlace: ['Taylor'],
+        },
+        {
+          sundayWinner: 'BUF',
+          mondayWinner: 'LAR',
+          firstPlace: ['Sam'],
+          secondPlace: ['Alex'],
+          thirdPlace: ['Taylor'],
+        },
+        {
+          sundayWinner: 'KC',
+          mondayWinner: 'DAL',
+          firstPlace: ['Taylor'],
+          secondPlace: ['Alex'],
+          thirdPlace: ['Sam'],
+        },
+        {
+          sundayWinner: 'KC',
+          mondayWinner: 'LAR',
+          firstPlace: ['Alex'],
+          secondPlace: ['Taylor'],
+          thirdPlace: ['Sam'],
+        },
+      ],
+    })
+
+    renderPage()
+
+    await user.click(await screen.findByRole('button', { name: /see possible finishes/i }))
+    expect(mockedFetchWeeklyOutcomeScenarios).toHaveBeenCalledWith(3)
+    expect(await screen.findByRole('dialog', { name: /possible finishes/i })).toBeInTheDocument()
+    expect(screen.getAllByText('BUF wins')).toHaveLength(2)
+    expect(screen.getAllByText('KC wins')).toHaveLength(2)
+    expect(screen.getAllByText('DAL wins')).toHaveLength(2)
+    expect(screen.getAllByText('LAR wins')).toHaveLength(2)
+    expect(screen.getAllByText('Alex')).toHaveLength(4)
+
+    await user.click(screen.getByRole('button', { name: 'Close' }))
+    expect(screen.queryByRole('dialog', { name: /possible finishes/i })).not.toBeInTheDocument()
   })
 })

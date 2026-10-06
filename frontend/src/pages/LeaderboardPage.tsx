@@ -6,6 +6,7 @@ import { fetchWeeklyLeaderboard } from '@/api/leaderboard'
 import { fetchCurrentWeek, fetchStartedWeeks } from '@/api/nfl'
 import { LastRefreshed } from '@/components/nfl/LastRefreshed'
 import { AllPicksModal } from '@/components/leaderboard/AllPicksModal'
+import { OutcomeScenariosModal } from '@/components/leaderboard/OutcomeScenariosModal'
 import { Button } from '@/components/ui/Button'
 import { SortableTh } from '@/components/ui/SortableTable'
 import { useTableSort } from '@/components/ui/useTableSort'
@@ -48,7 +49,6 @@ function LeaderboardTable({
     member: { value: (m) => m.memberName },
     correct: { value: (m) => m.correctPicks, numeric: true },
     points: { value: (m) => m.totalPoints, numeric: true },
-    pointsLeft: { value: (m) => m.pointsRemaining, numeric: true },
     // Confidence points still riding on the night games.
     nightGames: {
       value: (m) =>
@@ -68,7 +68,6 @@ function LeaderboardTable({
             <SortableTh label="Member" columnKey="member" sort={sort} />
             <SortableTh label="Correct" columnKey="correct" sort={sort} align="right" />
             <SortableTh label="Points" columnKey="points" sort={sort} align="right" />
-            <SortableTh label="Points Left" columnKey="pointsLeft" sort={sort} align="right" />
             {showPicksRemaining && (
               <SortableTh
                 label="SNF/MNF"
@@ -95,7 +94,6 @@ function LeaderboardTable({
               <td className="px-5 py-4 font-bold">{member.memberName}</td>
               <td className="px-5 py-4 text-right">{member.correctPicks}</td>
               <td className="px-5 py-4 text-right font-black text-accent">{member.totalPoints}</td>
-              <td className="px-5 py-4 text-right">{member.pointsRemaining}</td>
               {showPicksRemaining && (
                 <td className="px-5 py-4 text-right whitespace-nowrap">
                   {formatPicksRemaining(member.nightGamePicks)}
@@ -112,6 +110,7 @@ function LeaderboardTable({
 export function LeaderboardPage() {
   const [week, setWeek] = useState<number>()
   const [showAllPicks, setShowAllPicks] = useState(false)
+  const [showOutcomeScenarios, setShowOutcomeScenarios] = useState(false)
   const weeksQuery = useQuery({
     queryKey: ['leaderboard', 'weeks', 'started'],
     queryFn: fetchStartedWeeks,
@@ -131,6 +130,9 @@ export function LeaderboardPage() {
     enabled: selectedWeek !== undefined,
     staleTime: 10 * 60_000,
   })
+  const canShowOutcomeScenarios =
+    selectedWeek === currentWeekQuery.data?.weekNumber &&
+    query.data?.outcomeScenariosAvailable === true
 
   return (
     <div className="animate-fade-in space-y-6">
@@ -146,6 +148,11 @@ export function LeaderboardPage() {
           {query.data && query.data.standings.length > 0 && query.data.picksRevealed && (
             <Button type="button" variant="secondary" onClick={() => setShowAllPicks(true)}>
               See everyone&apos;s picks
+            </Button>
+          )}
+          {canShowOutcomeScenarios && (
+            <Button type="button" variant="secondary" onClick={() => setShowOutcomeScenarios(true)}>
+              See possible finishes
             </Button>
           )}
           <label className="flex items-center gap-3 text-sm font-bold text-ink-muted dark:text-slate-300 dev-dark:text-text-secondary">
@@ -167,6 +174,9 @@ export function LeaderboardPage() {
       </div>
       {showAllPicks && selectedWeek !== undefined && (
         <AllPicksModal week={selectedWeek} onClose={() => setShowAllPicks(false)} />
+      )}
+      {showOutcomeScenarios && selectedWeek !== undefined && (
+        <OutcomeScenariosModal week={selectedWeek} onClose={() => setShowOutcomeScenarios(false)} />
       )}
 
       {selectedWeek === undefined && !weeksQuery.isPending && !currentWeekQuery.isPending && (
