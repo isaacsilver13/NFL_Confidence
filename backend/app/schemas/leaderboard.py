@@ -44,6 +44,23 @@ class WeeklyLeaderboardRead(CamelModel):
     night_games: list[GameLabelRead] = []
     # True once the week's earliest game has kicked off (all picks lock and become visible).
     picks_revealed: bool = False
+    # True only for the live week after the Sunday afternoon slate, when exactly the
+    # Sunday-night and Monday-night games remain to be decided.
+    outcome_scenarios_available: bool = False
+
+
+class OutcomeScenarioRead(CamelModel):
+    sunday_winner: str
+    monday_winner: str
+    first_place: list[str]
+    second_place: list[str]
+    third_place: list[str]
+
+
+class OutcomeScenariosRead(CamelModel):
+    sunday_game: GameLabelRead
+    monday_game: GameLabelRead
+    scenarios: list[OutcomeScenarioRead]
 
 
 class SeasonStandingsRead(CamelModel):

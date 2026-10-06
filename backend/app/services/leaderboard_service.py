@@ -33,6 +33,8 @@ from app.schemas.leaderboard import (
     GamePicksRead,
     LeaderboardMemberRead,
     MemberGamePickRead,
+    OutcomeScenarioRead,
+    OutcomeScenariosRead,
     PickBreakdownRead,
     SeasonStandingsRead,
     TeamPickCountRead,
@@ -40,7 +42,7 @@ from app.schemas.leaderboard import (
     WeeklyLeaderboardRead,
     WeeklyPickBreakdownRead,
 )
-from app.services import picks_service
+from app.services import picks_service, weeks_service
 
 
 def _weekly_payout_cents(*, rank: int, member_count: int) -> int:
@@ -164,6 +166,7 @@ def _get_week(db: Session, league: League, week_number: int | None) -> NflWeek:
 
 
 _SUNDAY_NIGHT_START_HOUR = 18  # local; the afternoon slate never starts this late
+_SCENARIO_AVAILABLE_HOUR = 19
 
 
 def _is_night_game(game: NflGame, tz: ZoneInfo) -> bool:
@@ -203,6 +206,89 @@ def _night_games_picks(
     return night_games, picks_by_user
 
 
+def _outcome_scenario_games(
+    db: Session, *, week: NflWeek, now: datetime | None = None
+) -> list[NflGame]:
+    """Return one SNF and one MNF game once they are the only unresolved games left."""
+    tz = ZoneInfo(get_settings().scheduler_timezone)
+    now = now or datetime.now(timezone.utc)
+    local_now = now.astimezone(tz)
+    if local_now.weekday() != 6 or local_now.hour < _SCENARIO_AVAILABLE_HOUR:
+        return []
+
+    terminal_statuses = {GameStatus.FINAL, GameStatus.CANCELLED}
+    remaining = sorted(
+        (
+            game
+            for game in nfl_game_repository.get_by_week_id(db, week.id)
+            if game.game_status not in terminal_statuses
+        ),
+        key=lambda game: game.kickoff_time,
+    )
+    if len(remaining) != 2:
+        return []
+
+    sunday_game, monday_game = remaining
+    sunday_local = sunday_game.kickoff_time.astimezone(tz)
+    monday_local = monday_game.kickoff_time.astimezone(tz)
+    if not (
+        _is_night_game(sunday_game, tz)
+        and sunday_local.weekday() == 6
+        and monday_local.weekday() == 0
+    ):
+        return []
+    return remaining
+
+
+def _outcome_scenarios(
+    *, results: list, games: list[NflGame], picks: list[Pick]
+) -> list[OutcomeScenarioRead]:
+    """Project the four winner combinations with the live leaderboard tie-breakers."""
+    pick_by_user_game = {
+        (pick.user_id, pick.game_id): pick for pick in picks if pick.voided_at is None
+    }
+    sunday_game, monday_game = games
+    scenarios: list[OutcomeScenarioRead] = []
+    for sunday_winner in (sunday_game.away_team, sunday_game.home_team):
+        for monday_winner in (monday_game.away_team, monday_game.home_team):
+            projected: list[tuple[str, int, int, int]] = []
+            for result in results:
+                if result.user is None or result.user_id is None:
+                    continue
+                points = result.total_points or 0
+                correct = result.correct_picks or 0
+                highest = result.highest_confidence_win or 0
+                for game, winner in ((sunday_game, sunday_winner), (monday_game, monday_winner)):
+                    pick = pick_by_user_game.get((result.user_id, game.id))
+                    if pick is not None and pick.picked_team == winner:
+                        points += pick.confidence_value
+                        correct += 1
+                        highest = max(highest, pick.confidence_value)
+                projected.append((result.user.display_name, points, correct, highest))
+
+            ordered = sorted(projected, key=lambda row: (-row[1], -row[2], -row[3], row[0]))
+            placements: dict[int, list[str]] = {1: [], 2: [], 3: []}
+            previous_score: tuple[int, int, int] | None = None
+            rank = 0
+            for position, (name, points, correct, highest) in enumerate(ordered, start=1):
+                score = (points, correct, highest)
+                if score != previous_score:
+                    rank = position
+                    previous_score = score
+                if rank in placements:
+                    placements[rank].append(name)
+            scenarios.append(
+                OutcomeScenarioRead(
+                    sunday_winner=sunday_winner,
+                    monday_winner=monday_winner,
+                    first_place=placements[1],
+                    second_place=placements[2],
+                    third_place=placements[3],
+                )
+            )
+    return scenarios
+
+
 def get_weekly_leaderboard(
     db: Session, *, league: League, week_number: int | None = None
 ) -> WeeklyLeaderboardRead:
@@ -237,6 +323,48 @@ def get_weekly_leaderboard(
             for game in night_games
         ],
         picks_revealed=bool(kickoffs) and min(kickoffs) <= datetime.now(timezone.utc),
+        outcome_scenarios_available=bool(_outcome_scenario_games(db, week=week)),
+    )
+
+
+def get_weekly_outcome_scenarios(
+    db: Session, *, league: League, week_number: int
+) -> OutcomeScenariosRead:
+    """Project first through third for the four possible SNF/MNF outcomes."""
+    week = _get_week(db, league, week_number)
+    if weeks_service.get_current_week(db).id != week.id:
+        raise NotFoundError("Outcome scenarios are only available for the current week.")
+    games = _outcome_scenario_games(db, week=week)
+    if not games:
+        raise NotFoundError("Outcome scenarios are not available yet.")
+
+    results = weekly_result_repository.list_by_league_and_week(
+        db, league_id=league.id, week_id=week.id
+    )
+    submitted_user_ids = week_submission_repository.list_user_ids_for_week(
+        db, week_id=week.id
+    ) | picks_service.list_complete_card_user_ids(db, week_id=week.id)
+    results = [result for result in results if result.user_id in submitted_user_ids]
+    if not results:
+        raise NotFoundError(f"Week {week.week_number} has no leaderboard data.")
+    picks = pick_repository.list_by_week_and_users(
+        db,
+        week_id=week.id,
+        user_ids={result.user_id for result in results if result.user_id is not None},
+    )
+    sunday_game, monday_game = games
+    return OutcomeScenariosRead(
+        sunday_game=GameLabelRead(
+            game_id=sunday_game.id,
+            away_team=sunday_game.away_team,
+            home_team=sunday_game.home_team,
+        ),
+        monday_game=GameLabelRead(
+            game_id=monday_game.id,
+            away_team=monday_game.away_team,
+            home_team=monday_game.home_team,
+        ),
+        scenarios=_outcome_scenarios(results=results, games=games, picks=picks),
     )
 
 

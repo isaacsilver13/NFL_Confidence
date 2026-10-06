@@ -59,6 +59,19 @@ def get_weekly_leaderboard(
     return success(result.model_dump(mode="json", by_alias=True))
 
 
+@router.get("/week/{week_number}/outcome-scenarios")
+def get_weekly_outcome_scenarios(
+    week_number: int,
+    league_member: tuple[League, LeagueMember] = Depends(get_active_league_member),
+    db: Session = Depends(get_db),
+) -> dict:
+    league, member = league_member
+    result = leaderboard_service.get_weekly_outcome_scenarios(
+        db, league=league, week_number=week_number
+    )
+    return success(result.model_dump(mode="json", by_alias=True))
+
+
 @router.get("/season")
 def get_season_standings(
     season: int | None = Query(None, ge=2000, le=2100),
