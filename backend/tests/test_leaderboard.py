@@ -471,7 +471,7 @@ def test_outcome_scenarios_project_the_four_night_game_combinations(
                 user_id=owner.id,
                 total_points=10,
                 correct_picks=1,
-                highest_confidence_win=5,
+                highest_confidence_loss=0,
             ),
             WeeklyResult(
                 league_id=league.id,
@@ -479,7 +479,7 @@ def test_outcome_scenarios_project_the_four_night_game_combinations(
                 user_id=challenger.id,
                 total_points=11,
                 correct_picks=2,
-                highest_confidence_win=6,
+                highest_confidence_loss=0,
             ),
             WeeklyResult(
                 league_id=league.id,
@@ -487,7 +487,7 @@ def test_outcome_scenarios_project_the_four_night_game_combinations(
                 user_id=third.id,
                 total_points=4,
                 correct_picks=1,
-                highest_confidence_win=4,
+                highest_confidence_loss=0,
             ),
             Pick(user_id=owner.id, game_id=games[1].id, picked_team="KC", confidence_value=10),
             Pick(user_id=owner.id, game_id=games[3].id, picked_team="LAR", confidence_value=2),
@@ -798,3 +798,36 @@ def test_leaderboard_weeks_lists_started_but_unfinished_weeks_only_when_asked(
     assert weeks(False) == [finished.week_number]
     assert weeks(True) == [finished.week_number, stuck.week_number]
     assert future.week_number not in weeks(True)
+
+
+def test_outcome_scenarios_break_ties_by_lowest_missed_confidence(db_session: Session) -> None:
+    owner = _user(db_session, "Owner")
+    league = _league(db_session, owner)
+    owner, challenger = _members(db_session, league)
+    week, games = _night_week(db_session, league, 8, sunday=date(2026, 9, 13), final=False)
+    for user in (owner, challenger):
+        _submit(db_session, user=user, week=week)
+    db_session.add_all(
+        [
+            WeeklyResult(
+                league_id=league.id, week_id=week.id, user_id=owner.id,
+                total_points=10, correct_picks=2, highest_confidence_loss=10,
+            ),
+            WeeklyResult(
+                league_id=league.id, week_id=week.id, user_id=challenger.id,
+                total_points=10, correct_picks=2, highest_confidence_loss=8,
+            ),
+        ]
+    )
+    db_session.flush()
+    results = leaderboard_service.weekly_result_repository.list_by_league_and_week(
+        db_session, league_id=league.id, week_id=week.id
+    )
+
+    scenarios = leaderboard_service._outcome_scenarios(
+        results=results, games=[games[1], games[3]], picks=[]
+    )
+
+    # Same points and correct picks: the lower worst miss (8 vs 10) ranks first, no tie.
+    assert scenarios[0].first_place == ["Challenger"]
+    assert scenarios[0].second_place == ["Owner"]

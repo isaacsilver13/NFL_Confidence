@@ -93,7 +93,11 @@ def _ranked_members(
                 if season
                 else -(getattr(result, "correct_picks", 0) or 0)
             ),
-            -(getattr(result, "highest_confidence_win", 0) or 0),
+            (
+                -(getattr(result, "highest_confidence_win", 0) or 0)
+                if season
+                else (getattr(result, "highest_confidence_loss", 0) or 0)
+            ),
             result.user.display_name,
         ),
     )
@@ -108,7 +112,11 @@ def _ranked_members(
                 if season
                 else getattr(result, "correct_picks", 0) or 0
             ),
-            getattr(result, "highest_confidence_win", 0) or 0,
+            (
+                getattr(result, "highest_confidence_win", 0) or 0
+                if season
+                else getattr(result, "highest_confidence_loss", 0) or 0
+            ),
         )
         if current_key != previous_key:
             previous_rank = position
@@ -260,7 +268,7 @@ def _outcome_scenarios(
                     continue
                 points = result.total_points or 0
                 correct = result.correct_picks or 0
-                highest = result.highest_confidence_win or 0
+                worst_miss = result.highest_confidence_loss or 0
                 for game, winner in ((sunday_game, sunday_winner), (monday_game, monday_winner)):
                     if game.game_status in _TERMINAL_STATUSES:
                         continue  # already scored into the weekly result
@@ -268,15 +276,16 @@ def _outcome_scenarios(
                     if pick is not None and pick.picked_team == winner:
                         points += pick.confidence_value
                         correct += 1
-                        highest = max(highest, pick.confidence_value)
-                projected.append((result.user.display_name, points, correct, highest))
+                    elif pick is not None:
+                        worst_miss = max(worst_miss, pick.confidence_value)
+                projected.append((result.user.display_name, points, correct, worst_miss))
 
-            ordered = sorted(projected, key=lambda row: (-row[1], -row[2], -row[3], row[0]))
+            ordered = sorted(projected, key=lambda row: (-row[1], -row[2], row[3], row[0]))
             placements: dict[int, list[str]] = {1: [], 2: [], 3: []}
             previous_score: tuple[int, int, int] | None = None
             rank = 0
-            for position, (name, points, correct, highest) in enumerate(ordered, start=1):
-                score = (points, correct, highest)
+            for position, (name, points, correct, worst_miss) in enumerate(ordered, start=1):
+                score = (points, correct, worst_miss)
                 if score != previous_score:
                     rank = position
                     previous_score = score
