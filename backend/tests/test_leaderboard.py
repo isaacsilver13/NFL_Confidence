@@ -547,6 +547,19 @@ def test_outcome_scenarios_are_available_only_for_one_sunday_and_one_monday_game
         leaderboard_service._outcome_scenario_games(db_session, week=week, now=sunday_evening) == []
     )
 
+    # Stays available after Sunday night ends, through Monday night and the rest of the week.
+    games[2].game_status = GameStatus.FINAL
+    games[1].game_status = GameStatus.FINAL
+    games[1].winning_team = "KC"
+    monday_afternoon = datetime(2026, 9, 14, 20, tzinfo=timezone.utc)
+    assert leaderboard_service._outcome_scenario_games(
+        db_session, week=week, now=monday_afternoon
+    ) == [games[1], games[3]]
+    scenarios = leaderboard_service._outcome_scenarios(
+        results=[], games=[games[1], games[3]], picks=[]
+    )
+    assert [(s.sunday_winner, s.monday_winner) for s in scenarios] == [("KC", "DAL"), ("KC", "LAR")]
+
 
 def test_season_standings_returns_aggregate_rows(db_session: Session) -> None:
     owner = _user(db_session, "Owner")

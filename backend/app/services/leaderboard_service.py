@@ -167,6 +167,7 @@ def _get_week(db: Session, league: League, week_number: int | None) -> NflWeek:
 
 _SUNDAY_NIGHT_START_HOUR = 18  # local; the afternoon slate never starts this late
 _SCENARIO_AVAILABLE_HOUR = 19
+_TERMINAL_STATUSES = {GameStatus.FINAL, GameStatus.CANCELLED}
 
 
 def _is_night_game(game: NflGame, tz: ZoneInfo) -> bool:
@@ -209,35 +210,37 @@ def _night_games_picks(
 def _outcome_scenario_games(
     db: Session, *, week: NflWeek, now: datetime | None = None
 ) -> list[NflGame]:
-    """Return one SNF and one MNF game once they are the only unresolved games left."""
+    """Return the SNF and MNF games from Sunday 7pm local until the week ends.
+
+    Opens once those two are the only unresolved games left, and stays open after either
+    finishes so the table keeps showing the remaining outcomes."""
     tz = ZoneInfo(get_settings().scheduler_timezone)
     now = now or datetime.now(timezone.utc)
-    local_now = now.astimezone(tz)
-    if local_now.weekday() != 6 or local_now.hour < _SCENARIO_AVAILABLE_HOUR:
+    games = sorted(nfl_game_repository.get_by_week_id(db, week.id), key=lambda g: g.kickoff_time)
+    sunday_games = [
+        g for g in games if _is_night_game(g, tz) and g.kickoff_time.astimezone(tz).weekday() == 6
+    ]
+    monday_games = [g for g in games if g.kickoff_time.astimezone(tz).weekday() == 0]
+    if len(sunday_games) != 1 or not monday_games:
         return []
 
-    terminal_statuses = {GameStatus.FINAL, GameStatus.CANCELLED}
-    remaining = sorted(
-        (
-            game
-            for game in nfl_game_repository.get_by_week_id(db, week.id)
-            if game.game_status not in terminal_statuses
-        ),
-        key=lambda game: game.kickoff_time,
-    )
-    if len(remaining) != 2:
-        return []
-
-    sunday_game, monday_game = remaining
+    sunday_game, monday_game = sunday_games[0], monday_games[-1]  # MNF doubleheader: the late one
     sunday_local = sunday_game.kickoff_time.astimezone(tz)
-    monday_local = monday_game.kickoff_time.astimezone(tz)
-    if not (
-        _is_night_game(sunday_game, tz)
-        and sunday_local.weekday() == 6
-        and monday_local.weekday() == 0
+    if now.astimezone(tz) < sunday_local.replace(hour=_SCENARIO_AVAILABLE_HOUR, minute=0):
+        return []
+    if any(
+        game.game_status not in _TERMINAL_STATUSES
+        for game in games
+        if game not in (sunday_game, monday_game)
     ):
         return []
-    return remaining
+    return [sunday_game, monday_game]
+
+
+def _possible_winners(game: NflGame) -> tuple[str, ...]:
+    if game.game_status not in _TERMINAL_STATUSES:
+        return (game.away_team, game.home_team)
+    return (game.winning_team or "—",)  # final: fixed; cancelled/tie: no winner
 
 
 def _outcome_scenarios(
@@ -249,8 +252,8 @@ def _outcome_scenarios(
     }
     sunday_game, monday_game = games
     scenarios: list[OutcomeScenarioRead] = []
-    for sunday_winner in (sunday_game.away_team, sunday_game.home_team):
-        for monday_winner in (monday_game.away_team, monday_game.home_team):
+    for sunday_winner in _possible_winners(sunday_game):
+        for monday_winner in _possible_winners(monday_game):
             projected: list[tuple[str, int, int, int]] = []
             for result in results:
                 if result.user is None or result.user_id is None:
@@ -259,6 +262,8 @@ def _outcome_scenarios(
                 correct = result.correct_picks or 0
                 highest = result.highest_confidence_win or 0
                 for game, winner in ((sunday_game, sunday_winner), (monday_game, monday_winner)):
+                    if game.game_status in _TERMINAL_STATUSES:
+                        continue  # already scored into the weekly result
                     pick = pick_by_user_game.get((result.user_id, game.id))
                     if pick is not None and pick.picked_team == winner:
                         points += pick.confidence_value
