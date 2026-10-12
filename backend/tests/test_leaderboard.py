@@ -810,12 +810,20 @@ def test_outcome_scenarios_break_ties_by_lowest_missed_confidence(db_session: Se
     db_session.add_all(
         [
             WeeklyResult(
-                league_id=league.id, week_id=week.id, user_id=owner.id,
-                total_points=10, correct_picks=2, highest_confidence_loss=10,
+                league_id=league.id,
+                week_id=week.id,
+                user_id=owner.id,
+                total_points=10,
+                correct_picks=2,
+                highest_confidence_loss=10,
             ),
             WeeklyResult(
-                league_id=league.id, week_id=week.id, user_id=challenger.id,
-                total_points=10, correct_picks=2, highest_confidence_loss=8,
+                league_id=league.id,
+                week_id=week.id,
+                user_id=challenger.id,
+                total_points=10,
+                correct_picks=2,
+                highest_confidence_loss=8,
             ),
         ]
     )
