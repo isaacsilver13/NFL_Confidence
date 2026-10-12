@@ -35,6 +35,8 @@ class WeeklyResult(Base):
     correct_picks: Mapped[int] = mapped_column(Integer, default=0)
     incorrect_picks: Mapped[int] = mapped_column(Integer, default=0)
     highest_confidence_win: Mapped[int] = mapped_column(Integer, default=0)
+    # Weekly tie-breaker #3: the biggest confidence value on a missed pick (lower wins).
+    highest_confidence_loss: Mapped[int] = mapped_column(Integer, default=0)
     weekly_rank: Mapped[int | None] = mapped_column(Integer, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
