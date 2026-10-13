@@ -329,7 +329,7 @@ function formatCents(cents: number): string {
   return `$${Math.round(cents / 100)}`
 }
 
-function LeaguePotCard() {
+function LeaguePot() {
   const { data: pot } = useQuery({
     queryKey: ['league', 'pot'],
     queryFn: fetchLeaguePot,
@@ -339,31 +339,21 @@ function LeaguePotCard() {
   if (!pot || !pot.isVisible) return null
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-surface p-5 shadow-sm dark:border-slate-800 dev-dark:border-border dark:bg-slate-900 dev-dark:bg-surface-elevated">
-      <p className="text-xs font-bold uppercase tracking-[0.16em] text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
-        League pot
-      </p>
-      <p className="mt-1 text-2xl font-black text-primary dark:text-white dev-dark:text-ink">
-        {formatCents(pot.potCents)}
-      </p>
-      <div className="mt-3 flex flex-wrap gap-4 text-sm">
+    <div className="mt-5 border-t border-white/15 pt-4">
+      <p className="text-xs font-bold uppercase tracking-[0.16em] text-sky">League pot</p>
+      <p className="mt-1 text-2xl font-black">{formatCents(pot.potCents)}</p>
+      <div className="mt-2 flex flex-wrap gap-4 text-sm">
         <span className="inline-flex items-center gap-1.5">
           <span aria-hidden="true">🥇</span>
-          <span className="font-bold text-primary dark:text-white dev-dark:text-ink">
-            {formatCents(pot.firstPlaceCents)}
-          </span>
+          <span className="font-bold">{formatCents(pot.firstPlaceCents)}</span>
         </span>
         <span className="inline-flex items-center gap-1.5">
           <span aria-hidden="true">🥈</span>
-          <span className="font-bold text-primary dark:text-white dev-dark:text-ink">
-            {formatCents(pot.secondPlaceCents)}
-          </span>
+          <span className="font-bold">{formatCents(pot.secondPlaceCents)}</span>
         </span>
         <span className="inline-flex items-center gap-1.5">
           <span aria-hidden="true">🥉</span>
-          <span className="font-bold text-primary dark:text-white dev-dark:text-ink">
-            {formatCents(pot.thirdPlaceCents)}
-          </span>
+          <span className="font-bold">{formatCents(pot.thirdPlaceCents)}</span>
         </span>
       </div>
     </div>
@@ -462,6 +452,7 @@ export function DashboardPage() {
         <div className="overflow-hidden rounded-2xl border border-primary/10 bg-primary p-5 text-white shadow-lg shadow-primary/15">
           <p className="text-xs font-bold uppercase tracking-[0.2em] text-sky">
             {league.season} season
+            {currentWeek ? ` · Week ${currentWeek.weekNumber}` : ''}
           </p>
           <p className="mt-2 text-2xl font-black">{league.name}</p>
           <div className="mt-5 flex flex-wrap gap-3 text-sm text-slate-200">
@@ -473,17 +464,9 @@ export function DashboardPage() {
               <CalendarDays size={16} aria-hidden="true" /> Commissioner {league.commissionerName}
             </span>
           </div>
+          <LeaguePot />
         </div>
       )}
-      <div className="rounded-2xl border border-slate-200 bg-surface p-5 shadow-sm dark:border-slate-800 dev-dark:border-border dark:bg-slate-900 dev-dark:bg-surface-elevated">
-        <p className="text-xs font-bold uppercase tracking-[0.16em] text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
-          Current week
-        </p>
-        <p className="mt-2 text-2xl font-black text-primary dark:text-white dev-dark:text-ink">
-          {currentWeek ? `Week ${currentWeek.weekNumber}` : 'Unavailable'}
-        </p>
-      </div>
-      <LeaguePotCard />
       <DashboardSections userId={user.id} currentWeekNumber={currentWeek?.weekNumber} />
     </div>
   )
