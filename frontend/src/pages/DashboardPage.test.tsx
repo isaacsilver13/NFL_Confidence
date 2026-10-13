@@ -207,7 +207,7 @@ describe('DashboardPage league access', () => {
     mockedFetchSessionBootstrap.mockResolvedValueOnce(memberSession)
     renderPage()
 
-    await screen.findByText('Week 1')
+    await screen.findByText(/season · Week 1/)
     expect(screen.queryByText('League pot')).not.toBeInTheDocument()
   })
 
