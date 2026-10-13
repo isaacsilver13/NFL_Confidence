@@ -21,6 +21,10 @@ describe('getTeamPalette', () => {
     for (const team of teams) expect(getTeamPalette(team).background).not.toBe('#526777')
   })
 
+  it('maps the WSH alias to Washington', () => {
+    expect(getTeamPalette('WSH')).toEqual(getTeamPalette('WAS'))
+  })
+
   it('uses the secondary color for teams whose primary is black', () => {
     expect(getTeamPalette('LV').background).toBe('#a5acaf')
     expect(getTeamPalette('JAX').background).toBe('#d7a22a')

@@ -44,5 +44,7 @@ const TEAM_PALETTES: Record<string, TeamPalette> = {
 const FALLBACK_PALETTE: TeamPalette = { background: '#526777', foreground: '#ffffff' }
 
 export function getTeamPalette(code: string): TeamPalette {
-  return TEAM_PALETTES[code.trim().toUpperCase()] ?? FALLBACK_PALETTE
+  const key = code.trim().toUpperCase()
+  // ESPN sometimes sends WSH for Washington (see TEAM_CODE_ALIASES in teamLogos.ts).
+  return TEAM_PALETTES[key === 'WSH' ? 'WAS' : key] ?? FALLBACK_PALETTE
 }
