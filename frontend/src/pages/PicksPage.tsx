@@ -328,7 +328,7 @@ function GamesForm({
                 type="button"
                 onClick={handleSubmitPicks}
                 disabled={!canSubmit}
-                className="rounded-xl bg-primary px-3 py-1.5 text-xs font-black text-white transition-colors disabled:cursor-not-allowed disabled:opacity-40 dark:bg-sky dev-dark:bg-accent orange-trim dev-dark:text-white sm:px-4 sm:py-2 sm:text-sm"
+                className="rounded-xl bg-primary px-3 py-1.5 text-xs font-black text-white transition-colors disabled:cursor-not-allowed disabled:opacity-40 dark:bg-sky dev-dark:bg-accent dark:text-white sm:px-4 sm:py-2 sm:text-sm"
               >
                 {submitMutation.isPending
                   ? 'Submitting…'
