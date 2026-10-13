@@ -328,7 +328,7 @@ function GamesForm({
                 type="button"
                 onClick={handleSubmitPicks}
                 disabled={!canSubmit}
-                className="rounded-xl bg-primary px-3 py-1.5 text-xs font-black text-white transition-colors disabled:cursor-not-allowed disabled:opacity-40 dark:bg-sky dev-dark:bg-accent dark:text-primary dev-dark:text-white sm:px-4 sm:py-2 sm:text-sm"
+                className="rounded-xl bg-primary px-3 py-1.5 text-xs font-black text-white transition-colors disabled:cursor-not-allowed disabled:opacity-40 dark:bg-sky dev-dark:bg-accent orange-trim dev-dark:text-white sm:px-4 sm:py-2 sm:text-sm"
               >
                 {submitMutation.isPending
                   ? 'Submitting…'
@@ -562,7 +562,7 @@ function GamesForm({
                           aria-pressed={isSelected}
                           disabled={isLocked}
                           onClick={() => updateDraft(game.id, { team: isSelected ? '' : team })}
-                          className={`flex min-h-11 items-center gap-2 rounded-xl border px-3 py-2 text-sm font-bold transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-60 ${isSelected ? 'border-4 border-white bg-primary text-white shadow-sm dark:border-sky dev-dark:border-accent dark:bg-sky/20 dev-dark:bg-accent/20 dark:text-sky dev-dark:text-accent' : 'border-slate-300 bg-white text-ink hover:border-sky hover:bg-sky/10 dark:border-slate-700 dev-dark:border-border-hover dark:bg-slate-950 dev-dark:bg-background dark:text-slate-100 dev-dark:text-ink dark:hover:border-sky dev-dark:hover:border-accent'}`}
+                          className={`flex min-h-11 items-center gap-2 rounded-xl border px-3 py-2 text-sm font-bold transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-60 ${isSelected ? 'border-4 border-white bg-primary text-white shadow-sm dark:border-sky dev-dark:border-accent dark:bg-sky/20 dev-dark:bg-accent/20 orange-trim dev-dark:text-accent' : 'border-slate-300 bg-white text-ink hover:border-sky hover:bg-sky/10 dark:border-slate-700 dev-dark:border-border-hover dark:bg-slate-950 dev-dark:bg-background dark:text-slate-100 dev-dark:text-ink dark:hover:border-sky dev-dark:hover:border-accent'}`}
                         >
                           <TeamLogo code={team} size="sm" decorative />
                           {team}

@@ -16,7 +16,7 @@ function navLinkClassName({ isActive }: { isActive: boolean }): string {
   return [
     'rounded-xl px-3 py-2 text-sm font-bold transition-colors duration-150',
     isActive
-      ? 'bg-primary text-white shadow-sm dark:bg-sky dev-dark:bg-accent dark:text-primary dev-dark:text-white'
+      ? 'bg-primary text-white shadow-sm dark:bg-sky dev-dark:bg-accent orange-trim dev-dark:text-white'
       : 'text-ink-muted hover:bg-surface-muted hover:text-primary dark:text-slate-300 dev-dark:text-text-secondary dark:hover:bg-slate-800 dev-dark:hover:bg-surface-hover dark:hover:text-white dev-dark:hover:text-ink',
   ].join(' ')
 }

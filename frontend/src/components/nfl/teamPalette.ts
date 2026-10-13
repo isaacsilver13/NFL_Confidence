@@ -3,16 +3,19 @@ export interface TeamPalette {
   foreground: string
 }
 
+// Hex values follow the NFL Record & Fact Book / team logo-slick colors as aggregated by
+// teamcolorcodes.com (WAS #5A1414/#FFB612 matches the Commanders' 2026 logo slick).
 const TEAM_PALETTES: Record<string, TeamPalette> = {
   // AFC East
   BAL: { background: '#241773', foreground: '#ffffff' },
   BUF: { background: '#c60c30', foreground: '#ffffff' },
   MIA: { background: '#008d97', foreground: '#ffffff' },
   NE: { background: '#002244', foreground: '#ffffff' },
+  NYJ: { background: '#125740', foreground: '#ffffff' },
   // AFC Central
   CIN: { background: '#fb4f14', foreground: '#111827' },
   CLE: { background: '#311c1c', foreground: '#ff3c00' },
-  PIT: { background: '#27251f', foreground: '#fdb827' },
+  PIT: { background: '#101820', foreground: '#ffb612' },
   HOU: { background: '#eb6e1f', foreground: '#003831' },
   // AFC West
   DEN: { background: '#002244', foreground: '#fb4f14' },
@@ -27,7 +30,11 @@ const TEAM_PALETTES: Record<string, TeamPalette> = {
   // NFC East
   DAL: { background: '#003594', foreground: '#ffffff' },
   PHI: { background: '#004c54', foreground: '#ffffff' },
-  WAS: { background: '#5a1f1a', foreground: '#ffc52f' },
+  WAS: { background: '#5a1414', foreground: '#ffb612' },
+  // NFC South
+  ATL: { background: '#a71930', foreground: '#ffffff' },
+  CAR: { background: '#0085ca', foreground: '#101820' },
+  NO: { background: '#d3bc8d', foreground: '#101820' },
   NYG: { background: '#0b2265', foreground: '#a71930' },
   // NFC Central
   CHI: { background: '#c83803', foreground: '#ffffff' },
@@ -36,7 +43,7 @@ const TEAM_PALETTES: Record<string, TeamPalette> = {
   MIN: { background: '#4f2683', foreground: '#ffc52f' },
   // NFC West
   ARI: { background: '#97233f', foreground: '#ffb612' },
-  LAR: { background: '#003831', foreground: '#b0b7bc' },
+  LAR: { background: '#003594', foreground: '#ffd100' },
   SF: { background: '#aa0000', foreground: '#ffffff' },
   SEA: { background: '#0c2c56', foreground: '#69be28' },
 }

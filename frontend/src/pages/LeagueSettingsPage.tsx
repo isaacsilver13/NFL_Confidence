@@ -509,7 +509,7 @@ export function LeagueSettingsPage() {
       </div>
       <div className="rounded-2xl border border-slate-200 bg-surface p-5 shadow-sm dark:border-slate-800 dev-dark:border-border dark:bg-slate-900 dev-dark:bg-surface-elevated">
         <div className="flex items-start gap-3">
-          <span className="rounded-xl bg-sky/15 p-3 text-sky">
+          <span className="rounded-xl bg-sky/15 p-3 text-sky dark:text-accent">
             <ShieldCheck size={22} aria-hidden="true" />
           </span>
           <div>

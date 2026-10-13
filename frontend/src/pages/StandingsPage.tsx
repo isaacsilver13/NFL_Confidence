@@ -70,7 +70,8 @@ export function StandingsPage() {
       <div>
         <p className="text-xs font-bold uppercase tracking-[0.2em] text-accent">Long game</p>
         <h1 className="mt-2 flex items-center gap-2 text-3xl font-black tracking-tight text-primary dark:text-white dev-dark:text-ink">
-          <BarChart3 className="text-sky" size={25} aria-hidden="true" /> Season standings
+          <BarChart3 className="text-sky dark:text-accent" size={25} aria-hidden="true" /> Season
+          standings
         </h1>
       </div>
 
