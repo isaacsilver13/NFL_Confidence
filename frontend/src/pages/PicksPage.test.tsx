@@ -281,7 +281,7 @@ describe('PicksPage', () => {
     const winner = screen.getByRole('button', { name: 'BUF' })
     const confidence = screen.getAllByRole('button', { name: '2' })[0]
     expect(winner).toHaveAttribute('aria-pressed', 'true')
-    expect(winner).toHaveClass('dark:border-sky', 'dark:bg-sky/20', 'dark:text-sky')
+    expect(winner).toHaveClass('dark:border-sky', 'dark:bg-sky/20', 'orange-trim')
     expect(confidence).toHaveAttribute('aria-pressed', 'true')
 
     await user.click(winner)

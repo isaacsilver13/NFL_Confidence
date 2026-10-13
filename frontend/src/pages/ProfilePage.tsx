@@ -391,7 +391,7 @@ export function ProfilePage() {
       <div>
         <p className="text-xs font-bold uppercase tracking-[0.2em] text-accent">Your record</p>
         <h1 className="mt-2 flex items-center gap-2 text-3xl font-black tracking-tight text-primary dark:text-white dev-dark:text-ink">
-          <UserRound className="text-sky" size={25} aria-hidden="true" /> Profile
+          <UserRound className="text-sky dark:text-accent" size={25} aria-hidden="true" /> Profile
         </h1>
       </div>
       {historyQuery.isPending && (
@@ -411,7 +411,7 @@ export function ProfilePage() {
       )}
       {historyQuery.data && historyQuery.data.weeks.length === 0 && (
         <div className="rounded-2xl border border-slate-200 bg-surface p-8 text-center shadow-sm dark:border-slate-800 dev-dark:border-border dark:bg-slate-900 dev-dark:bg-surface-elevated">
-          <UserRound className="mx-auto text-sky" size={40} aria-hidden="true" />
+          <UserRound className="mx-auto text-sky dark:text-accent" size={40} aria-hidden="true" />
           <h2 className="mt-4 text-xl font-bold">No picks submitted yet.</h2>
           <p className="mt-2 text-slate-600 dark:text-slate-300 dev-dark:text-text-secondary">
             Your current and completed-week picks will appear here.

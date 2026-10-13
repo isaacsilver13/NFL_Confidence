@@ -340,7 +340,9 @@ function LeaguePot() {
 
   return (
     <div className="mt-5 border-t border-white/15 pt-4">
-      <p className="text-xs font-bold uppercase tracking-[0.16em] text-sky">League pot</p>
+      <p className="text-xs font-bold uppercase tracking-[0.16em] text-sky dark:text-accent">
+        League pot
+      </p>
       <p className="mt-1 text-2xl font-black">{formatCents(pot.potCents)}</p>
       <div className="mt-2 flex flex-wrap gap-4 text-sm">
         <span className="inline-flex items-center gap-1.5">
@@ -450,7 +452,7 @@ export function DashboardPage() {
       </div>
       {league && (
         <div className="overflow-hidden rounded-2xl border border-primary/10 bg-primary p-5 text-white shadow-lg shadow-primary/15">
-          <p className="text-xs font-bold uppercase tracking-[0.2em] text-sky">
+          <p className="text-xs font-bold uppercase tracking-[0.2em] text-sky dark:text-accent">
             {league.season} season
             {currentWeek ? ` · Week ${currentWeek.weekNumber}` : ''}
           </p>
