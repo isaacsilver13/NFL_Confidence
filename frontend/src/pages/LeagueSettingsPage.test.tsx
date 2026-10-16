@@ -15,7 +15,7 @@ import {
   updateMemberPayment,
   voidUnpaidPicks,
 } from '@/api/league'
-import { fetchWeeks } from '@/api/nfl'
+import { fetchCurrentWeek, fetchWeeks } from '@/api/nfl'
 import { fetchSessionBootstrap } from '@/api/session'
 import type { SessionBootstrap } from '@/api/session'
 import type { League, LeagueMember } from '@/types/league'
@@ -36,6 +36,7 @@ vi.mock('@/api/league', () => ({
 }))
 
 vi.mock('@/api/nfl', () => ({
+  fetchCurrentWeek: vi.fn(),
   fetchWeeks: vi.fn(),
 }))
 
@@ -53,6 +54,7 @@ const mockedUpdateLeagueMember = vi.mocked(updateLeagueMember)
 const mockedUpdateMemberPayment = vi.mocked(updateMemberPayment)
 const mockedVoidUnpaidPicks = vi.mocked(voidUnpaidPicks)
 const mockedFetchWeeks = vi.mocked(fetchWeeks)
+const mockedFetchCurrentWeek = vi.mocked(fetchCurrentWeek)
 const mockedFetchSessionBootstrap = vi.mocked(fetchSessionBootstrap)
 
 const league: League = {
@@ -154,6 +156,14 @@ describe('LeagueSettingsPage', () => {
         status: 'regular',
       },
     ])
+    mockedFetchCurrentWeek.mockResolvedValue({
+      id: 'week-1',
+      season: 2026,
+      weekNumber: 1,
+      startDate: '2026-09-01T00:00:00Z',
+      endDate: '2026-09-08T00:00:00Z',
+      status: 'regular',
+    })
     mockedFetchMemberPaymentStatuses.mockResolvedValue(paymentStatuses)
     mockedFetchMemberSubmissionStatuses.mockResolvedValue(submissionStatuses)
     mockedRefreshLeagueData.mockResolvedValue({ weeksRefreshed: 2, gamesFinal: 5 })
@@ -310,5 +320,26 @@ describe('LeagueSettingsPage', () => {
 
     expect((await screen.findAllByText('Complete (autosaved)')).length).toBeGreaterThan(0)
     expect(screen.queryByText('Not submitted')).not.toBeInTheDocument()
+  })
+
+  it('defaults the payment and submission tables to the current week, not Week 1', async () => {
+    const week = (weekNumber: number) => ({
+      id: `week-${weekNumber}`,
+      season: 2026,
+      weekNumber,
+      startDate: '2026-09-01T00:00:00Z',
+      endDate: '2026-09-08T00:00:00Z',
+      status: 'regular',
+    })
+    mockedFetchWeeks.mockResolvedValue([week(1), week(2), week(3)])
+    mockedFetchCurrentWeek.mockResolvedValue(week(3))
+    renderPage()
+
+    await waitFor(() => expect(mockedFetchMemberPaymentStatuses).toHaveBeenCalledWith(3))
+    await waitFor(() => expect(mockedFetchMemberSubmissionStatuses).toHaveBeenCalledWith(3))
+    expect(screen.getByLabelText('Payment week')).toHaveValue('3')
+    expect(screen.getByLabelText('Submissions week')).toHaveValue('3')
+    expect(mockedFetchMemberPaymentStatuses).not.toHaveBeenCalledWith(1)
+    expect(mockedFetchMemberSubmissionStatuses).not.toHaveBeenCalledWith(1)
   })
 })
