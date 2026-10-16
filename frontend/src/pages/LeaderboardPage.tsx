@@ -49,6 +49,7 @@ function LeaderboardTable({
     member: { value: (m) => m.memberName },
     correct: { value: (m) => m.correctPicks, numeric: true },
     points: { value: (m) => m.totalPoints, numeric: true },
+    pointsLeft: { value: (m) => m.pointsRemaining, numeric: true },
     // Confidence points still riding on the night games.
     nightGames: {
       value: (m) =>
@@ -68,6 +69,7 @@ function LeaderboardTable({
             <SortableTh label="Member" columnKey="member" sort={sort} />
             <SortableTh label="Correct" columnKey="correct" sort={sort} align="right" />
             <SortableTh label="Points" columnKey="points" sort={sort} align="right" />
+            <SortableTh label="Points Left" columnKey="pointsLeft" sort={sort} align="right" />
             {showPicksRemaining && (
               <SortableTh
                 label="SNF/MNF"
@@ -94,6 +96,7 @@ function LeaderboardTable({
               <td className="px-5 py-4 font-bold">{member.memberName}</td>
               <td className="px-5 py-4 text-right">{member.correctPicks}</td>
               <td className="px-5 py-4 text-right font-black text-accent">{member.totalPoints}</td>
+              <td className="px-5 py-4 text-right">{member.pointsRemaining}</td>
               {showPicksRemaining && (
                 <td className="px-5 py-4 text-right whitespace-nowrap">
                   {formatPicksRemaining(member.nightGamePicks)}

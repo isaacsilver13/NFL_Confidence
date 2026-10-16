@@ -26,7 +26,7 @@ import {
   updateMemberPayment,
   voidUnpaidPicks,
 } from '@/api/league'
-import { fetchWeeks } from '@/api/nfl'
+import { fetchCurrentWeek, fetchWeeks } from '@/api/nfl'
 import { fetchSessionBootstrap } from '@/api/session'
 import { Button } from '@/components/ui/Button'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
@@ -154,6 +154,23 @@ function ScoreRefresh() {
   )
 }
 
+// The weeks list is ordered Week 1 first, so default to the current week instead of its head.
+function useWeekSelection(selectedWeek: number | null) {
+  const { data: weeks } = useQuery({
+    queryKey: ['weeks'],
+    queryFn: fetchWeeks,
+    staleTime: 5 * 60_000,
+  })
+  const { data: currentWeek, isPending: currentPending } = useQuery({
+    queryKey: ['weeks', 'current'],
+    queryFn: fetchCurrentWeek,
+    staleTime: 60_000,
+  })
+  // Hold at 0 (query disabled) while the current week loads so Week 1 isn't fetched first.
+  const fallback = currentPending ? 0 : (weeks?.[0]?.weekNumber ?? 0)
+  return { weeks, weekNumber: selectedWeek ?? currentWeek?.weekNumber ?? fallback }
+}
+
 function PaymentAdmin() {
   const [selectedWeek, setSelectedWeek] = useState<number | null>(null)
   const [actionUserId, setActionUserId] = useState<string | null>(null)
@@ -161,12 +178,7 @@ function PaymentAdmin() {
   const [error, setError] = useState<string | null>(null)
   const [confirmingVoid, setConfirmingVoid] = useState(false)
   const queryClient = useQueryClient()
-  const { data: weeks } = useQuery({
-    queryKey: ['weeks'],
-    queryFn: fetchWeeks,
-    staleTime: 5 * 60_000,
-  })
-  const weekNumber = selectedWeek ?? weeks?.[0]?.weekNumber ?? 0
+  const { weeks, weekNumber } = useWeekSelection(selectedWeek)
   const { data: paymentStatuses, isLoading } = useQuery({
     queryKey: ['league', 'payments', weekNumber],
     queryFn: () => fetchMemberPaymentStatuses(weekNumber),
@@ -314,12 +326,7 @@ function formatSubmittedAt(submittedAt: string): string {
 
 function SubmissionStatus() {
   const [selectedWeek, setSelectedWeek] = useState<number | null>(null)
-  const { data: weeks } = useQuery({
-    queryKey: ['weeks'],
-    queryFn: fetchWeeks,
-    staleTime: 5 * 60_000,
-  })
-  const weekNumber = selectedWeek ?? weeks?.[0]?.weekNumber ?? 0
+  const { weeks, weekNumber } = useWeekSelection(selectedWeek)
   const { data: submissionStatuses, isLoading } = useQuery({
     queryKey: ['league', 'submissions', weekNumber],
     queryFn: () => fetchMemberSubmissionStatuses(weekNumber),
