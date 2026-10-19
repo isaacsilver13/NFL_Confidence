@@ -31,27 +31,21 @@ depends_on: str | Sequence[str] | None = None
 
 def upgrade() -> None:
     bind = op.get_bind()
-    rows = bind.execute(
-        sa.text(
-            """
+    rows = bind.execute(sa.text("""
             SELECT p.user_id, g.week_id, max(p.submitted_at) AS submitted_at
             FROM picks p
             JOIN nfl_games g ON g.id = p.game_id
             WHERE p.voided_at IS NULL
             GROUP BY p.user_id, g.week_id
-            """
-        )
-    ).fetchall()
+            """)).fetchall()
     if not rows:
         return
     bind.execute(
-        sa.text(
-            """
+        sa.text("""
             INSERT INTO week_submissions (id, user_id, week_id, submitted_at)
             VALUES (:id, :user_id, :week_id, :submitted_at)
             ON CONFLICT (user_id, week_id) DO NOTHING
-            """
-        ),
+            """),
         [
             {
                 "id": str(uuid.uuid4()),

@@ -22,8 +22,7 @@ def upgrade() -> None:
         sa.Column("highest_confidence_loss", sa.Integer(), nullable=False, server_default="0"),
     )
     # Backfill from scored picks so past weeks don't read as "never lost".
-    op.execute(
-        """
+    op.execute("""
         UPDATE weekly_results wr
         SET highest_confidence_loss = sub.loss
         FROM (
@@ -33,8 +32,7 @@ def upgrade() -> None:
             GROUP BY p.user_id, g.week_id
         ) sub
         WHERE sub.user_id = wr.user_id AND sub.week_id = wr.week_id
-        """
-    )
+        """)
 
 
 def downgrade() -> None:

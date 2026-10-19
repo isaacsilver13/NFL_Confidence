@@ -98,15 +98,14 @@ def refresh_session(db: Session, raw_refresh_token: str) -> IssuedTokens:
     Raises UnauthorizedError if the token is missing, unknown, expired, or already revoked.
     """
     token_hash = hash_refresh_token(raw_refresh_token)
-    existing = refresh_token_repository.get_by_hash(db, token_hash)
-    if existing is None or not refresh_token_repository.is_valid(existing):
+    user_id = refresh_token_repository.consume_valid_by_hash(db, token_hash)
+    if user_id is None:
         raise UnauthorizedError("Invalid or expired refresh token")
 
-    user = user_repository.get_by_id(db, existing.user_id)
+    user = user_repository.get_by_id(db, user_id)
     if user is None:
         raise UnauthorizedError("Invalid or expired refresh token")
 
-    refresh_token_repository.revoke(db, existing)
     return issue_tokens(db, user)
 
 

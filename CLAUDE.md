@@ -42,9 +42,9 @@ For a focused change, run the narrowest relevant backend test, frontend test, ty
 
 - Backend flow: routes -> services -> repositories -> models (`app/api`, `app/services`, `app/repositories`, `app/models`). Frontend flow: pages/components/hooks -> API client -> backend routes.
 - Alembic migrations (`backend/alembic/`) are the database source of truth — never edit an applied migration to change schema history.
-- **Two parallel job-scheduling systems exist in `app/jobs/`**: `scheduler.py` + `nfl_schedule.py` (the live, automatically-running scheduler) and `job_runner.py` + `worker.py` (a separate, admin-triggered path). They are not the same code path — when touching pick-locking or schedule-driven behavior, check which of the two systems the change needs to apply to, and be aware their locking logic has been found to diverge (live scheduler locks per-week; the admin-triggered path has been found to lock per-game). Verify current behavior in both before assuming parity.
+- Scheduled jobs are driven by external `POST /api/v1/internal/tick` requests through `app/jobs/tick.py`. There is no in-process scheduler in the application lifespan. The GitHub tick workflow is manual-only; cron-job.org is the chosen automatic trigger. Inspect the tick dispatch and job implementations when changing locking or schedule behavior.
 - Auth lives in `app/auth`; `app/integrations` holds external API clients; `app/db` holds session/engine setup separate from `app/models`.
-- Dev vs prod are fully separate Fly.io apps with separate config: `backend/fly.dev.toml` / `backend/fly.toml` and `frontend/fly.dev.toml` / `frontend/fly.toml`. CI (`.github/workflows/ci.yml`) deploys `develop` → dev Fly apps and `main` → prod Fly apps automatically after backend+frontend checks pass, using `flyctl deploy --config <dev-or-prod>.toml`.
+- Each environment serves the API and built SPA from one Fly application. Root `fly.dev.toml` targets `nfl-confidence-web-dev`; root `fly.toml` targets `nfl-confidence-web`. CI deploys `develop` to dev and `main` to prod after backend/frontend checks pass. Subdirectory Fly configurations are legacy; use root deployment instructions.
 - Consult `docs/technical-architecture.md`, `docs/testing-strategy.md`, `docs/deployment.md`, and `docs/release-readiness.md` for detailed requirements rather than duplicating them here.
 
 ## Safety boundaries

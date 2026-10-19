@@ -20,9 +20,7 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    op.execute(
-        sa.text(
-            """
+    op.execute(sa.text("""
             WITH ranked AS (
                 SELECT id, row_number() OVER (ORDER BY created_at, id) AS row_number
                 FROM leagues
@@ -32,9 +30,7 @@ def upgrade() -> None:
             SET is_active = FALSE
             FROM ranked
             WHERE leagues.id = ranked.id AND ranked.row_number > 1
-            """
-        )
-    )
+            """))
     op.create_index(
         "uq_leagues_one_active",
         "leagues",
