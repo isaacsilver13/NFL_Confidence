@@ -6,6 +6,7 @@ import { savePicks, submitPicks } from '@/api/nfl'
 import { fetchCurrentPicksCard } from '@/api/session'
 import { LastRefreshed } from '@/components/nfl/LastRefreshed'
 import { TeamLogo } from '@/components/nfl/TeamLogo'
+import { getTeamSelectionStyle } from '@/components/nfl/teamPalette'
 import { getPicksCardRefetchInterval } from '@/features/nfl/picksPolling'
 import type { NflGame, NflPick, NflWeek, PickInput, WeekSubmission } from '@/types/nfl'
 
@@ -137,6 +138,7 @@ function GamesForm({
   const [drafts, setDrafts] = useState<PickDrafts>(() => initialDrafts(games, picks))
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
+  const [isDraftSaved, setIsDraftSaved] = useState(true)
   const [voided, setVoided] = useState(false)
   const [submitPicksError, setSubmitPicksError] = useState<string | null>(null)
   const [now, setNow] = useState(() => Date.now())
@@ -210,7 +212,8 @@ function GamesForm({
     },
   })
   const isComplete = pickedCount === games.length && games.length > 0
-  const canSubmit = isComplete && !hasConflicts && !isLocked && !submitMutation.isPending
+  const canSubmit =
+    isComplete && !hasConflicts && !isLocked && !submitMutation.isPending && isDraftSaved
 
   function handleSubmitPicks() {
     submitMutation.mutate(week.weekNumber)
@@ -243,6 +246,7 @@ function GamesForm({
       if (pendingSave.version === draftVersionRef.current) {
         await queryClient.invalidateQueries({ queryKey: ['picks', 'card', 'current'] })
         if (pendingSave.version === draftVersionRef.current) {
+          setIsDraftSaved(true)
           setSaved(true)
           setVoided(voidedGameIds.length > 0)
           setSubmitError(null)
@@ -295,6 +299,7 @@ function GamesForm({
     const nextVersion = draftVersionRef.current + 1
     draftsRef.current = nextDrafts
     draftVersionRef.current = nextVersion
+    setIsDraftSaved(false)
     setSaved(false)
     setSubmitError(null)
     setDrafts(nextDrafts)
@@ -480,14 +485,19 @@ function GamesForm({
                 </span>
               </p>
               <span
-                className={`inline-flex shrink-0 items-center gap-1 text-xs font-black uppercase tracking-[0.12em] ${isConflicting ? 'text-danger' : isPicked ? 'text-accent' : 'text-ink-muted dark:text-slate-400 dev-dark:text-text-muted'}`}
+                style={draft.team && !isConflicting ? getTeamSelectionStyle(draft.team) : undefined}
+                className={`inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs font-black uppercase tracking-[0.12em] ${isConflicting ? 'text-danger' : 'text-ink-muted dark:text-slate-400 dev-dark:text-text-muted'}`}
               >
                 {isConflicting ? (
                   <AlertTriangle size={13} aria-hidden="true" />
                 ) : isPicked ? (
                   <Check size={13} aria-hidden="true" />
                 ) : null}
-                {isConflicting ? 'Conflict' : isPicked ? 'Picked' : 'Not picked'}
+                {isConflicting
+                  ? 'Conflict'
+                  : draft.team
+                    ? `${draft.team} selected${isPicked ? ' · Picked' : ''}`
+                    : 'Not picked'}
               </span>
             </div>
             <div className="flex flex-col gap-3 p-3 sm:p-4 lg:flex-row lg:items-center lg:justify-between lg:gap-6">
@@ -562,7 +572,8 @@ function GamesForm({
                           aria-pressed={isSelected}
                           disabled={isLocked}
                           onClick={() => updateDraft(game.id, { team: isSelected ? '' : team })}
-                          className={`flex min-h-11 items-center gap-2 rounded-xl border px-3 py-2 text-sm font-bold transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-60 ${isSelected ? 'border-4 border-white bg-primary text-white shadow-sm dark:border-sky dev-dark:border-accent dark:bg-sky/20 dev-dark:bg-accent/20 orange-trim dev-dark:text-accent' : 'border-slate-300 bg-white text-ink hover:border-sky hover:bg-sky/10 dark:border-slate-700 dev-dark:border-border-hover dark:bg-slate-950 dev-dark:bg-background dark:text-slate-100 dev-dark:text-ink dark:hover:border-sky dev-dark:hover:border-accent'}`}
+                          style={isSelected ? getTeamSelectionStyle(team) : undefined}
+                          className={`flex min-h-11 items-center gap-2 rounded-xl border px-3 py-2 text-sm font-bold transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-60 ${isSelected ? 'ring-2 ring-current ring-offset-2 ring-offset-surface shadow-sm' : 'border-slate-300 bg-white text-ink hover:border-sky hover:bg-sky/10 dark:border-slate-700 dev-dark:border-border-hover dark:bg-slate-950 dev-dark:bg-background dark:text-slate-100 dev-dark:text-ink dark:hover:border-sky dev-dark:hover:border-accent'}`}
                         >
                           <TeamLogo code={team} size="sm" decorative />
                           {team}
@@ -635,9 +646,23 @@ function GamesForm({
             </p>
           )}
           {submitError && (
-            <p role="alert" className="text-sm text-danger">
-              {submitError}
-            </p>
+            <>
+              <p role="alert" className="text-sm text-danger">
+                {submitError}
+              </p>
+              {!isLocked && (
+                <button
+                  type="button"
+                  disabled={saveMutation.isPending}
+                  onClick={() =>
+                    scheduleSave({ drafts: draftsRef.current, version: draftVersionRef.current }, 0)
+                  }
+                  className="min-h-11 rounded-xl border border-current px-3 py-2 text-sm font-bold disabled:opacity-60"
+                >
+                  Retry save
+                </button>
+              )}
+            </>
           )}
         </div>
       )}

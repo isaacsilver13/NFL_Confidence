@@ -48,3 +48,20 @@ export function getTeamPalette(code: string): TeamPalette {
   // ESPN sometimes sends WSH for Washington (see TEAM_CODE_ALIASES in teamLogos.ts).
   return TEAM_PALETTES[key === 'WSH' ? 'WAS' : key] ?? FALLBACK_PALETTE
 }
+/** Preserve a team's accent text when readable, otherwise use white or black. */
+export function getTeamSelectionStyle(code: string) {
+  const palette = getTeamPalette(code)
+  function luminance(hex: string) {
+    const channels = hex.match(/[a-f\d]{2}/gi)!.map((channel) => {
+      const value = parseInt(channel, 16) / 255
+      return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4
+    })
+    return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722
+  }
+  const background = luminance(palette.background)
+  const foreground = luminance(palette.foreground)
+  const contrast =
+    (Math.max(background, foreground) + 0.05) / (Math.min(background, foreground) + 0.05)
+  const color = contrast >= 4.5 ? palette.foreground : background > 0.179 ? '#000000' : '#ffffff'
+  return { backgroundColor: palette.background, color, borderColor: color }
+}

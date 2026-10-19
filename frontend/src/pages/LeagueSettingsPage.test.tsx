@@ -142,6 +142,22 @@ function renderPage(session: SessionBootstrap = ownerSession) {
 }
 
 describe('LeagueSettingsPage', () => {
+  it('groups tools in accordions with the roster open by default', async () => {
+    renderPage()
+    expect(await screen.findByRole('button', { name: /^Member roster/ })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    )
+    const invites = screen.getByRole('button', { name: /^Invitations & passcode/ })
+    expect(invites).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByText('League passcode')).not.toBeInTheDocument()
+    await userEvent.setup().click(invites)
+    expect(screen.getByText('League passcode')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Weekly payments/ })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    )
+  })
   beforeEach(() => {
     vi.clearAllMocks()
     mockedFetchLeague.mockResolvedValue(league)
@@ -236,7 +252,7 @@ describe('LeagueSettingsPage', () => {
     const user = userEvent.setup()
     renderPage()
 
-    expect(await screen.findByText('Weekly payments')).toBeInTheDocument()
+    await user.click(await screen.findByRole('button', { name: /^Weekly payments/ }))
     const paymentCheckboxes = await screen.findAllByRole('checkbox', { name: 'Paid' })
     await user.click(paymentCheckboxes[1])
 
@@ -251,6 +267,7 @@ describe('LeagueSettingsPage', () => {
     const user = userEvent.setup()
     renderPage()
 
+    await user.click(await screen.findByRole('button', { name: /^Scores & standings/ }))
     await user.click(await screen.findByRole('button', { name: 'Refresh scores & standings' }))
 
     await waitFor(() => expect(mockedRefreshLeagueData).toHaveBeenCalledTimes(1))
@@ -267,6 +284,7 @@ describe('LeagueSettingsPage', () => {
     )
     renderPage()
 
+    await user.click(await screen.findByRole('button', { name: /^Scores & standings/ }))
     await user.click(await screen.findByRole('button', { name: 'Refresh scores & standings' }))
 
     expect(await screen.findByRole('button', { name: 'Refreshing...' })).toBeDisabled()
@@ -282,6 +300,7 @@ describe('LeagueSettingsPage', () => {
     )
     renderPage()
 
+    await user.click(await screen.findByRole('button', { name: /^Scores & standings/ }))
     await user.click(await screen.findByRole('button', { name: 'Refresh scores & standings' }))
 
     expect(await screen.findByText('Could not reach the NFL data provider.')).toBeInTheDocument()
@@ -293,6 +312,7 @@ describe('LeagueSettingsPage', () => {
     mockedRefreshLeagueData.mockRejectedValueOnce(new Error('network down'))
     renderPage()
 
+    await user.click(await screen.findByRole('button', { name: /^Scores & standings/ }))
     await user.click(await screen.findByRole('button', { name: 'Refresh scores & standings' }))
 
     expect(
@@ -303,6 +323,7 @@ describe('LeagueSettingsPage', () => {
   it("shows who has and hasn't submitted picks for the selected week", async () => {
     renderPage()
 
+    await userEvent.setup().click(await screen.findByRole('button', { name: /^Pick submissions/ }))
     expect(await screen.findByText('Who has submitted picks')).toBeInTheDocument()
     await waitFor(() => expect(mockedFetchMemberSubmissionStatuses).toHaveBeenCalledWith(1))
     expect(await screen.findByText(/Submitted Sep 5/)).toBeInTheDocument()
@@ -318,6 +339,7 @@ describe('LeagueSettingsPage', () => {
     })
     renderPage()
 
+    await userEvent.setup().click(await screen.findByRole('button', { name: /^Pick submissions/ }))
     expect((await screen.findAllByText('Complete (autosaved)')).length).toBeGreaterThan(0)
     expect(screen.queryByText('Not submitted')).not.toBeInTheDocument()
   })
@@ -335,6 +357,8 @@ describe('LeagueSettingsPage', () => {
     mockedFetchCurrentWeek.mockResolvedValue(week(3))
     renderPage()
 
+    await userEvent.setup().click(await screen.findByRole('button', { name: /^Weekly payments/ }))
+    await userEvent.setup().click(await screen.findByRole('button', { name: /^Pick submissions/ }))
     await waitFor(() => expect(mockedFetchMemberPaymentStatuses).toHaveBeenCalledWith(3))
     await waitFor(() => expect(mockedFetchMemberSubmissionStatuses).toHaveBeenCalledWith(3))
     expect(screen.getByLabelText('Payment week')).toHaveValue('3')

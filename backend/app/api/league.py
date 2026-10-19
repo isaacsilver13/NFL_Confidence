@@ -61,6 +61,7 @@ def create_league(
             season=league.season,
             member_count=league_service.get_member_count(db, league),
             commissioner_name=current_user.display_name,
+            commissioner_names=league_service.get_commissioner_names(db, league),
             invite_code=league.invite_code,
             is_active=league.is_active,
         ).model_dump(by_alias=True)
@@ -80,6 +81,7 @@ def get_league(
             season=league.season,
             member_count=league_service.get_member_count(db, league),
             commissioner_name=league.owner.display_name,
+            commissioner_names=league_service.get_commissioner_names(db, league),
             invite_code=league.invite_code,
             is_active=league.is_active,
         ).model_dump(by_alias=True)

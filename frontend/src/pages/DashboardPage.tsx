@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { ApiError } from '@/api/client'
 import { createLeague, fetchLeaguePot, joinLeagueWithCode } from '@/api/league'
-import { fetchCompletedWeeks, fetchPickHistory } from '@/api/nfl'
+import { fetchStartedWeeks, fetchPickHistory } from '@/api/nfl'
 import { fetchWeeklyLeaderboard, fetchSeasonStandings } from '@/api/leaderboard'
 import { fetchCurrentPicksCard, fetchSessionBootstrap } from '@/api/session'
 import { Button } from '@/components/ui/Button'
@@ -71,6 +71,7 @@ function DashboardSections({
   // this component first mounted.
   const [openSections, setOpenSections] = useState<SectionId[]>(() => storedOpenSections(userId))
   const [hashSection, setHashSection] = useState<SectionId | null>(() => sectionFromHash())
+  const [leaderboardWeek, setLeaderboardWeek] = useState<number>()
   const isOpen = (section: SectionId) => openSections.includes(section) || section === hashSection
 
   useEffect(() => {
@@ -108,24 +109,25 @@ function DashboardSections({
   }
 
   const leaderboardWeeksQuery = useQuery({
-    queryKey: ['leaderboard', 'weeks'],
-    queryFn: fetchCompletedWeeks,
-    enabled: isOpen('leaderboard'),
-    staleTime: 10 * 60_000,
+    queryKey: ['leaderboard', 'weeks', 'started'],
+    queryFn: fetchStartedWeeks,
+    staleTime: 60_000,
+    refetchInterval: 60_000,
   })
-  const latestCompletedWeek = leaderboardWeeksQuery.data?.at(-1)?.weekNumber
-  const summaryWeek = latestCompletedWeek ?? currentWeekNumber
+  const summaryWeek =
+    leaderboardWeek ?? currentWeekNumber ?? leaderboardWeeksQuery.data?.at(-1)?.weekNumber
   const leaderboardQuery = useQuery({
     queryKey: ['leaderboard', 'week', summaryWeek],
     queryFn: () => fetchWeeklyLeaderboard(summaryWeek as number),
-    enabled: isOpen('leaderboard') && summaryWeek !== undefined,
-    staleTime: 10 * 60_000,
+    enabled: summaryWeek !== undefined,
+    staleTime: 60_000,
+    refetchInterval: 60_000,
   })
   const standingsQuery = useQuery({
     queryKey: ['leaderboard', 'season'],
     queryFn: () => fetchSeasonStandings(),
-    enabled: isOpen('standings'),
-    staleTime: 10 * 60_000,
+    staleTime: 60_000,
+    refetchInterval: 60_000,
   })
   const picksQuery = useQuery({
     queryKey: ['picks', 'card', 'current'],
@@ -167,7 +169,7 @@ function DashboardSections({
   }
 
   const sectionContent: Record<SectionId, React.ReactNode> = {
-    leaderboard: <LeaderboardPage />,
+    leaderboard: <LeaderboardPage week={summaryWeek} onWeekChange={setLeaderboardWeek} />,
     breakdown: <WeeklyGameBreakdownSection />,
     standings: <StandingsPage />,
     profile: <ProfilePage />,
@@ -463,7 +465,11 @@ export function DashboardPage() {
               {league.memberCount === 1 ? '' : 's'}
             </span>
             <span className="inline-flex items-center gap-2">
-              <CalendarDays size={16} aria-hidden="true" /> Commissioner {league.commissionerName}
+              <CalendarDays size={16} aria-hidden="true" />
+              {(league.commissionerNames?.length ?? 0) > 1 ? 'Commissioners' : 'Commissioner'}{' '}
+              {league.commissionerNames?.length
+                ? league.commissionerNames.join(', ')
+                : league.commissionerName}
             </span>
           </div>
           <LeaguePot />

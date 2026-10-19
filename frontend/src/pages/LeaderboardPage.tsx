@@ -110,7 +110,10 @@ function LeaderboardTable({
   )
 }
 
-export function LeaderboardPage() {
+export function LeaderboardPage({
+  week: controlledWeek,
+  onWeekChange,
+}: { week?: number; onWeekChange?: (week: number) => void } = {}) {
   const [week, setWeek] = useState<number>()
   const [showAllPicks, setShowAllPicks] = useState(false)
   const [showOutcomeScenarios, setShowOutcomeScenarios] = useState(false)
@@ -126,12 +129,14 @@ export function LeaderboardPage() {
   })
   const completedWeeks = weeksQuery.data ?? []
   const weekOptions = buildWeekOptions(completedWeeks, currentWeekQuery.data?.weekNumber)
-  const selectedWeek = week ?? currentWeekQuery.data?.weekNumber ?? weekOptions.at(-1)?.weekNumber
+  const selectedWeek =
+    controlledWeek ?? week ?? currentWeekQuery.data?.weekNumber ?? weekOptions.at(-1)?.weekNumber
   const query = useQuery({
     queryKey: ['leaderboard', 'week', selectedWeek],
     queryFn: () => fetchWeeklyLeaderboard(selectedWeek as number),
     enabled: selectedWeek !== undefined,
-    staleTime: 10 * 60_000,
+    staleTime: 60_000,
+    refetchInterval: 60_000,
   })
   const canShowOutcomeScenarios =
     selectedWeek === currentWeekQuery.data?.weekNumber &&
@@ -162,7 +167,11 @@ export function LeaderboardPage() {
             Week
             <select
               value={selectedWeek ?? ''}
-              onChange={(event) => setWeek(Number(event.target.value))}
+              onChange={(event) => {
+                const nextWeek = Number(event.target.value)
+                setWeek(nextWeek)
+                onWeekChange?.(nextWeek)
+              }}
               className="min-h-11 rounded-xl border border-slate-300 bg-surface px-3 text-ink shadow-sm dark:border-slate-700 dev-dark:border-border-hover dark:bg-slate-900 dev-dark:bg-surface-elevated dark:text-slate-100 dev-dark:text-ink"
             >
               {weekOptions.map(({ weekNumber, isCurrent }) => (

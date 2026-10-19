@@ -60,7 +60,8 @@ export function StandingsPage() {
   const seasonQuery = useQuery({
     queryKey: ['leaderboard', 'season'],
     queryFn: () => fetchSeasonStandings(),
-    staleTime: 10 * 60_000,
+    staleTime: 60_000,
+    refetchInterval: 60_000,
   })
   const isLoading = seasonQuery.isPending
   const error = seasonQuery.error

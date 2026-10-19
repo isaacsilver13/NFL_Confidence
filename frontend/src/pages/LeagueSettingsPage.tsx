@@ -29,6 +29,7 @@ import {
 import { fetchCurrentWeek, fetchWeeks } from '@/api/nfl'
 import { fetchSessionBootstrap } from '@/api/session'
 import { Button } from '@/components/ui/Button'
+import { AccordionSection } from '@/components/ui/AccordionSection'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import type { LeagueMember } from '@/types/league'
 
@@ -396,6 +397,33 @@ function SubmissionStatus() {
   )
 }
 
+function AdminSection({
+  id,
+  title,
+  summary,
+  defaultOpen = false,
+  children,
+}: {
+  id: string
+  title: string
+  summary: string
+  defaultOpen?: boolean
+  children: React.ReactNode
+}) {
+  const [isOpen, setIsOpen] = useState(defaultOpen)
+  return (
+    <AccordionSection
+      id={id}
+      title={title}
+      summary={summary}
+      isOpen={isOpen}
+      onToggle={() => setIsOpen(!isOpen)}
+    >
+      {children}
+    </AccordionSection>
+  )
+}
+
 export function LeagueSettingsPage() {
   const { data: bootstrapData, isLoading: isLoadingMembership } = useQuery({
     queryKey: ['session', 'bootstrap'],
@@ -529,7 +557,11 @@ export function LeagueSettingsPage() {
       </div>
 
       {isCommissioner && (
-        <div className="space-y-5">
+        <AdminSection
+          id="member-invites"
+          title="Invitations & passcode"
+          summary="Share the league code or invite members by email"
+        >
           <div className="space-y-3">
             <h2 className="flex items-center gap-2 text-lg font-bold">
               <KeyRound size={18} aria-hidden="true" /> League passcode
@@ -549,10 +581,15 @@ export function LeagueSettingsPage() {
               void queryClient.invalidateQueries({ queryKey: ['league', 'members'] })
             }
           />
-        </div>
+        </AdminSection>
       )}
 
-      <div className="space-y-3">
+      <AdminSection
+        id="member-roster"
+        title="Member roster"
+        summary={`${members?.length ?? league.memberCount} members · manage names and roles`}
+        defaultOpen
+      >
         <h2 className="flex items-center gap-2 text-lg font-bold">
           <Users size={18} aria-hidden="true" /> Members
         </h2>
@@ -657,11 +694,29 @@ export function LeagueSettingsPage() {
             </li>
           ))}
         </ul>
-      </div>
+      </AdminSection>
 
-      <ScoreRefresh />
-      <SubmissionStatus />
-      <PaymentAdmin />
+      <AdminSection
+        id="member-refresh"
+        title="Scores & standings"
+        summary="Refresh game scores and league results"
+      >
+        <ScoreRefresh />
+      </AdminSection>
+      <AdminSection
+        id="member-submissions"
+        title="Pick submissions"
+        summary="Check who has completed or submitted a weekly card"
+      >
+        <SubmissionStatus />
+      </AdminSection>
+      <AdminSection
+        id="member-payments"
+        title="Weekly payments"
+        summary="Track payments and manage unpaid picks"
+      >
+        <PaymentAdmin />
+      </AdminSection>
       <ConfirmDialog
         open={confirmingRemoveMember !== null}
         title="Remove member?"

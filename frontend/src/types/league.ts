@@ -4,6 +4,7 @@ export interface League {
   season: number
   memberCount: number
   commissionerName: string
+  commissionerNames?: string[]
   inviteCode: string
   isActive: boolean
 }

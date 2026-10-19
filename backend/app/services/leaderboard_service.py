@@ -390,6 +390,27 @@ def get_season_standings(
         db, league_id=league.id, season=target_season
     )
     standings = _ranked_members(results, season=True)
+    # SeasonResult stores points and placements, but no pick record. Aggregate
+    # the same completed weeks used by season scoring instead of returning 0-0.
+    records = db.execute(
+        select(
+            WeeklyResult.user_id,
+            func.sum(WeeklyResult.correct_picks),
+            func.sum(WeeklyResult.incorrect_picks),
+        )
+        .join(NflWeek, WeeklyResult.week_id == NflWeek.id)
+        .where(
+            WeeklyResult.league_id == league.id,
+            NflWeek.season == target_season,
+            NflWeek.status == WeekStatus.COMPLETE,
+        )
+        .group_by(WeeklyResult.user_id)
+    ).all()
+    records_by_user = {
+        user_id: (correct or 0, incorrect or 0) for user_id, correct, incorrect in records
+    }
+    for member in standings:
+        member.correct_picks, member.incorrect_picks = records_by_user.get(member.member_id, (0, 0))
     if not standings:
         raise NotFoundError(f"Season {target_season} has no standings data.")
     return SeasonStandingsRead(season=target_season, standings=standings)

@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Literal
 
-from pydantic import EmailStr
+from pydantic import EmailStr, Field
 
 from app.models.enums import LeagueRole
 from app.schemas.base import CamelModel
@@ -16,6 +16,7 @@ class LeagueRead(CamelModel):
     season: int
     member_count: int
     commissioner_name: str
+    commissioner_names: list[str] = Field(default_factory=list)
     invite_code: str
     is_active: bool
 
