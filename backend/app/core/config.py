@@ -14,7 +14,7 @@ class Settings(BaseSettings):
 
     environment: str = "local"
 
-    # Scheduled jobs are triggered externally (a GitHub Actions cron calls
+    # Scheduled jobs are triggered externally (a cron-job.org calls
     # POST /api/v1/internal/tick), so the app can sleep between runs. The tick
     # endpoint stays disabled (503) until TICK_TOKEN is set.
     tick_token: str = ""
