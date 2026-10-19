@@ -111,16 +111,13 @@ def render_weekly_report_html(db: Session, *, league: League, week_number: int) 
 
     scoreboard_html = "".join(_game_card_html(game) for game in games)
 
-    standings_rows = "".join(
-        f"""<tr>
+    standings_rows = "".join(f"""<tr>
           <td style="padding:8px 12px;border-bottom:1px solid #ddd4bf;font-weight:700;">{row.rank}</td>
           <td style="padding:8px 12px;border-bottom:1px solid #ddd4bf;">{escape(row.member_name)}</td>
           <td style="padding:8px 12px;border-bottom:1px solid #ddd4bf;text-align:right;font-weight:700;">{row.total_points}</td>
           <td style="padding:8px 12px;border-bottom:1px solid #ddd4bf;text-align:right;">{row.correct_picks}</td>
           <td style="padding:8px 12px;border-bottom:1px solid #ddd4bf;text-align:right;">{row.incorrect_picks}</td>
-        </tr>"""
-        for row in leaderboard.standings
-    )
+        </tr>""" for row in leaderboard.standings)
 
     payment_chips = ""
     for payment_member, payment, _voided_pick_count in payment_statuses:

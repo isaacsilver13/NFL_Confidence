@@ -90,7 +90,7 @@ def test_failed_issuance_rolls_back_consumption(tmp_path, monkeypatch):
         engine.dispose()
 
 
-def test_jose_upgrade_preserves_hs256_claims_and_rejects_bad_tokens():
+def test_jwt_migration_preserves_hs256_claims_and_rejects_bad_tokens():
     import base64
     import hashlib
     import hmac
@@ -99,13 +99,13 @@ def test_jose_upgrade_preserves_hs256_claims_and_rejects_bad_tokens():
 
     from app.auth import jwt as tokens
 
-    def legacy_token(payload):
+    def legacy_token(payload, *, key=None, algorithm="HS256"):
         def encode(value):
             return base64.urlsafe_b64encode(json.dumps(value).encode()).rstrip(b"=")
 
-        signing_input = encode({"alg": "HS256", "typ": "JWT"}) + b"." + encode(payload)
+        signing_input = encode({"alg": algorithm, "typ": "JWT"}) + b"." + encode(payload)
         signature = hmac.new(
-            tokens.settings.jwt_secret.encode(), signing_input, hashlib.sha256
+            (key or tokens.settings.jwt_secret).encode(), signing_input, hashlib.sha256
         ).digest()
         return (signing_input + b"." + base64.urlsafe_b64encode(signature).rstrip(b"=")).decode()
 
@@ -116,6 +116,12 @@ def test_jose_upgrade_preserves_hs256_claims_and_rejects_bad_tokens():
         "exp": int(time.time()) + 60,
     }
     assert tokens.decode_access_token(legacy_token(payload)) == payload
+    for forged in (
+        legacy_token(payload, key="independent-wrong-key-fixture-only"),
+        legacy_token(payload, algorithm="HS384"),
+    ):
+        with pytest.raises(tokens.InvalidTokenError):
+            tokens.decode_access_token(forged)
     for invalid in ({**payload, "exp": 1}, {**payload, "type": "refresh"}):
         with pytest.raises(tokens.InvalidTokenError):
             tokens.decode_access_token(legacy_token(invalid))
