@@ -84,15 +84,27 @@ def test_monday_thursday_sync_does_not_run_on_other_days() -> None:
     assert "monday_thursday_score_sync" not in names(at(2026, 10, 4, 20))  # Sunday
 
 
-def test_overnight_sync_runs_daily_at_2am() -> None:
+def test_overnight_sync_is_due_daily_from_2am_for_the_rest_of_the_day() -> None:
     for day in range(4, 11):
+        assert "overnight_score_sync" not in names(at(2026, 10, day, 1, 59))
         assert "overnight_score_sync" in names(at(2026, 10, day, 2, 30))
-        assert "overnight_score_sync" not in names(at(2026, 10, day, 3, 0))
+        assert "overnight_score_sync" in names(at(2026, 10, day, 7, 0))  # a late tick catches up
+
+
+def test_single_shot_slot_key_is_per_day_not_per_hour() -> None:
+    early = {s.job_name: s.key for s in due_slots(at(2026, 10, 6, 2, 5), CFG)}
+    late = {s.job_name: s.key for s in due_slots(at(2026, 10, 6, 7, 5), CFG)}
+    tomorrow = {s.job_name: s.key for s in due_slots(at(2026, 10, 7, 2, 5), CFG)}
+    assert early["overnight_score_sync"] == late["overnight_score_sync"]
+    assert early["overnight_score_sync"] != tomorrow["overnight_score_sync"]
+    assert early["lock_expired_picks"] != late["lock_expired_picks"]  # lock stays hourly
 
 
 def test_default_import_is_tuesday_9am() -> None:
+    assert "schedule_import" not in names(at(2026, 10, 6, 8, 59))
     assert "schedule_import" in names(at(2026, 10, 6, 9, 10))  # Tuesday
-    assert "schedule_import" not in names(at(2026, 10, 6, 10, 0))
+    assert "schedule_import" in names(at(2026, 10, 6, 15, 0))  # late tick catches up
+    assert "schedule_import" not in names(at(2026, 10, 7, 0, 0))  # Wednesday
     assert "schedule_import" not in names(at(2026, 10, 5, 9, 10))  # Monday
 
 
@@ -103,14 +115,16 @@ def test_import_day_and_hour_are_configurable() -> None:
 
 
 def test_default_reminder_is_wednesday_5pm() -> None:
+    assert "weekly_picks_reminder" not in names(at(2026, 10, 7, 16, 59))
     assert "weekly_picks_reminder" in names(at(2026, 10, 7, 17, 0))
-    assert "weekly_picks_reminder" not in names(at(2026, 10, 7, 18, 0))
+    assert "weekly_picks_reminder" in names(at(2026, 10, 7, 20, 0))  # late tick catches up
     assert "weekly_picks_reminder" not in names(at(2026, 10, 8, 17, 0))
 
 
 def test_default_weekly_report_is_tuesday_8am() -> None:
+    assert "weekly_report" not in names(at(2026, 10, 6, 7, 59))
     assert "weekly_report" in names(at(2026, 10, 6, 8, 0))
-    assert "weekly_report" not in names(at(2026, 10, 6, 9, 0))
+    assert "weekly_report" in names(at(2026, 10, 6, 12, 0))  # late tick catches up
     assert "weekly_report" not in names(at(2026, 10, 7, 8, 0))
 
 
@@ -118,9 +132,10 @@ def test_lock_slot_is_due_every_hour() -> None:
     assert all("lock_expired_picks" in names(at(2026, 10, 6, h, 5)) for h in range(24))
 
 
-def test_quiet_hour_only_has_lock() -> None:
-    # Tuesday 14:00 Chicago: no sync window, no import, no reminder.
-    assert names(at(2026, 10, 6, 14, 5)) == ["lock_expired_picks"]
+def test_quiet_hour_has_only_overnight_catch_up_and_lock() -> None:
+    # Friday 14:00 Chicago: no sync window, import, reminder or report.
+    assert names(at(2026, 10, 9, 14, 5)) == ["overnight_score_sync", "lock_expired_picks"]
+    assert names(at(2026, 10, 9, 1, 5)) == ["lock_expired_picks"]
 
 
 def test_import_runs_before_sync_and_lock_is_last() -> None:
@@ -128,14 +143,15 @@ def test_import_runs_before_sync_and_lock_is_last() -> None:
     assert names(at(2026, 10, 4, 10, 5), cfg) == [
         "schedule_import",
         "sunday_score_sync",
+        "overnight_score_sync",
         "lock_expired_picks",
     ]
 
 
-def test_spring_forward_sunday_has_no_2am_overnight_slot() -> None:
+def test_spring_forward_sunday_still_gets_its_overnight_sync() -> None:
     # 2027-03-14: clocks jump 02:00 CST -> 03:00 CDT, so local 02:xx does not exist.
-    # The Sunday-window slots still fire on time after the change.
-    assert "overnight_score_sync" not in names(at(2027, 3, 14, 3, 0))
+    # The catch-up window means the first tick at 03:00 still runs the overnight sync.
+    assert "overnight_score_sync" in names(at(2027, 3, 14, 3, 0))
     assert "sunday_score_sync" in names(at(2027, 3, 14, 10, 5))
 
 

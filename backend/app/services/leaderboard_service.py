@@ -5,8 +5,8 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import desc, distinct, func, select
-from sqlalchemy.orm import Session
+from sqlalchemy import ColumnElement, desc, distinct, exists, func, or_, select
+from sqlalchemy.orm import Session, aliased
 
 from app.core.config import get_settings
 from app.core.exceptions import NotFoundError
@@ -33,6 +33,8 @@ from app.schemas.leaderboard import (
     GamePicksRead,
     LeaderboardMemberRead,
     MemberGamePickRead,
+    OutcomeScenarioRead,
+    OutcomeScenariosRead,
     PickBreakdownRead,
     SeasonStandingsRead,
     TeamPickCountRead,
@@ -40,7 +42,7 @@ from app.schemas.leaderboard import (
     WeeklyLeaderboardRead,
     WeeklyPickBreakdownRead,
 )
-from app.services import picks_service
+from app.services import picks_service, weeks_service
 
 
 def _weekly_payout_cents(*, rank: int, member_count: int) -> int:
@@ -91,7 +93,11 @@ def _ranked_members(
                 if season
                 else -(getattr(result, "correct_picks", 0) or 0)
             ),
-            -(getattr(result, "highest_confidence_win", 0) or 0),
+            (
+                -(getattr(result, "highest_confidence_win", 0) or 0)
+                if season
+                else (getattr(result, "highest_confidence_loss", 0) or 0)
+            ),
             result.user.display_name,
         ),
     )
@@ -106,7 +112,11 @@ def _ranked_members(
                 if season
                 else getattr(result, "correct_picks", 0) or 0
             ),
-            getattr(result, "highest_confidence_win", 0) or 0,
+            (
+                getattr(result, "highest_confidence_win", 0) or 0
+                if season
+                else getattr(result, "highest_confidence_loss", 0) or 0
+            ),
         )
         if current_key != previous_key:
             previous_rank = position
@@ -164,6 +174,8 @@ def _get_week(db: Session, league: League, week_number: int | None) -> NflWeek:
 
 
 _SUNDAY_NIGHT_START_HOUR = 18  # local; the afternoon slate never starts this late
+_SCENARIO_AVAILABLE_HOUR = 19
+_TERMINAL_STATUSES = {GameStatus.FINAL, GameStatus.CANCELLED}
 
 
 def _is_night_game(game: NflGame, tz: ZoneInfo) -> bool:
@@ -203,6 +215,94 @@ def _night_games_picks(
     return night_games, picks_by_user
 
 
+def _outcome_scenario_games(
+    db: Session, *, week: NflWeek, now: datetime | None = None
+) -> list[NflGame]:
+    """Return the SNF and MNF games from Sunday 7pm local until the week ends.
+
+    Opens once those two are the only unresolved games left, and stays open after either
+    finishes so the table keeps showing the remaining outcomes."""
+    tz = ZoneInfo(get_settings().scheduler_timezone)
+    now = now or datetime.now(timezone.utc)
+    games = sorted(nfl_game_repository.get_by_week_id(db, week.id), key=lambda g: g.kickoff_time)
+    sunday_games = [
+        g for g in games if _is_night_game(g, tz) and g.kickoff_time.astimezone(tz).weekday() == 6
+    ]
+    monday_games = [g for g in games if g.kickoff_time.astimezone(tz).weekday() == 0]
+    if len(sunday_games) != 1 or not monday_games:
+        return []
+
+    sunday_game, monday_game = sunday_games[0], monday_games[-1]  # MNF doubleheader: the late one
+    sunday_local = sunday_game.kickoff_time.astimezone(tz)
+    if now.astimezone(tz) < sunday_local.replace(hour=_SCENARIO_AVAILABLE_HOUR, minute=0):
+        return []
+    if any(
+        game.game_status not in _TERMINAL_STATUSES
+        for game in games
+        if game not in (sunday_game, monday_game)
+    ):
+        return []
+    return [sunday_game, monday_game]
+
+
+def _possible_winners(game: NflGame) -> tuple[str, ...]:
+    if game.game_status not in _TERMINAL_STATUSES:
+        return (game.away_team, game.home_team)
+    return (game.winning_team or "—",)  # final: fixed; cancelled/tie: no winner
+
+
+def _outcome_scenarios(
+    *, results: list, games: list[NflGame], picks: list[Pick]
+) -> list[OutcomeScenarioRead]:
+    """Project the four winner combinations with the live leaderboard tie-breakers."""
+    pick_by_user_game = {
+        (pick.user_id, pick.game_id): pick for pick in picks if pick.voided_at is None
+    }
+    sunday_game, monday_game = games
+    scenarios: list[OutcomeScenarioRead] = []
+    for sunday_winner in _possible_winners(sunday_game):
+        for monday_winner in _possible_winners(monday_game):
+            projected: list[tuple[str, int, int, int]] = []
+            for result in results:
+                if result.user is None or result.user_id is None:
+                    continue
+                points = result.total_points or 0
+                correct = result.correct_picks or 0
+                worst_miss = result.highest_confidence_loss or 0
+                for game, winner in ((sunday_game, sunday_winner), (monday_game, monday_winner)):
+                    if game.game_status in _TERMINAL_STATUSES:
+                        continue  # already scored into the weekly result
+                    pick = pick_by_user_game.get((result.user_id, game.id))
+                    if pick is not None and pick.picked_team == winner:
+                        points += pick.confidence_value
+                        correct += 1
+                    elif pick is not None:
+                        worst_miss = max(worst_miss, pick.confidence_value)
+                projected.append((result.user.display_name, points, correct, worst_miss))
+
+            ordered = sorted(projected, key=lambda row: (-row[1], -row[2], row[3], row[0]))
+            placements: dict[int, list[str]] = {1: [], 2: [], 3: []}
+            previous_score: tuple[int, int, int] | None = None
+            rank = 0
+            for position, (name, points, correct, worst_miss) in enumerate(ordered, start=1):
+                score = (points, correct, worst_miss)
+                if score != previous_score:
+                    rank = position
+                    previous_score = score
+                if rank in placements:
+                    placements[rank].append(name)
+            scenarios.append(
+                OutcomeScenarioRead(
+                    sunday_winner=sunday_winner,
+                    monday_winner=monday_winner,
+                    first_place=placements[1],
+                    second_place=placements[2],
+                    third_place=placements[3],
+                )
+            )
+    return scenarios
+
+
 def get_weekly_leaderboard(
     db: Session, *, league: League, week_number: int | None = None
 ) -> WeeklyLeaderboardRead:
@@ -237,6 +337,48 @@ def get_weekly_leaderboard(
             for game in night_games
         ],
         picks_revealed=bool(kickoffs) and min(kickoffs) <= datetime.now(timezone.utc),
+        outcome_scenarios_available=bool(_outcome_scenario_games(db, week=week)),
+    )
+
+
+def get_weekly_outcome_scenarios(
+    db: Session, *, league: League, week_number: int
+) -> OutcomeScenariosRead:
+    """Project first through third for the four possible SNF/MNF outcomes."""
+    week = _get_week(db, league, week_number)
+    if weeks_service.get_current_week(db).id != week.id:
+        raise NotFoundError("Outcome scenarios are only available for the current week.")
+    games = _outcome_scenario_games(db, week=week)
+    if not games:
+        raise NotFoundError("Outcome scenarios are not available yet.")
+
+    results = weekly_result_repository.list_by_league_and_week(
+        db, league_id=league.id, week_id=week.id
+    )
+    submitted_user_ids = week_submission_repository.list_user_ids_for_week(
+        db, week_id=week.id
+    ) | picks_service.list_complete_card_user_ids(db, week_id=week.id)
+    results = [result for result in results if result.user_id in submitted_user_ids]
+    if not results:
+        raise NotFoundError(f"Week {week.week_number} has no leaderboard data.")
+    picks = pick_repository.list_by_week_and_users(
+        db,
+        week_id=week.id,
+        user_ids={result.user_id for result in results if result.user_id is not None},
+    )
+    sunday_game, monday_game = games
+    return OutcomeScenariosRead(
+        sunday_game=GameLabelRead(
+            game_id=sunday_game.id,
+            away_team=sunday_game.away_team,
+            home_team=sunday_game.home_team,
+        ),
+        monday_game=GameLabelRead(
+            game_id=monday_game.id,
+            away_team=monday_game.away_team,
+            home_team=monday_game.home_team,
+        ),
+        scenarios=_outcome_scenarios(results=results, games=games, picks=picks),
     )
 
 
@@ -248,9 +390,42 @@ def get_season_standings(
         db, league_id=league.id, season=target_season
     )
     standings = _ranked_members(results, season=True)
+    # SeasonResult stores points and placements, but no pick record. Aggregate
+    # the same completed weeks used by season scoring instead of returning 0-0.
+    records = db.execute(
+        select(
+            WeeklyResult.user_id,
+            func.sum(WeeklyResult.correct_picks),
+            func.sum(WeeklyResult.incorrect_picks),
+        )
+        .join(NflWeek, WeeklyResult.week_id == NflWeek.id)
+        .where(
+            WeeklyResult.league_id == league.id,
+            NflWeek.season == target_season,
+            NflWeek.status == WeekStatus.COMPLETE,
+        )
+        .group_by(WeeklyResult.user_id)
+    ).all()
+    records_by_user = {
+        user_id: (correct or 0, incorrect or 0) for user_id, correct, incorrect in records
+    }
+    for member in standings:
+        member.correct_picks, member.incorrect_picks = records_by_user.get(member.member_id, (0, 0))
     if not standings:
         raise NotFoundError(f"Season {target_season} has no standings data.")
     return SeasonStandingsRead(season=target_season, standings=standings)
+
+
+def _week_revealed() -> ColumnElement[bool]:
+    """Week is scored final, or its first game has kicked off (picks are locked/revealed)."""
+    started = aliased(NflGame)
+    return or_(
+        NflWeek.status == WeekStatus.COMPLETE,
+        exists().where(
+            started.week_id == NflWeek.id,
+            started.kickoff_time <= datetime.now(timezone.utc),
+        ),
+    )
 
 
 def get_pick_breakdown(db: Session, *, league: League, viewer_id: uuid.UUID) -> PickBreakdownRead:
@@ -261,7 +436,7 @@ def get_pick_breakdown(db: Session, *, league: League, viewer_id: uuid.UUID) -> 
     completed_weeks = list(
         db.execute(
             select(NflWeek)
-            .where(NflWeek.season == league.season, NflWeek.status == WeekStatus.COMPLETE)
+            .where(NflWeek.season == league.season, _week_revealed())
             .order_by(NflWeek.week_number)
         ).scalars()
     )
@@ -278,7 +453,7 @@ def get_pick_breakdown(db: Session, *, league: League, viewer_id: uuid.UUID) -> 
         .join(NflWeek, NflGame.week_id == NflWeek.id)
         .where(
             NflWeek.season == league.season,
-            NflWeek.status == WeekStatus.COMPLETE,
+            _week_revealed(),
         )
         .order_by(NflWeek.week_number, NflGame.kickoff_time)
     ).all()
@@ -296,7 +471,7 @@ def get_pick_breakdown(db: Session, *, league: League, viewer_id: uuid.UUID) -> 
         .where(
             LeagueMember.league_id == league.id,
             NflWeek.season == league.season,
-            NflWeek.status == WeekStatus.COMPLETE,
+            _week_revealed(),
         )
         .group_by(NflWeek.week_number, NflGame.id, Pick.picked_team)
         .order_by(NflWeek.week_number, NflGame.id, Pick.picked_team)
@@ -310,7 +485,7 @@ def get_pick_breakdown(db: Session, *, league: League, viewer_id: uuid.UUID) -> 
         .where(
             LeagueMember.league_id == league.id,
             NflWeek.season == league.season,
-            NflWeek.status == WeekStatus.COMPLETE,
+            _week_revealed(),
         )
         .order_by(NflWeek.week_number, NflGame.id, Pick.confidence_value)
     ).all()
@@ -363,7 +538,7 @@ def get_pick_breakdown(db: Session, *, league: League, viewer_id: uuid.UUID) -> 
 def get_game_picks(
     db: Session, *, league: League, viewer_id: uuid.UUID, game_id: uuid.UUID
 ) -> GamePicksRead:
-    """Every league member's pick for one completed-week game, for the leaderboard's
+    """Every league member's pick for one locked-week game, for the leaderboard's
     per-game "View Picks" modal."""
     membership = league_member_repository.get_by_league_and_user(db, league.id, viewer_id)
     if membership is None:
@@ -375,7 +550,7 @@ def get_game_picks(
         .where(
             NflGame.id == game_id,
             NflWeek.season == league.season,
-            NflWeek.status == WeekStatus.COMPLETE,
+            _week_revealed(),
         )
     ).scalar_one_or_none()
     if game is None:

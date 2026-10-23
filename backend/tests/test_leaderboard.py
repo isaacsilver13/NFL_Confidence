@@ -452,6 +452,115 @@ def test_weekly_leaderboard_reports_points_remaining_on_unfinished_games(
     assert owner_row.points_remaining == 5
 
 
+def test_outcome_scenarios_project_the_four_night_game_combinations(
+    db_session: Session,
+) -> None:
+    owner = _user(db_session, "Owner")
+    league = _league(db_session, owner)
+    owner, challenger = _members(db_session, league)
+    third = _user(db_session, "Third")
+    db_session.add(LeagueMember(league_id=league.id, user_id=third.id, role=LeagueRole.MEMBER))
+    week, games = _night_week(db_session, league, 6, sunday=date(2026, 9, 13), final=False)
+    for user in (owner, challenger, third):
+        _submit(db_session, user=user, week=week)
+    db_session.add_all(
+        [
+            WeeklyResult(
+                league_id=league.id,
+                week_id=week.id,
+                user_id=owner.id,
+                total_points=10,
+                correct_picks=1,
+                highest_confidence_loss=0,
+            ),
+            WeeklyResult(
+                league_id=league.id,
+                week_id=week.id,
+                user_id=challenger.id,
+                total_points=11,
+                correct_picks=2,
+                highest_confidence_loss=0,
+            ),
+            WeeklyResult(
+                league_id=league.id,
+                week_id=week.id,
+                user_id=third.id,
+                total_points=4,
+                correct_picks=1,
+                highest_confidence_loss=0,
+            ),
+            Pick(user_id=owner.id, game_id=games[1].id, picked_team="KC", confidence_value=10),
+            Pick(user_id=owner.id, game_id=games[3].id, picked_team="LAR", confidence_value=2),
+            Pick(user_id=challenger.id, game_id=games[1].id, picked_team="BUF", confidence_value=4),
+            Pick(user_id=challenger.id, game_id=games[3].id, picked_team="DAL", confidence_value=3),
+        ]
+    )
+    db_session.flush()
+    results = leaderboard_service.weekly_result_repository.list_by_league_and_week(
+        db_session, league_id=league.id, week_id=week.id
+    )
+    picks = leaderboard_service.pick_repository.list_by_week_and_users(
+        db_session, week_id=week.id, user_ids={owner.id, challenger.id, third.id}
+    )
+
+    scenarios = leaderboard_service._outcome_scenarios(
+        results=results, games=[games[1], games[3]], picks=picks
+    )
+
+    assert [(scenario.sunday_winner, scenario.monday_winner) for scenario in scenarios] == [
+        ("BUF", "DAL"),
+        ("BUF", "LAR"),
+        ("KC", "DAL"),
+        ("KC", "LAR"),
+    ]
+    assert scenarios[0].first_place == ["Challenger"]
+    assert scenarios[3].first_place == ["Owner"]
+    assert scenarios[3].second_place == ["Challenger"]
+    assert scenarios[3].third_place == ["Third"]
+
+
+def test_outcome_scenarios_are_available_only_for_one_sunday_and_one_monday_game(
+    db_session: Session,
+) -> None:
+    owner = _user(db_session, "Owner")
+    league = _league(db_session, owner)
+    week, games = _night_week(db_session, league, 7, sunday=date(2026, 9, 13), final=False)
+    games[0].game_status = GameStatus.FINAL
+    games[2].game_status = GameStatus.FINAL
+    sunday_evening = datetime(2026, 9, 14, 0, tzinfo=timezone.utc)  # 7pm Sunday in Chicago
+
+    available = leaderboard_service._outcome_scenario_games(
+        db_session, week=week, now=sunday_evening
+    )
+
+    assert available == [games[1], games[3]]
+    assert (
+        leaderboard_service._outcome_scenario_games(
+            db_session,
+            week=week,
+            now=datetime(2026, 9, 13, 23, tzinfo=timezone.utc),  # 6pm Chicago
+        )
+        == []
+    )
+    games[2].game_status = GameStatus.SCHEDULED
+    assert (
+        leaderboard_service._outcome_scenario_games(db_session, week=week, now=sunday_evening) == []
+    )
+
+    # Stays available after Sunday night ends, through Monday night and the rest of the week.
+    games[2].game_status = GameStatus.FINAL
+    games[1].game_status = GameStatus.FINAL
+    games[1].winning_team = "KC"
+    monday_afternoon = datetime(2026, 9, 14, 20, tzinfo=timezone.utc)
+    assert leaderboard_service._outcome_scenario_games(
+        db_session, week=week, now=monday_afternoon
+    ) == [games[1], games[3]]
+    scenarios = leaderboard_service._outcome_scenarios(
+        results=[], games=[games[1], games[3]], picks=[]
+    )
+    assert [(s.sunday_winner, s.monday_winner) for s in scenarios] == [("KC", "DAL"), ("KC", "LAR")]
+
+
 def test_season_standings_returns_aggregate_rows(db_session: Session) -> None:
     owner = _user(db_session, "Owner")
     league = _league(db_session, owner)
@@ -603,8 +712,8 @@ def test_get_game_picks_not_found_for_incomplete_week(db_session: Session) -> No
     week = NflWeek(
         season=league.season,
         week_number=9,
-        start_date=datetime(2026, 11, 1, tzinfo=timezone.utc),
-        end_date=datetime(2026, 11, 8, tzinfo=timezone.utc),
+        start_date=datetime(2030, 11, 1, tzinfo=timezone.utc),
+        end_date=datetime(2030, 11, 8, tzinfo=timezone.utc),
         status=WeekStatus.REGULAR,
     )
     db_session.add(week)
@@ -623,6 +732,22 @@ def test_get_game_picks_not_found_for_incomplete_week(db_session: Session) -> No
     with pytest.raises(NotFoundError):
         leaderboard_service.get_game_picks(
             db_session, league=league, viewer_id=owner.id, game_id=game.id
+        )
+
+
+def test_pick_breakdown_includes_started_week_but_not_future_week(db_session: Session) -> None:
+    owner = _user(db_session, "Owner")
+    league = _league(db_session, owner)
+    db_session.add(LeagueMember(league_id=league.id, user_id=owner.id, role=LeagueRole.OWNER))
+    started, _ = _night_week(db_session, league, 3, sunday=date(2026, 9, 20), final=False)
+    future, future_games = _night_week(db_session, league, 4, sunday=date(2030, 9, 15), final=False)
+
+    result = leaderboard_service.get_pick_breakdown(db_session, league=league, viewer_id=owner.id)
+
+    assert [week.week_number for week in result.weeks] == [started.week_number]
+    with pytest.raises(NotFoundError):
+        leaderboard_service.get_game_picks(
+            db_session, league=league, viewer_id=owner.id, game_id=future_games[0].id
         )
 
 
@@ -673,3 +798,44 @@ def test_leaderboard_weeks_lists_started_but_unfinished_weeks_only_when_asked(
     assert weeks(False) == [finished.week_number]
     assert weeks(True) == [finished.week_number, stuck.week_number]
     assert future.week_number not in weeks(True)
+
+
+def test_outcome_scenarios_break_ties_by_lowest_missed_confidence(db_session: Session) -> None:
+    owner = _user(db_session, "Owner")
+    league = _league(db_session, owner)
+    owner, challenger = _members(db_session, league)
+    week, games = _night_week(db_session, league, 8, sunday=date(2026, 9, 13), final=False)
+    for user in (owner, challenger):
+        _submit(db_session, user=user, week=week)
+    db_session.add_all(
+        [
+            WeeklyResult(
+                league_id=league.id,
+                week_id=week.id,
+                user_id=owner.id,
+                total_points=10,
+                correct_picks=2,
+                highest_confidence_loss=10,
+            ),
+            WeeklyResult(
+                league_id=league.id,
+                week_id=week.id,
+                user_id=challenger.id,
+                total_points=10,
+                correct_picks=2,
+                highest_confidence_loss=8,
+            ),
+        ]
+    )
+    db_session.flush()
+    results = leaderboard_service.weekly_result_repository.list_by_league_and_week(
+        db_session, league_id=league.id, week_id=week.id
+    )
+
+    scenarios = leaderboard_service._outcome_scenarios(
+        results=results, games=[games[1], games[3]], picks=[]
+    )
+
+    # Same points and correct picks: the lower worst miss (8 vs 10) ranks first, no tie.
+    assert scenarios[0].first_place == ["Challenger"]
+    assert scenarios[0].second_place == ["Owner"]

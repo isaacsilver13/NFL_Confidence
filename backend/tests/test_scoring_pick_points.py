@@ -33,13 +33,13 @@ def _pick(
 def _result(
     total_points: int,
     correct_picks: int,
-    highest_confidence_win: int,
+    highest_confidence_loss: int,
     user_id: uuid.UUID | None = None,
 ) -> SimpleNamespace:
     return SimpleNamespace(
         total_points=total_points,
         correct_picks=correct_picks,
-        highest_confidence_win=highest_confidence_win,
+        highest_confidence_loss=highest_confidence_loss,
         user_id=user_id if user_id is not None else uuid.uuid4(),
         weekly_rank=None,
     )
@@ -94,9 +94,11 @@ def test_plain_string_final_status_is_treated_as_final() -> None:
 # --- _rank_key --------------------------------------------------------------
 
 
-def test_rank_key_returns_negated_tuple_and_str_user_id() -> None:
+def test_rank_key_negates_points_and_correct_picks_but_not_highest_loss() -> None:
+    # Points and correct picks sort high-first (negated); the highest-missed confidence
+    # sorts low-first, so it is used as is.
     uid = uuid.UUID(int=1)
-    assert _rank_key(_result(10, 3, 7, uid)) == (-10, -3, -7, str(uid))  # type: ignore[arg-type]
+    assert _rank_key(_result(10, 3, 7, uid)) == (-10, -3, 7, str(uid))  # type: ignore[arg-type]
 
 
 def test_rank_key_orders_by_total_points_first() -> None:
@@ -111,10 +113,11 @@ def test_rank_key_breaks_points_tie_by_correct_picks() -> None:
     assert sorted([fewer, more], key=_rank_key) == [more, fewer]  # type: ignore[arg-type]
 
 
-def test_rank_key_breaks_correct_picks_tie_by_highest_confidence_win() -> None:
-    higher = _result(10, 3, 16)
-    lower = _result(10, 3, 9)
-    assert sorted([lower, higher], key=_rank_key) == [higher, lower]  # type: ignore[arg-type]
+def test_rank_key_breaks_correct_picks_tie_by_lowest_highest_confidence_loss() -> None:
+    # Missing only a low-confidence pick beats missing a high-confidence one.
+    lower_loss = _result(10, 3, 9)
+    higher_loss = _result(10, 3, 16)
+    assert sorted([higher_loss, lower_loss], key=_rank_key) == [lower_loss, higher_loss]  # type: ignore[arg-type]
 
 
 def test_rank_key_breaks_full_stat_tie_by_user_id_ascending() -> None:
@@ -146,8 +149,8 @@ def test_assign_weekly_ranks_partial_tie_is_not_a_tie() -> None:
     _assign_weekly_ranks([b, a])  # type: ignore[arg-type]
     assert (a.weekly_rank, b.weekly_rank) == (1, 2)
 
-    c = _result(10, 3, 12)
-    d = _result(10, 3, 8)
+    c = _result(10, 3, 8)
+    d = _result(10, 3, 12)
     _assign_weekly_ranks([d, c])  # type: ignore[arg-type]
     assert (c.weekly_rank, d.weekly_rank) == (1, 2)
 

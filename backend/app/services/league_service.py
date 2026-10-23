@@ -32,6 +32,14 @@ settings = get_settings()
 INVITE_EXPIRY_DAYS = 7
 
 
+def get_commissioner_names(db: Session, league: League) -> list[str]:
+    return [
+        member.user.display_name
+        for member in league_member_repository.list_by_league(db, league.id)
+        if member.role == LeagueRole.OWNER
+    ]
+
+
 def _ensure_season_result(db: Session, *, league: League, user_id: uuid.UUID) -> None:
     result = season_result_repository.get_by_league_user_season(
         db, league_id=league.id, user_id=user_id, season=league.season

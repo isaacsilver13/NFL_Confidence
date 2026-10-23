@@ -6,12 +6,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '@/api/client'
 import { fetchLeaguePot, joinLeagueWithCode } from '@/api/league'
 import { fetchCurrentPicksCard, fetchSessionBootstrap, type SessionBootstrap } from '@/api/session'
-import { fetchCompletedWeeks } from '@/api/nfl'
+import { fetchStartedWeeks } from '@/api/nfl'
 import { fetchSeasonStandings, fetchWeeklyLeaderboard } from '@/api/leaderboard'
 import { DashboardPage } from './DashboardPage'
 
 vi.mock('./LeaderboardPage', () => ({
-  LeaderboardPage: () => <div>Leaderboard section body</div>,
+  LeaderboardPage: ({ onWeekChange }: { onWeekChange?: (week: number) => void }) => (
+    <div>
+      Leaderboard section body<button onClick={() => onWeekChange?.(1)}>Review week 1</button>
+    </div>
+  ),
 }))
 
 vi.mock('@/components/leaderboard/WeeklyGameBreakdownSection', () => ({
@@ -38,7 +42,7 @@ vi.mock('@/api/session', () => ({
 }))
 
 vi.mock('@/api/nfl', () => ({
-  fetchCompletedWeeks: vi.fn(),
+  fetchStartedWeeks: vi.fn(),
   fetchPickHistory: vi.fn(),
 }))
 
@@ -51,7 +55,7 @@ const mockedJoinLeagueWithCode = vi.mocked(joinLeagueWithCode)
 const mockedFetchLeaguePot = vi.mocked(fetchLeaguePot)
 const mockedFetchSessionBootstrap = vi.mocked(fetchSessionBootstrap)
 const mockedFetchCurrentPicksCard = vi.mocked(fetchCurrentPicksCard)
-const mockedFetchCompletedWeeks = vi.mocked(fetchCompletedWeeks)
+const mockedFetchStartedWeeks = vi.mocked(fetchStartedWeeks)
 const mockedFetchSeasonStandings = vi.mocked(fetchSeasonStandings)
 const mockedFetchWeeklyLeaderboard = vi.mocked(fetchWeeklyLeaderboard)
 
@@ -117,7 +121,7 @@ describe('DashboardPage league access', () => {
       picks: [],
       submission: { submittedAt: null },
     })
-    mockedFetchCompletedWeeks.mockResolvedValue([])
+    mockedFetchStartedWeeks.mockResolvedValue([])
     mockedFetchSeasonStandings.mockResolvedValue({ season: 2026, standings: [] })
     mockedFetchLeaguePot.mockResolvedValue({
       weekNumber: 1,
@@ -200,14 +204,14 @@ describe('DashboardPage league access', () => {
     expect(leaderboardSection).toHaveAttribute('aria-expanded', 'true')
     expect(standingsSection).toHaveAttribute('aria-expanded', 'false')
     expect(await screen.findByText('Leaderboard section body')).toBeInTheDocument()
-    expect(mockedFetchCompletedWeeks).toHaveBeenCalledTimes(1)
+    expect(mockedFetchStartedWeeks).toHaveBeenCalledTimes(1)
   })
 
   it('hides the league pot before the visibility cutoff', async () => {
     mockedFetchSessionBootstrap.mockResolvedValueOnce(memberSession)
     renderPage()
 
-    await screen.findByText('Week 1')
+    await screen.findByText(/season · Week 1/)
     expect(screen.queryByText('League pot')).not.toBeInTheDocument()
   })
 
@@ -234,7 +238,7 @@ describe('DashboardPage league access', () => {
 
   it('shows the live current week rank in the summary before any week completes', async () => {
     mockedFetchSessionBootstrap.mockResolvedValueOnce(memberSession)
-    mockedFetchCompletedWeeks.mockResolvedValue([])
+    mockedFetchStartedWeeks.mockResolvedValue([])
     mockedFetchWeeklyLeaderboard.mockResolvedValue({
       week: { weekNumber: 1, seasonNumber: 2026 },
       standings: [
@@ -260,6 +264,66 @@ describe('DashboardPage league access', () => {
     renderPage()
 
     expect(await screen.findByText('Your current rank is #2')).toBeInTheDocument()
+  })
+
+  it('lists all commissioners and loads the season record while its section is collapsed', async () => {
+    mockedFetchSessionBootstrap.mockResolvedValue({
+      ...memberSession,
+      league: {
+        ...memberSession.league!,
+        commissionerNames: ['Alex', 'Sam'],
+      },
+    })
+    mockedFetchSeasonStandings.mockResolvedValue({
+      season: 2026,
+      standings: [
+        {
+          rank: 1,
+          memberId: 'user-1',
+          memberName: 'New User',
+          totalPoints: 25,
+          correctPicks: 12,
+          incorrectPicks: 4,
+          weeklyWins: 1,
+          firstPlaceFinishes: 1,
+          secondPlaceFinishes: 0,
+          thirdPlaceFinishes: 0,
+          payoutCents: 0,
+          pointsRemaining: 0,
+          nightGamePicks: [],
+        },
+      ],
+    })
+    renderPage()
+    expect(await screen.findByText('Commissioners Alex, Sam')).toBeInTheDocument()
+    expect(await screen.findByText('Your season pick record is 12-4')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Season Standings/ })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    )
+  })
+
+  it('keeps the weekly summary on the current week and follows the week selector', async () => {
+    mockedFetchSessionBootstrap.mockResolvedValue({
+      ...memberSession,
+      currentWeek: {
+        ...memberSession.currentWeek!,
+        weekNumber: 2,
+      },
+    })
+    mockedFetchStartedWeeks.mockResolvedValue([{ weekNumber: 1, seasonNumber: 2026 }])
+    mockedFetchWeeklyLeaderboard.mockResolvedValue({
+      week: { weekNumber: 2, seasonNumber: 2026 },
+      standings: [],
+      nightGames: [],
+      picksRevealed: true,
+    })
+    renderPage()
+    await screen.findByRole('button', { name: 'Review week 1' })
+    expect(mockedFetchWeeklyLeaderboard).toHaveBeenCalledWith(2)
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Review week 1' }))
+    await screen.findByText('Leaderboard section body')
+    expect(mockedFetchWeeklyLeaderboard).toHaveBeenCalledWith(1)
   })
 
   it('opens a section named by the URL hash and keeps the persisted default open too', async () => {

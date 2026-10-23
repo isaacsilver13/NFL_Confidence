@@ -15,10 +15,7 @@ depends_on: str | Sequence[str] | None = None
 
 def upgrade() -> None:
     bind = op.get_bind()
-    missing_rows = list(
-        bind.execute(
-            sa.text(
-                """
+    missing_rows = list(bind.execute(sa.text("""
                 SELECT lm.league_id, lm.user_id, l.season
                 FROM league_members AS lm
                 JOIN leagues AS l ON l.id = lm.league_id
@@ -27,19 +24,14 @@ def upgrade() -> None:
                     AND sr.user_id = lm.user_id
                     AND sr.season = l.season
                 WHERE sr.id IS NULL
-                """
-            )
-        ).mappings()
-    )
+                """)).mappings())
 
     for row in missing_rows:
         bind.execute(
-            sa.text(
-                """
+            sa.text("""
                 INSERT INTO season_results (id, league_id, user_id, season)
                 VALUES (:id, :league_id, :user_id, :season)
-                """
-            ),
+                """),
             {
                 "id": uuid.uuid4(),
                 "league_id": row["league_id"],

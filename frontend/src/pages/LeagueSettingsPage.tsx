@@ -4,6 +4,7 @@ import {
   LoaderCircle,
   Mail,
   Pencil,
+  RefreshCw,
   Save,
   ShieldCheck,
   UserMinus,
@@ -19,14 +20,16 @@ import {
   fetchMemberSubmissionStatuses,
   fetchLeague,
   fetchLeagueMembers,
+  refreshLeagueData,
   removeLeagueMember,
   updateLeagueMember,
   updateMemberPayment,
   voidUnpaidPicks,
 } from '@/api/league'
-import { fetchWeeks } from '@/api/nfl'
+import { fetchCurrentWeek, fetchWeeks } from '@/api/nfl'
 import { fetchSessionBootstrap } from '@/api/session'
 import { Button } from '@/components/ui/Button'
+import { AccordionSection } from '@/components/ui/AccordionSection'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import type { LeagueMember } from '@/types/league'
 
@@ -98,6 +101,77 @@ function InviteForm({ onInvited }: { onInvited: () => void }) {
   )
 }
 
+function ScoreRefresh() {
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [successMessage, setSuccessMessage] = useState<string | null>(null)
+  const queryClient = useQueryClient()
+
+  async function handleRefresh() {
+    setError(null)
+    setSuccessMessage(null)
+    setIsRefreshing(true)
+    try {
+      const result = await refreshLeagueData()
+      await queryClient.invalidateQueries({ queryKey: ['leaderboard'] })
+      await queryClient.invalidateQueries({ queryKey: ['picks'] })
+      await queryClient.invalidateQueries({ queryKey: ['weeks'] })
+      setSuccessMessage(
+        `Refreshed ${result.weeksRefreshed} ${result.weeksRefreshed === 1 ? 'week' : 'weeks'}.`,
+      )
+    } catch (error) {
+      setError(
+        error instanceof ApiError ? error.message : 'Could not refresh scores. Please try again.',
+      )
+    } finally {
+      setIsRefreshing(false)
+    }
+  }
+
+  return (
+    <section className="space-y-3">
+      <div>
+        <h2 className="text-lg font-bold">Scores & standings</h2>
+        <p className="text-sm text-slate-600 dark:text-slate-300 dev-dark:text-text-secondary">
+          Pull the latest game results and recalculate pick outcomes and weekly standings.
+        </p>
+      </div>
+      <Button type="button" onClick={() => void handleRefresh()} disabled={isRefreshing}>
+        <RefreshCw size={16} className={isRefreshing ? 'animate-spin' : ''} aria-hidden="true" />
+        {isRefreshing ? 'Refreshing...' : 'Refresh scores & standings'}
+      </Button>
+      {error && (
+        <p className="text-sm text-red-600 dark:text-red-400 dev-dark:text-error">{error}</p>
+      )}
+      {successMessage && (
+        <p
+          className="text-sm text-green-600 dark:text-green-400 dev-dark:text-success"
+          role="status"
+        >
+          {successMessage}
+        </p>
+      )}
+    </section>
+  )
+}
+
+// The weeks list is ordered Week 1 first, so default to the current week instead of its head.
+function useWeekSelection(selectedWeek: number | null) {
+  const { data: weeks } = useQuery({
+    queryKey: ['weeks'],
+    queryFn: fetchWeeks,
+    staleTime: 5 * 60_000,
+  })
+  const { data: currentWeek, isPending: currentPending } = useQuery({
+    queryKey: ['weeks', 'current'],
+    queryFn: fetchCurrentWeek,
+    staleTime: 60_000,
+  })
+  // Hold at 0 (query disabled) while the current week loads so Week 1 isn't fetched first.
+  const fallback = currentPending ? 0 : (weeks?.[0]?.weekNumber ?? 0)
+  return { weeks, weekNumber: selectedWeek ?? currentWeek?.weekNumber ?? fallback }
+}
+
 function PaymentAdmin() {
   const [selectedWeek, setSelectedWeek] = useState<number | null>(null)
   const [actionUserId, setActionUserId] = useState<string | null>(null)
@@ -105,12 +179,7 @@ function PaymentAdmin() {
   const [error, setError] = useState<string | null>(null)
   const [confirmingVoid, setConfirmingVoid] = useState(false)
   const queryClient = useQueryClient()
-  const { data: weeks } = useQuery({
-    queryKey: ['weeks'],
-    queryFn: fetchWeeks,
-    staleTime: 5 * 60_000,
-  })
-  const weekNumber = selectedWeek ?? weeks?.[0]?.weekNumber ?? 0
+  const { weeks, weekNumber } = useWeekSelection(selectedWeek)
   const { data: paymentStatuses, isLoading } = useQuery({
     queryKey: ['league', 'payments', weekNumber],
     queryFn: () => fetchMemberPaymentStatuses(weekNumber),
@@ -258,12 +327,7 @@ function formatSubmittedAt(submittedAt: string): string {
 
 function SubmissionStatus() {
   const [selectedWeek, setSelectedWeek] = useState<number | null>(null)
-  const { data: weeks } = useQuery({
-    queryKey: ['weeks'],
-    queryFn: fetchWeeks,
-    staleTime: 5 * 60_000,
-  })
-  const weekNumber = selectedWeek ?? weeks?.[0]?.weekNumber ?? 0
+  const { weeks, weekNumber } = useWeekSelection(selectedWeek)
   const { data: submissionStatuses, isLoading } = useQuery({
     queryKey: ['league', 'submissions', weekNumber],
     queryFn: () => fetchMemberSubmissionStatuses(weekNumber),
@@ -330,6 +394,33 @@ function SubmissionStatus() {
         </ul>
       )}
     </section>
+  )
+}
+
+function AdminSection({
+  id,
+  title,
+  summary,
+  defaultOpen = false,
+  children,
+}: {
+  id: string
+  title: string
+  summary: string
+  defaultOpen?: boolean
+  children: React.ReactNode
+}) {
+  const [isOpen, setIsOpen] = useState(defaultOpen)
+  return (
+    <AccordionSection
+      id={id}
+      title={title}
+      summary={summary}
+      isOpen={isOpen}
+      onToggle={() => setIsOpen(!isOpen)}
+    >
+      {children}
+    </AccordionSection>
   )
 }
 
@@ -453,7 +544,7 @@ export function LeagueSettingsPage() {
       </div>
       <div className="rounded-2xl border border-slate-200 bg-surface p-5 shadow-sm dark:border-slate-800 dev-dark:border-border dark:bg-slate-900 dev-dark:bg-surface-elevated">
         <div className="flex items-start gap-3">
-          <span className="rounded-xl bg-sky/15 p-3 text-sky">
+          <span className="rounded-xl bg-sky/15 p-3 text-sky dark:text-accent">
             <ShieldCheck size={22} aria-hidden="true" />
           </span>
           <div>
@@ -466,7 +557,11 @@ export function LeagueSettingsPage() {
       </div>
 
       {isCommissioner && (
-        <div className="space-y-5">
+        <AdminSection
+          id="member-invites"
+          title="Invitations & passcode"
+          summary="Share the league code or invite members by email"
+        >
           <div className="space-y-3">
             <h2 className="flex items-center gap-2 text-lg font-bold">
               <KeyRound size={18} aria-hidden="true" /> League passcode
@@ -486,10 +581,15 @@ export function LeagueSettingsPage() {
               void queryClient.invalidateQueries({ queryKey: ['league', 'members'] })
             }
           />
-        </div>
+        </AdminSection>
       )}
 
-      <div className="space-y-3">
+      <AdminSection
+        id="member-roster"
+        title="Member roster"
+        summary={`${members?.length ?? league.memberCount} members · manage names and roles`}
+        defaultOpen
+      >
         <h2 className="flex items-center gap-2 text-lg font-bold">
           <Users size={18} aria-hidden="true" /> Members
         </h2>
@@ -594,10 +694,29 @@ export function LeagueSettingsPage() {
             </li>
           ))}
         </ul>
-      </div>
+      </AdminSection>
 
-      <SubmissionStatus />
-      <PaymentAdmin />
+      <AdminSection
+        id="member-refresh"
+        title="Scores & standings"
+        summary="Refresh game scores and league results"
+      >
+        <ScoreRefresh />
+      </AdminSection>
+      <AdminSection
+        id="member-submissions"
+        title="Pick submissions"
+        summary="Check who has completed or submitted a weekly card"
+      >
+        <SubmissionStatus />
+      </AdminSection>
+      <AdminSection
+        id="member-payments"
+        title="Weekly payments"
+        summary="Track payments and manage unpaid picks"
+      >
+        <PaymentAdmin />
+      </AdminSection>
       <ConfirmDialog
         open={confirmingRemoveMember !== null}
         title="Remove member?"

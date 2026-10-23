@@ -4,6 +4,7 @@ export interface League {
   season: number
   memberCount: number
   commissionerName: string
+  commissionerNames?: string[]
   inviteCode: string
   isActive: boolean
 }
@@ -64,6 +65,11 @@ export interface VoidUnpaidPicksResult {
   week: number
   voidedPickCount: number
   affectedMemberCount: number
+}
+
+export interface ScoreRefreshResult {
+  weeksRefreshed: number
+  gamesFinal: number
 }
 
 export interface MemberSubmissionStatus {

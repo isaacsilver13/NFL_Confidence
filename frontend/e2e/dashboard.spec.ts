@@ -16,7 +16,7 @@ test.describe('dashboard sections (mobile)', () => {
   })
 
   for (const namePrefix of [
-    'Make Your Picks',
+    'Weekly Game Breakdown',
     'Weekly Leaderboard',
     'Season Standings',
     'My Picks',
@@ -33,7 +33,7 @@ test.describe('dashboard sections (mobile)', () => {
   })
 
   test('pick and confidence buttons are comfortable tap targets', async ({ authedPage }) => {
-    await openSection(authedPage, 'Make Your Picks')
+    await authedPage.getByRole('link', { name: 'Picks', exact: true }).click()
 
     const pickButtons = authedPage
       .getByRole('group', { name: /^Winner for/ })
@@ -54,26 +54,30 @@ test.describe('dashboard sections (mobile)', () => {
     }
   })
 
-  test('sticky picks-progress bar does not overlap the sticky nav header', async ({
-    authedPage,
-  }) => {
-    await openSection(authedPage, 'Make Your Picks')
+  test('picks progress starts below navigation and scrolls out of view', async ({ authedPage }) => {
+    await authedPage.getByRole('link', { name: 'Picks', exact: true }).click()
 
     const header = authedPage.locator('header').first()
     const progressBar = authedPage.getByRole('progressbar', { name: 'Games picked' })
     await expect(progressBar).toBeVisible()
-
-    await authedPage.mouse.wheel(0, 400)
 
     const headerBox = await header.boundingBox()
     const progressBox = await progressBar.boundingBox()
     expect(headerBox).not.toBeNull()
     expect(progressBox).not.toBeNull()
     expect(progressBox!.y).toBeGreaterThanOrEqual(headerBox!.y + headerBox!.height - 1)
+    await authedPage.mouse.wheel(0, 400)
+    await expect.poll(async () => (await progressBar.boundingBox())?.y).toBeLessThan(0)
+    await expect(header).toBeInViewport()
   })
 
   test('accordion headers are comfortable tap targets', async ({ authedPage }) => {
-    for (const namePrefix of ['Make Your Picks', 'Weekly Leaderboard', 'Season Standings']) {
+    for (const namePrefix of [
+      'Weekly Game Breakdown',
+      'Weekly Leaderboard',
+      'Season Standings',
+      'My Picks',
+    ]) {
       const header = authedPage.getByRole('button', { name: new RegExp(`^${namePrefix}`) })
       expectComfortableTapTarget(await header.boundingBox())
     }

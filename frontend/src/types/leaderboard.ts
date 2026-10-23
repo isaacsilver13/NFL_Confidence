@@ -39,6 +39,21 @@ export interface WeeklyLeaderboard {
   standings: LeaderboardMember[]
   nightGames: GameLabel[]
   picksRevealed: boolean
+  outcomeScenariosAvailable?: boolean
+}
+
+export interface OutcomeScenario {
+  sundayWinner: string
+  mondayWinner: string
+  firstPlace: string[]
+  secondPlace: string[]
+  thirdPlace: string[]
+}
+
+export interface OutcomeScenarios {
+  sundayGame: GameLabel
+  mondayGame: GameLabel
+  scenarios: OutcomeScenario[]
 }
 
 export interface SeasonStandings {
