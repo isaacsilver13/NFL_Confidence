@@ -28,7 +28,7 @@ def _rank_key(result: WeeklyResult) -> tuple[int, int, int, str]:
     return (
         -result.total_points,
         -result.correct_picks,
-        -result.highest_confidence_win,
+        result.highest_confidence_loss,
         str(result.user_id),
     )
 
@@ -41,7 +41,7 @@ def _assign_weekly_ranks(results: list[WeeklyResult]) -> None:
         current_key = (
             result.total_points,
             result.correct_picks,
-            result.highest_confidence_win,
+            result.highest_confidence_loss,
         )
         if current_key != previous_key:
             previous_rank = position
@@ -169,6 +169,10 @@ def score_week(db: Session, *, league: League, week_id: uuid.UUID) -> int:
         result.incorrect_picks = sum((pick.points_earned or 0) == 0 for pick in scored_picks)
         result.highest_confidence_win = max(
             (pick.confidence_value for pick in scored_picks if (pick.points_earned or 0) > 0),
+            default=0,
+        )
+        result.highest_confidence_loss = max(
+            (pick.confidence_value for pick in scored_picks if (pick.points_earned or 0) == 0),
             default=0,
         )
         weekly_results.append(result)

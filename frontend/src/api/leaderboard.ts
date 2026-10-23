@@ -1,5 +1,6 @@
 import type {
   GamePicks,
+  OutcomeScenarios,
   PickBreakdown,
   SeasonStandings,
   WeeklyLeaderboard,
@@ -17,6 +18,10 @@ function withQuery(path: string, values: Record<string, string | number | undefi
 
 export function fetchWeeklyLeaderboard(week?: number): Promise<WeeklyLeaderboard> {
   return apiFetch<WeeklyLeaderboard>(withQuery('/leaderboard/week', { week }))
+}
+
+export function fetchWeeklyOutcomeScenarios(week: number): Promise<OutcomeScenarios> {
+  return apiFetch<OutcomeScenarios>(`/leaderboard/week/${week}/outcome-scenarios`)
 }
 
 export function fetchSeasonStandings(season?: number): Promise<SeasonStandings> {

@@ -5,13 +5,15 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
-from sqlalchemy import desc, select, text
+from sqlalchemy import desc, func, select, text
 from sqlalchemy.orm import Session
 
 from app.core.responses import error, success
 from app.db.schema_validator import validate_schema
 from app.db.session import get_db
 from app.models.job_execution import JobExecution
+from app.models.nfl_game import NflGame
+from app.models.pick import Pick
 
 router = APIRouter(tags=["health"])
 logger = logging.getLogger(__name__)
@@ -20,6 +22,28 @@ logger = logging.getLogger(__name__)
 @router.get("/health")
 def health_check() -> dict:
     return success({"status": "healthy"})
+
+
+@router.get("/health/metrics")
+def metrics(db: Session = Depends(get_db)) -> dict:
+    """Aggregate counts and timestamps for the AIsaac dashboard. No users, picks or scores."""
+
+    last_pick, last_sync, picks, games = db.execute(
+        select(
+            select(func.max(Pick.submitted_at)).scalar_subquery(),
+            select(func.max(NflGame.last_synced)).scalar_subquery(),
+            select(func.count(Pick.id)).scalar_subquery(),
+            select(func.count(NflGame.id)).scalar_subquery(),
+        )
+    ).one()
+    return success(
+        {
+            "last_activity_at": last_pick.isoformat() if last_pick else None,
+            "data_freshness_at": last_sync.isoformat() if last_sync else None,
+            "picks_total": picks,
+            "games_total": games,
+        }
+    )
 
 
 @router.get("/health/ready", response_model=None)

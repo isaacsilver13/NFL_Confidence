@@ -56,7 +56,12 @@ def get_pick_week(db: Session) -> NflWeek:
     return next_week
 
 
-SCORE_SYNC_JOBS = ("sunday_score_sync", "monday_thursday_score_sync", "overnight_score_sync")
+SCORE_SYNC_JOBS = (
+    "sunday_score_sync",
+    "monday_thursday_score_sync",
+    "overnight_score_sync",
+    "manual_score_sync",
+)
 
 
 def get_last_refreshed_at(db: Session) -> datetime | None:

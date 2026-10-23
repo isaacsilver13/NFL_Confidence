@@ -3,7 +3,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app.models.refresh_token import RefreshToken
@@ -36,3 +36,23 @@ def is_valid(refresh_token: RefreshToken) -> bool:
     if expires_at.tzinfo is None:
         expires_at = expires_at.replace(tzinfo=timezone.utc)
     return expires_at > datetime.now(timezone.utc)
+
+
+def consume_valid_by_hash(db: Session, token_hash: str) -> uuid.UUID | None:
+    """Atomically consume one live token in the replacement token's transaction.
+
+    A concurrent UPDATE waits for the row lock and rechecks the live predicate;
+    only one transaction can obtain the user id. No commit occurs here, so a
+    failed replacement issuance rolls consumption back with the transaction.
+    """
+    now = datetime.now(timezone.utc)
+    return db.execute(
+        update(RefreshToken)
+        .where(
+            RefreshToken.token_hash == token_hash,
+            RefreshToken.revoked_at.is_(None),
+            RefreshToken.expires_at > now,
+        )
+        .values(revoked_at=now)
+        .returning(RefreshToken.user_id)
+    ).scalar_one_or_none()

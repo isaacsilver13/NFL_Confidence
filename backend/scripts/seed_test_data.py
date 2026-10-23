@@ -28,7 +28,7 @@ from app.services import league_service, scoring_service
 from app.services.auth_service import get_or_create_dev_user, get_or_create_google_user
 from app.services.nfl_schedule_service import _END_OF_WEEK_BUFFER, import_games
 
-TEST_LEAGUE_NAME = "2026 NFL Confidence League"
+TEST_LEAGUE_NAME = "NFL Picks League"
 # Fixed passcode for local/dev seeding only -- never used for production league
 # creation, which always goes through the normal random-code path.
 DEV_LEAGUE_INVITE_CODE = "DevinTester23"

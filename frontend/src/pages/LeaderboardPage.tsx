@@ -6,6 +6,7 @@ import { fetchWeeklyLeaderboard } from '@/api/leaderboard'
 import { fetchCurrentWeek, fetchStartedWeeks } from '@/api/nfl'
 import { LastRefreshed } from '@/components/nfl/LastRefreshed'
 import { AllPicksModal } from '@/components/leaderboard/AllPicksModal'
+import { OutcomeScenariosModal } from '@/components/leaderboard/OutcomeScenariosModal'
 import { Button } from '@/components/ui/Button'
 import { SortableTh } from '@/components/ui/SortableTable'
 import { useTableSort } from '@/components/ui/useTableSort'
@@ -109,9 +110,13 @@ function LeaderboardTable({
   )
 }
 
-export function LeaderboardPage() {
+export function LeaderboardPage({
+  week: controlledWeek,
+  onWeekChange,
+}: { week?: number; onWeekChange?: (week: number) => void } = {}) {
   const [week, setWeek] = useState<number>()
   const [showAllPicks, setShowAllPicks] = useState(false)
+  const [showOutcomeScenarios, setShowOutcomeScenarios] = useState(false)
   const weeksQuery = useQuery({
     queryKey: ['leaderboard', 'weeks', 'started'],
     queryFn: fetchStartedWeeks,
@@ -124,13 +129,18 @@ export function LeaderboardPage() {
   })
   const completedWeeks = weeksQuery.data ?? []
   const weekOptions = buildWeekOptions(completedWeeks, currentWeekQuery.data?.weekNumber)
-  const selectedWeek = week ?? currentWeekQuery.data?.weekNumber ?? weekOptions.at(-1)?.weekNumber
+  const selectedWeek =
+    controlledWeek ?? week ?? currentWeekQuery.data?.weekNumber ?? weekOptions.at(-1)?.weekNumber
   const query = useQuery({
     queryKey: ['leaderboard', 'week', selectedWeek],
     queryFn: () => fetchWeeklyLeaderboard(selectedWeek as number),
     enabled: selectedWeek !== undefined,
-    staleTime: 10 * 60_000,
+    staleTime: 60_000,
+    refetchInterval: 60_000,
   })
+  const canShowOutcomeScenarios =
+    selectedWeek === currentWeekQuery.data?.weekNumber &&
+    query.data?.outcomeScenariosAvailable === true
 
   return (
     <div className="animate-fade-in space-y-6">
@@ -148,11 +158,20 @@ export function LeaderboardPage() {
               See everyone&apos;s picks
             </Button>
           )}
+          {canShowOutcomeScenarios && (
+            <Button type="button" variant="secondary" onClick={() => setShowOutcomeScenarios(true)}>
+              See possible finishes
+            </Button>
+          )}
           <label className="flex items-center gap-3 text-sm font-bold text-ink-muted dark:text-slate-300 dev-dark:text-text-secondary">
             Week
             <select
               value={selectedWeek ?? ''}
-              onChange={(event) => setWeek(Number(event.target.value))}
+              onChange={(event) => {
+                const nextWeek = Number(event.target.value)
+                setWeek(nextWeek)
+                onWeekChange?.(nextWeek)
+              }}
               className="min-h-11 rounded-xl border border-slate-300 bg-surface px-3 text-ink shadow-sm dark:border-slate-700 dev-dark:border-border-hover dark:bg-slate-900 dev-dark:bg-surface-elevated dark:text-slate-100 dev-dark:text-ink"
             >
               {weekOptions.map(({ weekNumber, isCurrent }) => (
@@ -167,6 +186,9 @@ export function LeaderboardPage() {
       </div>
       {showAllPicks && selectedWeek !== undefined && (
         <AllPicksModal week={selectedWeek} onClose={() => setShowAllPicks(false)} />
+      )}
+      {showOutcomeScenarios && selectedWeek !== undefined && (
+        <OutcomeScenariosModal week={selectedWeek} onClose={() => setShowOutcomeScenarios(false)} />
       )}
 
       {selectedWeek === undefined && !weeksQuery.isPending && !currentWeekQuery.isPending && (

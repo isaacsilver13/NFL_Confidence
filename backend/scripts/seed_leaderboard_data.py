@@ -19,7 +19,7 @@ from app.models.weekly_result import WeeklyResult
 from app.repositories import league_member_repository, league_repository, user_repository
 from app.services.auth_service import get_or_create_dev_user
 
-DEMO_LEAGUE_NAME = "Local NFL Confidence Demo League"
+DEMO_LEAGUE_NAME = "NFL Picks League"
 DEMO_USER_SPECS = (
     ("leaderboard-demo-ava", "ava@leaderboard.local", "Ava Chen"),
     ("leaderboard-demo-ben", "ben@leaderboard.local", "Ben Morgan"),

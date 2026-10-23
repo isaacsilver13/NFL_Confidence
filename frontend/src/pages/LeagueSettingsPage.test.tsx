@@ -3,17 +3,19 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { ApiError } from '@/api/client'
 import {
   fetchLeague,
   fetchLeagueMembers,
   fetchMemberPaymentStatuses,
   fetchMemberSubmissionStatuses,
+  refreshLeagueData,
   removeLeagueMember,
   updateLeagueMember,
   updateMemberPayment,
   voidUnpaidPicks,
 } from '@/api/league'
-import { fetchWeeks } from '@/api/nfl'
+import { fetchCurrentWeek, fetchWeeks } from '@/api/nfl'
 import { fetchSessionBootstrap } from '@/api/session'
 import type { SessionBootstrap } from '@/api/session'
 import type { League, LeagueMember } from '@/types/league'
@@ -26,6 +28,7 @@ vi.mock('@/api/league', () => ({
   fetchLeagueMembers: vi.fn(),
   fetchMemberPaymentStatuses: vi.fn(),
   fetchMemberSubmissionStatuses: vi.fn(),
+  refreshLeagueData: vi.fn(),
   removeLeagueMember: vi.fn(),
   updateLeagueMember: vi.fn(),
   updateMemberPayment: vi.fn(),
@@ -33,6 +36,7 @@ vi.mock('@/api/league', () => ({
 }))
 
 vi.mock('@/api/nfl', () => ({
+  fetchCurrentWeek: vi.fn(),
   fetchWeeks: vi.fn(),
 }))
 
@@ -44,11 +48,13 @@ const mockedFetchLeague = vi.mocked(fetchLeague)
 const mockedFetchLeagueMembers = vi.mocked(fetchLeagueMembers)
 const mockedFetchMemberPaymentStatuses = vi.mocked(fetchMemberPaymentStatuses)
 const mockedFetchMemberSubmissionStatuses = vi.mocked(fetchMemberSubmissionStatuses)
+const mockedRefreshLeagueData = vi.mocked(refreshLeagueData)
 const mockedRemoveLeagueMember = vi.mocked(removeLeagueMember)
 const mockedUpdateLeagueMember = vi.mocked(updateLeagueMember)
 const mockedUpdateMemberPayment = vi.mocked(updateMemberPayment)
 const mockedVoidUnpaidPicks = vi.mocked(voidUnpaidPicks)
 const mockedFetchWeeks = vi.mocked(fetchWeeks)
+const mockedFetchCurrentWeek = vi.mocked(fetchCurrentWeek)
 const mockedFetchSessionBootstrap = vi.mocked(fetchSessionBootstrap)
 
 const league: League = {
@@ -136,6 +142,22 @@ function renderPage(session: SessionBootstrap = ownerSession) {
 }
 
 describe('LeagueSettingsPage', () => {
+  it('groups tools in accordions with the roster open by default', async () => {
+    renderPage()
+    expect(await screen.findByRole('button', { name: /^Member roster/ })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    )
+    const invites = screen.getByRole('button', { name: /^Invitations & passcode/ })
+    expect(invites).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByText('League passcode')).not.toBeInTheDocument()
+    await userEvent.setup().click(invites)
+    expect(screen.getByText('League passcode')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Weekly payments/ })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    )
+  })
   beforeEach(() => {
     vi.clearAllMocks()
     mockedFetchLeague.mockResolvedValue(league)
@@ -150,8 +172,17 @@ describe('LeagueSettingsPage', () => {
         status: 'regular',
       },
     ])
+    mockedFetchCurrentWeek.mockResolvedValue({
+      id: 'week-1',
+      season: 2026,
+      weekNumber: 1,
+      startDate: '2026-09-01T00:00:00Z',
+      endDate: '2026-09-08T00:00:00Z',
+      status: 'regular',
+    })
     mockedFetchMemberPaymentStatuses.mockResolvedValue(paymentStatuses)
     mockedFetchMemberSubmissionStatuses.mockResolvedValue(submissionStatuses)
+    mockedRefreshLeagueData.mockResolvedValue({ weeksRefreshed: 2, gamesFinal: 5 })
     mockedRemoveLeagueMember.mockResolvedValue(undefined)
     mockedUpdateLeagueMember.mockResolvedValue(members[1])
     mockedUpdateMemberPayment.mockResolvedValue(undefined)
@@ -221,7 +252,7 @@ describe('LeagueSettingsPage', () => {
     const user = userEvent.setup()
     renderPage()
 
-    expect(await screen.findByText('Weekly payments')).toBeInTheDocument()
+    await user.click(await screen.findByRole('button', { name: /^Weekly payments/ }))
     const paymentCheckboxes = await screen.findAllByRole('checkbox', { name: 'Paid' })
     await user.click(paymentCheckboxes[1])
 
@@ -232,9 +263,67 @@ describe('LeagueSettingsPage', () => {
     await waitFor(() => expect(mockedVoidUnpaidPicks).toHaveBeenCalledWith(1))
   })
 
+  it('lets a commissioner refresh scores and standings', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(await screen.findByRole('button', { name: /^Scores & standings/ }))
+    await user.click(await screen.findByRole('button', { name: 'Refresh scores & standings' }))
+
+    await waitFor(() => expect(mockedRefreshLeagueData).toHaveBeenCalledTimes(1))
+    expect(await screen.findByText('Refreshed 2 weeks.')).toBeInTheDocument()
+  })
+
+  it('disables the refresh button while a refresh is running', async () => {
+    const user = userEvent.setup()
+    let resolveRefresh: (value: { weeksRefreshed: number; gamesFinal: number }) => void = () => {}
+    mockedRefreshLeagueData.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveRefresh = resolve
+      }),
+    )
+    renderPage()
+
+    await user.click(await screen.findByRole('button', { name: /^Scores & standings/ }))
+    await user.click(await screen.findByRole('button', { name: 'Refresh scores & standings' }))
+
+    expect(await screen.findByRole('button', { name: 'Refreshing...' })).toBeDisabled()
+    resolveRefresh({ weeksRefreshed: 1, gamesFinal: 3 })
+    expect(await screen.findByText('Refreshed 1 week.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Refresh scores & standings' })).toBeEnabled()
+  })
+
+  it('shows the server message when a refresh fails', async () => {
+    const user = userEvent.setup()
+    mockedRefreshLeagueData.mockRejectedValueOnce(
+      new ApiError(502, 'UPSTREAM_ERROR', 'Could not reach the NFL data provider.'),
+    )
+    renderPage()
+
+    await user.click(await screen.findByRole('button', { name: /^Scores & standings/ }))
+    await user.click(await screen.findByRole('button', { name: 'Refresh scores & standings' }))
+
+    expect(await screen.findByText('Could not reach the NFL data provider.')).toBeInTheDocument()
+    expect(screen.queryByText(/^Refreshed/)).not.toBeInTheDocument()
+  })
+
+  it('falls back to a generic message when a refresh fails unexpectedly', async () => {
+    const user = userEvent.setup()
+    mockedRefreshLeagueData.mockRejectedValueOnce(new Error('network down'))
+    renderPage()
+
+    await user.click(await screen.findByRole('button', { name: /^Scores & standings/ }))
+    await user.click(await screen.findByRole('button', { name: 'Refresh scores & standings' }))
+
+    expect(
+      await screen.findByText('Could not refresh scores. Please try again.'),
+    ).toBeInTheDocument()
+  })
+
   it("shows who has and hasn't submitted picks for the selected week", async () => {
     renderPage()
 
+    await userEvent.setup().click(await screen.findByRole('button', { name: /^Pick submissions/ }))
     expect(await screen.findByText('Who has submitted picks')).toBeInTheDocument()
     await waitFor(() => expect(mockedFetchMemberSubmissionStatuses).toHaveBeenCalledWith(1))
     expect(await screen.findByText(/Submitted Sep 5/)).toBeInTheDocument()
@@ -250,7 +339,31 @@ describe('LeagueSettingsPage', () => {
     })
     renderPage()
 
+    await userEvent.setup().click(await screen.findByRole('button', { name: /^Pick submissions/ }))
     expect((await screen.findAllByText('Complete (autosaved)')).length).toBeGreaterThan(0)
     expect(screen.queryByText('Not submitted')).not.toBeInTheDocument()
+  })
+
+  it('defaults the payment and submission tables to the current week, not Week 1', async () => {
+    const week = (weekNumber: number) => ({
+      id: `week-${weekNumber}`,
+      season: 2026,
+      weekNumber,
+      startDate: '2026-09-01T00:00:00Z',
+      endDate: '2026-09-08T00:00:00Z',
+      status: 'regular',
+    })
+    mockedFetchWeeks.mockResolvedValue([week(1), week(2), week(3)])
+    mockedFetchCurrentWeek.mockResolvedValue(week(3))
+    renderPage()
+
+    await userEvent.setup().click(await screen.findByRole('button', { name: /^Weekly payments/ }))
+    await userEvent.setup().click(await screen.findByRole('button', { name: /^Pick submissions/ }))
+    await waitFor(() => expect(mockedFetchMemberPaymentStatuses).toHaveBeenCalledWith(3))
+    await waitFor(() => expect(mockedFetchMemberSubmissionStatuses).toHaveBeenCalledWith(3))
+    expect(screen.getByLabelText('Payment week')).toHaveValue('3')
+    expect(screen.getByLabelText('Submissions week')).toHaveValue('3')
+    expect(mockedFetchMemberPaymentStatuses).not.toHaveBeenCalledWith(1)
+    expect(mockedFetchMemberSubmissionStatuses).not.toHaveBeenCalledWith(1)
   })
 })

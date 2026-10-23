@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { ApiError } from '@/api/client'
 import { createLeague, fetchLeaguePot, joinLeagueWithCode } from '@/api/league'
-import { fetchCompletedWeeks, fetchPickHistory } from '@/api/nfl'
+import { fetchStartedWeeks, fetchPickHistory } from '@/api/nfl'
 import { fetchWeeklyLeaderboard, fetchSeasonStandings } from '@/api/leaderboard'
 import { fetchCurrentPicksCard, fetchSessionBootstrap } from '@/api/session'
 import { Button } from '@/components/ui/Button'
@@ -71,6 +71,7 @@ function DashboardSections({
   // this component first mounted.
   const [openSections, setOpenSections] = useState<SectionId[]>(() => storedOpenSections(userId))
   const [hashSection, setHashSection] = useState<SectionId | null>(() => sectionFromHash())
+  const [leaderboardWeek, setLeaderboardWeek] = useState<number>()
   const isOpen = (section: SectionId) => openSections.includes(section) || section === hashSection
 
   useEffect(() => {
@@ -108,24 +109,25 @@ function DashboardSections({
   }
 
   const leaderboardWeeksQuery = useQuery({
-    queryKey: ['leaderboard', 'weeks'],
-    queryFn: fetchCompletedWeeks,
-    enabled: isOpen('leaderboard'),
-    staleTime: 10 * 60_000,
+    queryKey: ['leaderboard', 'weeks', 'started'],
+    queryFn: fetchStartedWeeks,
+    staleTime: 60_000,
+    refetchInterval: 60_000,
   })
-  const latestCompletedWeek = leaderboardWeeksQuery.data?.at(-1)?.weekNumber
-  const summaryWeek = latestCompletedWeek ?? currentWeekNumber
+  const summaryWeek =
+    leaderboardWeek ?? currentWeekNumber ?? leaderboardWeeksQuery.data?.at(-1)?.weekNumber
   const leaderboardQuery = useQuery({
     queryKey: ['leaderboard', 'week', summaryWeek],
     queryFn: () => fetchWeeklyLeaderboard(summaryWeek as number),
-    enabled: isOpen('leaderboard') && summaryWeek !== undefined,
-    staleTime: 10 * 60_000,
+    enabled: summaryWeek !== undefined,
+    staleTime: 60_000,
+    refetchInterval: 60_000,
   })
   const standingsQuery = useQuery({
     queryKey: ['leaderboard', 'season'],
     queryFn: () => fetchSeasonStandings(),
-    enabled: isOpen('standings'),
-    staleTime: 10 * 60_000,
+    staleTime: 60_000,
+    refetchInterval: 60_000,
   })
   const picksQuery = useQuery({
     queryKey: ['picks', 'card', 'current'],
@@ -149,7 +151,7 @@ function DashboardSections({
       weeklyMember ? `Your current rank is #${weeklyMember.rank}` : undefined,
       'See the weekly race and your current rank',
     ),
-    breakdown: 'See how the league split its picks on each completed game',
+    breakdown: 'See how the league split its picks on each game once picks lock',
     standings: sectionSummary(
       seasonMember
         ? `Your season pick record is ${seasonMember.correctPicks}-${seasonMember.incorrectPicks}`
@@ -167,7 +169,7 @@ function DashboardSections({
   }
 
   const sectionContent: Record<SectionId, React.ReactNode> = {
-    leaderboard: <LeaderboardPage />,
+    leaderboard: <LeaderboardPage week={summaryWeek} onWeekChange={setLeaderboardWeek} />,
     breakdown: <WeeklyGameBreakdownSection />,
     standings: <StandingsPage />,
     profile: <ProfilePage />,
@@ -329,7 +331,7 @@ function formatCents(cents: number): string {
   return `$${Math.round(cents / 100)}`
 }
 
-function LeaguePotCard() {
+function LeaguePot() {
   const { data: pot } = useQuery({
     queryKey: ['league', 'pot'],
     queryFn: fetchLeaguePot,
@@ -339,31 +341,23 @@ function LeaguePotCard() {
   if (!pot || !pot.isVisible) return null
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-surface p-5 shadow-sm dark:border-slate-800 dev-dark:border-border dark:bg-slate-900 dev-dark:bg-surface-elevated">
-      <p className="text-xs font-bold uppercase tracking-[0.16em] text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
+    <div className="mt-5 border-t border-white/15 pt-4">
+      <p className="text-xs font-bold uppercase tracking-[0.16em] text-sky dark:text-accent">
         League pot
       </p>
-      <p className="mt-1 text-2xl font-black text-primary dark:text-white dev-dark:text-ink">
-        {formatCents(pot.potCents)}
-      </p>
-      <div className="mt-3 flex flex-wrap gap-4 text-sm">
+      <p className="mt-1 text-2xl font-black">{formatCents(pot.potCents)}</p>
+      <div className="mt-2 flex flex-wrap gap-4 text-sm">
         <span className="inline-flex items-center gap-1.5">
           <span aria-hidden="true">🥇</span>
-          <span className="font-bold text-primary dark:text-white dev-dark:text-ink">
-            {formatCents(pot.firstPlaceCents)}
-          </span>
+          <span className="font-bold">{formatCents(pot.firstPlaceCents)}</span>
         </span>
         <span className="inline-flex items-center gap-1.5">
           <span aria-hidden="true">🥈</span>
-          <span className="font-bold text-primary dark:text-white dev-dark:text-ink">
-            {formatCents(pot.secondPlaceCents)}
-          </span>
+          <span className="font-bold">{formatCents(pot.secondPlaceCents)}</span>
         </span>
         <span className="inline-flex items-center gap-1.5">
           <span aria-hidden="true">🥉</span>
-          <span className="font-bold text-primary dark:text-white dev-dark:text-ink">
-            {formatCents(pot.thirdPlaceCents)}
-          </span>
+          <span className="font-bold">{formatCents(pot.thirdPlaceCents)}</span>
         </span>
       </div>
     </div>
@@ -460,8 +454,9 @@ export function DashboardPage() {
       </div>
       {league && (
         <div className="overflow-hidden rounded-2xl border border-primary/10 bg-primary p-5 text-white shadow-lg shadow-primary/15">
-          <p className="text-xs font-bold uppercase tracking-[0.2em] text-sky">
+          <p className="text-xs font-bold uppercase tracking-[0.2em] text-sky dark:text-accent">
             {league.season} season
+            {currentWeek ? ` · Week ${currentWeek.weekNumber}` : ''}
           </p>
           <p className="mt-2 text-2xl font-black">{league.name}</p>
           <div className="mt-5 flex flex-wrap gap-3 text-sm text-slate-200">
@@ -470,20 +465,16 @@ export function DashboardPage() {
               {league.memberCount === 1 ? '' : 's'}
             </span>
             <span className="inline-flex items-center gap-2">
-              <CalendarDays size={16} aria-hidden="true" /> Commissioner {league.commissionerName}
+              <CalendarDays size={16} aria-hidden="true" />
+              {(league.commissionerNames?.length ?? 0) > 1 ? 'Commissioners' : 'Commissioner'}{' '}
+              {league.commissionerNames?.length
+                ? league.commissionerNames.join(', ')
+                : league.commissionerName}
             </span>
           </div>
+          <LeaguePot />
         </div>
       )}
-      <div className="rounded-2xl border border-slate-200 bg-surface p-5 shadow-sm dark:border-slate-800 dev-dark:border-border dark:bg-slate-900 dev-dark:bg-surface-elevated">
-        <p className="text-xs font-bold uppercase tracking-[0.16em] text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
-          Current week
-        </p>
-        <p className="mt-2 text-2xl font-black text-primary dark:text-white dev-dark:text-ink">
-          {currentWeek ? `Week ${currentWeek.weekNumber}` : 'Unavailable'}
-        </p>
-      </div>
-      <LeaguePotCard />
       <DashboardSections userId={user.id} currentWeekNumber={currentWeek?.weekNumber} />
     </div>
   )

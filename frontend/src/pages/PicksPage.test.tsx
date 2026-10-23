@@ -89,6 +89,17 @@ function renderPage() {
 }
 
 describe('PicksPage', () => {
+  it('uses team colors on the selected winner and selection label', async () => {
+    renderPage()
+    const button = await screen.findByRole('button', { name: 'KC' })
+    await userEvent.setup().click(button)
+    expect(button).toHaveAttribute('aria-pressed', 'true')
+    expect(button).toHaveStyle({ backgroundColor: '#e31837', color: '#ffffff' })
+    expect(screen.getByText('KC selected')).toHaveStyle({
+      backgroundColor: '#e31837',
+      color: '#ffffff',
+    })
+  })
   beforeEach(() => {
     vi.clearAllMocks()
     mockedFetchLastRefreshed.mockResolvedValue({ lastRefreshedAt: '2026-09-27T21:12:00Z' })
@@ -182,6 +193,48 @@ describe('PicksPage', () => {
     await user.click(submitButton)
 
     expect(await screen.findByText('Submit requires a pick for all 2 games.')).toBeInTheDocument()
+  })
+
+  it('waits for the latest autosave before allowing a complete card to be submitted', async () => {
+    const user = userEvent.setup()
+    let resolveSave!: (picks: NflPick[]) => void
+    mockedSavePicks.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveSave = resolve
+      }),
+    )
+    renderPage()
+    await user.click(await screen.findByRole('button', { name: 'KC' }))
+    await user.click(screen.getByRole('button', { name: 'GB' }))
+    await user.click(screen.getAllByRole('button', { name: '2' })[0])
+    await user.click(screen.getAllByRole('button', { name: '1' })[1])
+    const submit = screen.getByRole('button', { name: 'Submit picks' })
+    expect(submit).toBeDisabled()
+    await waitFor(() => expect(mockedSavePicks).toHaveBeenCalledTimes(1))
+    expect(submit).toBeDisabled()
+    expect(mockedSubmitPicks).not.toHaveBeenCalled()
+    resolveSave([])
+    await waitFor(() => expect(submit).toBeEnabled())
+    await user.click(submit)
+    await waitFor(() => expect(mockedSubmitPicks).toHaveBeenCalledWith(1, expect.anything()))
+  })
+
+  it('lets a failed autosave be retried before submitting the latest card', async () => {
+    const user = userEvent.setup()
+    mockedSavePicks.mockRejectedValueOnce(new Error('network down')).mockResolvedValue([])
+    renderPage()
+    await user.click(await screen.findByRole('button', { name: 'KC' }))
+    await user.click(screen.getByRole('button', { name: 'GB' }))
+    await user.click(screen.getAllByRole('button', { name: '2' })[0])
+    await user.click(screen.getAllByRole('button', { name: '1' })[1])
+    const submit = screen.getByRole('button', { name: 'Submit picks' })
+    await screen.findByText("Could not save this week's picks.")
+    expect(submit).toBeDisabled()
+    await user.click(screen.getByRole('button', { name: 'Retry save' }))
+    await waitFor(() => expect(submit).toBeEnabled())
+    expect(mockedSavePicks).toHaveBeenCalledTimes(2)
+    expect(mockedSavePicks.mock.calls[1][0].picks).toHaveLength(2)
+    expect(screen.queryByRole('button', { name: 'Retry save' })).not.toBeInTheDocument()
   })
 
   it('makes picks read-only after the earliest kickoff', async () => {
@@ -281,7 +334,7 @@ describe('PicksPage', () => {
     const winner = screen.getByRole('button', { name: 'BUF' })
     const confidence = screen.getAllByRole('button', { name: '2' })[0]
     expect(winner).toHaveAttribute('aria-pressed', 'true')
-    expect(winner).toHaveClass('dark:border-sky', 'dark:bg-sky/20', 'dark:text-sky')
+    expect(winner).toHaveStyle({ backgroundColor: '#00338d', color: '#ffffff' })
     expect(confidence).toHaveAttribute('aria-pressed', 'true')
 
     await user.click(winner)

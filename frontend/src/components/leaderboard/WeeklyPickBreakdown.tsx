@@ -35,7 +35,7 @@ function GamePicksModal({ game, onClose }: { game: GamePickBreakdown; onClose: (
         onClick={(event) => event.stopPropagation()}
         className="w-full max-w-md rounded-2xl border border-slate-200 bg-surface p-5 shadow-lg dark:border-slate-800 dev-dark:border-border dark:bg-slate-900 dev-dark:bg-surface-elevated"
       >
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-1">
           <h2
             id="game-picks-title"
             className="text-lg font-black text-primary dark:text-white dev-dark:text-ink"
@@ -67,7 +67,7 @@ function GamePicksModal({ game, onClose }: { game: GamePickBreakdown; onClose: (
               {data.picks.map((pick) => (
                 <li
                   key={pick.memberName}
-                  className="flex items-center justify-between gap-3 py-2 text-sm"
+                  className="flex flex-wrap items-center justify-between gap-1 py-2 text-sm"
                 >
                   <span className="font-medium">{pick.memberName}</span>
                   <span
@@ -116,9 +116,9 @@ function GameBreakdown({
   const homePalette = getTeamPalette(game.homeTeam)
 
   return (
-    <article className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dev-dark:border-border dark:bg-slate-950 dev-dark:bg-background">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2 font-bold">
+    <article className="min-w-0 rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-800 dev-dark:border-border dark:bg-slate-950 dev-dark:bg-background">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-1.5 text-sm font-bold">
           <TeamLogo code={game.awayTeam} size="sm" decorative />
           <span>
             {game.awayTeam}
@@ -139,21 +139,21 @@ function GameBreakdown({
             )}
           </span>
         </div>
-        <p className="text-sm text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
+        <p className="text-xs text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
           Median confidence:{' '}
           <span className="font-bold text-ink dark:text-slate-200 dev-dark:text-ink">
             {formatMedian(game.medianConfidence)}
           </span>
         </p>
       </div>
-      <div className="mt-4 grid gap-2 text-xs font-bold sm:grid-cols-2">
-        <div className="flex items-center justify-between gap-3">
+      <div className="mt-3 grid grid-cols-2 gap-3 text-xs font-bold">
+        <div className="flex flex-wrap items-center justify-between gap-1">
           <span>
             {game.awayTeam}: {awayCount} {awayCount === 1 ? 'pick' : 'picks'}
           </span>
           <span>{awayPercentage}%</span>
         </div>
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-1">
           <span>
             {game.homeTeam}: {homeCount} {homeCount === 1 ? 'pick' : 'picks'}
           </span>
@@ -173,7 +173,7 @@ function GameBreakdown({
           No picks were submitted for this game.
         </p>
       )}
-      <div className="mt-3 text-right">
+      <div className="mt-1 text-right">
         <Button type="button" variant="quiet" onClick={onViewPicks}>
           View Picks
         </Button>
@@ -194,7 +194,7 @@ export function WeeklyPickBreakdown({ games }: { games: GamePickBreakdown[] }) {
   }
 
   return (
-    <div className="space-y-3">
+    <div className="grid min-w-0 gap-3 md:grid-cols-2">
       {games.map((game) => (
         <GameBreakdown key={game.gameId} game={game} onViewPicks={() => setOpenGame(game)} />
       ))}

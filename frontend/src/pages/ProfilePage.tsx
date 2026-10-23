@@ -3,7 +3,7 @@ import { ArrowDown, ArrowUp, ArrowUpDown, UserRound } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { ApiError } from '@/api/client'
-import { fetchPickHistory } from '@/api/nfl'
+import { fetchCompletedWeeks, fetchPickHistory } from '@/api/nfl'
 import type { HistoricalPick, HistoricalWeek, PickOutcome } from '@/types/nfl'
 
 const OUTCOME_LABELS: Record<PickOutcome, string> = {
@@ -13,7 +13,7 @@ const OUTCOME_LABELS: Record<PickOutcome, string> = {
   voided: 'Voided',
 }
 
-type SortKey = 'game' | 'team' | 'confidence' | 'outcome' | 'points'
+type SortKey = 'kickoff' | 'game' | 'team' | 'confidence' | 'outcome' | 'points'
 type SortDirection = 'ascending' | 'descending'
 
 const OUTCOME_ORDER: Record<PickOutcome, number> = {
@@ -24,9 +24,12 @@ const OUTCOME_ORDER: Record<PickOutcome, number> = {
 }
 
 function formatKickoff(kickoff: string): string {
-  return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(
-    new Date(kickoff),
-  )
+  return new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(new Date(kickoff))
 }
 
 function Outcome({ pick }: { pick: HistoricalPick }) {
@@ -42,14 +45,20 @@ function Outcome({ pick }: { pick: HistoricalPick }) {
 }
 
 function HistoryTable({ picks }: { picks: HistoricalPick[] }) {
-  const [sortKey, setSortKey] = useState<SortKey>('game')
+  const [sortKey, setSortKey] = useState<SortKey>('kickoff')
   const [direction, setDirection] = useState<SortDirection>('ascending')
   const sortedPicks = [...picks].sort((left, right) => {
     const leftValue = sortValue(left, sortKey)
     const rightValue = sortValue(right, sortKey)
     const comparison = compareValues(leftValue, rightValue)
     if (comparison !== 0) return comparison * (direction === 'ascending' ? 1 : -1)
-    return left.kickoff.localeCompare(right.kickoff) || left.id.localeCompare(right.id)
+    return (
+      new Date(left.kickoff).getTime() - new Date(right.kickoff).getTime() ||
+      `${left.awayTeam} at ${left.homeTeam}`.localeCompare(
+        `${right.awayTeam} at ${right.homeTeam}`,
+      ) ||
+      left.id.localeCompare(right.id)
+    )
   })
 
   function handleSort(nextKey: SortKey) {
@@ -62,11 +71,18 @@ function HistoryTable({ picks }: { picks: HistoricalPick[] }) {
   }
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800 dev-dark:border-border">
-      <table className="w-full min-w-[760px] text-left text-sm">
+    <div className="w-fit max-w-full overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800 dev-dark:border-border">
+      <table className="w-max text-left text-sm">
         <caption className="sr-only">Your picks</caption>
         <thead className="bg-surface-muted text-xs uppercase tracking-[0.14em] text-ink-muted dark:bg-slate-950 dev-dark:bg-background dark:text-slate-400 dev-dark:text-text-muted">
           <tr>
+            <SortableHeader
+              label="Kickoff"
+              sortKey="kickoff"
+              activeKey={sortKey}
+              direction={direction}
+              onSort={handleSort}
+            />
             <SortableHeader
               label="Game"
               sortKey="game"
@@ -109,18 +125,18 @@ function HistoryTable({ picks }: { picks: HistoricalPick[] }) {
         <tbody className="divide-y divide-slate-200 dark:divide-slate-800 dev-dark:divide-border">
           {sortedPicks.map((pick) => (
             <tr key={pick.id}>
-              <th scope="row" className="px-4 py-3 font-semibold">
+              <td className="whitespace-nowrap px-3 py-2 text-xs text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
+                {formatKickoff(pick.kickoff)}
+              </td>
+              <th scope="row" className="whitespace-nowrap px-3 py-2 font-semibold">
                 {pick.awayTeam} at {pick.homeTeam}
-                <span className="block text-xs font-normal text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
-                  {formatKickoff(pick.kickoff)}
-                </span>
               </th>
-              <td className="px-4 py-3 font-bold">{pick.team}</td>
-              <td className="px-4 py-3 text-right">{pick.confidence}</td>
-              <td className="px-4 py-3">
+              <td className="px-3 py-2 font-bold">{pick.team}</td>
+              <td className="px-3 py-2 text-right">{pick.confidence}</td>
+              <td className="px-3 py-2">
                 <Outcome pick={pick} />
               </td>
-              <td className="px-4 py-3 text-right">{pick.pointsEarned ?? '-'}</td>
+              <td className="px-3 py-2 text-right">{pick.pointsEarned ?? '-'}</td>
             </tr>
           ))}
         </tbody>
@@ -130,6 +146,7 @@ function HistoryTable({ picks }: { picks: HistoricalPick[] }) {
 }
 
 function sortValue(pick: HistoricalPick, sortKey: SortKey): string | number | null {
+  if (sortKey === 'kickoff') return new Date(pick.kickoff).getTime()
   if (sortKey === 'game') return `${pick.awayTeam} at ${pick.homeTeam}`
   if (sortKey === 'team') return pick.team
   if (sortKey === 'confidence') return pick.confidence
@@ -164,7 +181,7 @@ function SortableHeader({
   const Icon = isActive ? (direction === 'ascending' ? ArrowUp : ArrowDown) : ArrowUpDown
   return (
     <th
-      className={`px-4 py-3 ${align === 'right' ? 'text-right' : ''}`}
+      className={`px-3 py-2 ${align === 'right' ? 'text-right' : ''}`}
       aria-sort={isActive ? direction : 'none'}
     >
       <button
@@ -192,6 +209,8 @@ interface WeekStat {
 interface ConfidenceStat {
   confidence: number
   correct: number
+  timesUsed: number
+  successRate: number
 }
 
 function computeWeekStats(weeks: HistoricalWeek[]): WeekStat[] {
@@ -203,7 +222,7 @@ function computeWeekStats(weeks: HistoricalWeek[]): WeekStat[] {
       )
       const correct = scored.filter((pick) => pick.outcome === 'correct').length
       const incorrect = scored.length - correct
-      const totalPoints = week.picks.reduce((sum, pick) => sum + (pick.pointsEarned ?? 0), 0)
+      const totalPoints = scored.reduce((sum, pick) => sum + (pick.pointsEarned ?? 0), 0)
       return {
         weekNumber: week.weekNumber,
         correct,
@@ -219,12 +238,16 @@ function computeConfidenceStats(weeks: HistoricalWeek[]): ConfidenceStat[] {
   const byConfidence = new Map<number, ConfidenceStat>()
   for (const week of weeks) {
     for (const pick of week.picks) {
-      if (pick.outcome !== 'correct') continue
+      if (pick.outcome !== 'correct' && pick.outcome !== 'incorrect') continue
       const entry = byConfidence.get(pick.confidence) ?? {
         confidence: pick.confidence,
         correct: 0,
+        timesUsed: 0,
+        successRate: 0,
       }
-      entry.correct += 1
+      entry.correct += pick.outcome === 'correct' ? 1 : 0
+      entry.timesUsed += 1
+      entry.successRate = entry.correct / entry.timesUsed
       byConfidence.set(pick.confidence, entry)
     }
   }
@@ -235,10 +258,17 @@ function formatWinRate(winRate: number | null): string {
   return winRate === null ? '—' : `${Math.round(winRate * 100)}%`
 }
 
-function SeasonStats({ weeks }: { weeks: HistoricalWeek[] }) {
+function SeasonStats({
+  weeks,
+  completedWeekNumbers,
+}: {
+  weeks: HistoricalWeek[]
+  completedWeekNumbers: Set<number> | null
+}) {
   const weekStats = useMemo(() => computeWeekStats(weeks), [weeks])
   const confidenceStats = useMemo(() => computeConfidenceStats(weeks), [weeks])
   const weeksWithScoring = weekStats.filter((week) => week.scoredPicks > 0)
+  const completedWeekStats = weekStats.filter((week) => completedWeekNumbers?.has(week.weekNumber))
 
   if (weeksWithScoring.length === 0) return null
 
@@ -246,7 +276,10 @@ function SeasonStats({ weeks }: { weeks: HistoricalWeek[] }) {
   const totalScored = weeksWithScoring.reduce((sum, week) => sum + week.scoredPicks, 0)
   const seasonWinRate = totalScored > 0 ? totalCorrect / totalScored : null
   const averageWeeklyPoints =
-    weeksWithScoring.reduce((sum, week) => sum + week.totalPoints, 0) / weeksWithScoring.length
+    completedWeekStats.length > 0
+      ? completedWeekStats.reduce((sum, week) => sum + week.totalPoints, 0) /
+        completedWeekStats.length
+      : null
   const confidenceHistogramData = [...confidenceStats].sort(
     (left, right) => left.confidence - right.confidence,
   )
@@ -283,10 +316,12 @@ function SeasonStats({ weeks }: { weeks: HistoricalWeek[] }) {
             Average weekly points
           </p>
           <p className="mt-1 text-2xl font-black text-primary dark:text-white dev-dark:text-ink">
-            {averageWeeklyPoints.toFixed(1)}
+            {averageWeeklyPoints?.toFixed(1) ?? '—'}
           </p>
           <p className="text-xs text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
-            Across {weeksWithScoring.length} scored week{weeksWithScoring.length === 1 ? '' : 's'}
+            {completedWeekNumbers
+              ? `Across ${completedWeekStats.length} completed week${completedWeekStats.length === 1 ? '' : 's'}`
+              : 'Completed-week average unavailable'}
           </p>
         </div>
       </div>
@@ -297,10 +332,13 @@ function SeasonStats({ weeks }: { weeks: HistoricalWeek[] }) {
         </p>
         <ul className="mt-2 space-y-1.5">
           {weeksWithScoring.map((week) => (
-            <li key={week.weekNumber} className="flex items-center gap-3 text-sm">
-              <span className="w-16 shrink-0 font-bold">Week {week.weekNumber}</span>
+            <li
+              key={week.weekNumber}
+              className="grid grid-cols-[auto_1fr_auto] items-center gap-x-3 gap-y-1 text-sm sm:grid-cols-[4rem_1fr_auto_4rem]"
+            >
+              <span className="whitespace-nowrap font-bold sm:w-16">Week {week.weekNumber}</span>
               <div
-                className="h-3 flex-1 overflow-hidden rounded-full bg-surface-muted dark:bg-slate-800 dev-dark:bg-surface-hover"
+                className="col-span-3 row-start-2 h-3 min-w-0 overflow-hidden rounded-full bg-surface-muted dark:bg-slate-800 dev-dark:bg-surface-hover sm:col-span-1 sm:row-start-auto"
                 role="img"
                 aria-label={`Week ${week.weekNumber}: ${formatWinRate(week.winRate)} win rate`}
               >
@@ -309,10 +347,10 @@ function SeasonStats({ weeks }: { weeks: HistoricalWeek[] }) {
                   style={{ width: `${(week.winRate ?? 0) * 100}%` }}
                 />
               </div>
-              <span className="w-12 shrink-0 text-right text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
-                {formatWinRate(week.winRate)}
+              <span className="shrink-0 text-right text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
+                {week.correct}/{week.scoredPicks} correct · {formatWinRate(week.winRate)}
               </span>
-              <span className="w-16 shrink-0 text-right font-bold text-accent">
+              <span className="whitespace-nowrap text-right font-bold text-accent sm:w-16">
                 {week.totalPoints} pts
               </span>
             </li>
@@ -325,17 +363,23 @@ function SeasonStats({ weeks }: { weeks: HistoricalWeek[] }) {
           <p className="text-xs font-bold uppercase tracking-[0.14em] text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
             Confidence point histogram
           </p>
+          <p className="mt-1 text-xs text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
+            Success rate across scored picks; pending and voided picks are excluded.
+          </p>
           <div
             className="mt-2 h-64"
             role="img"
             aria-label={`Confidence point histogram: ${confidenceHistogramData
-              .map((stat) => `confidence ${stat.confidence}, ${stat.correct} correct`)
+              .map(
+                (stat) =>
+                  `confidence ${stat.confidence}, ${formatWinRate(stat.successRate)} (${stat.correct}/${stat.timesUsed} correct)`,
+              )
               .join('; ')}`}
           >
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
                 data={confidenceHistogramData}
-                margin={{ top: 4, right: 8, bottom: 4, left: 0 }}
+                margin={{ top: 4, right: 8, bottom: 16, left: 16 }}
               >
                 <CartesianGrid strokeDasharray="3 3" vertical={false} className="opacity-20" />
                 <XAxis
@@ -345,20 +389,35 @@ function SeasonStats({ weeks }: { weeks: HistoricalWeek[] }) {
                   fontSize={12}
                 />
                 <YAxis
-                  allowDecimals={false}
-                  label={{ value: 'Times used', angle: -90, position: 'insideLeft' }}
+                  domain={[0, 1]}
+                  tickFormatter={(value: number) => `${Math.round(value * 100)}%`}
+                  label={{ value: 'Success Rate', angle: -90, position: 'insideLeft', dx: -12 }}
                   tickLine={false}
                   fontSize={12}
-                  width={36}
+                  width={60}
                 />
                 <Tooltip
-                  formatter={(value) => [value, 'Correct']}
+                  cursor={{ fill: 'currentColor', fillOpacity: 0.08 }}
+                  contentStyle={{
+                    backgroundColor: 'var(--color-surface)',
+                    color: 'var(--color-ink)',
+                    borderColor: 'var(--color-border)',
+                    borderRadius: 8,
+                  }}
+                  labelStyle={{ color: 'var(--color-ink)' }}
+                  formatter={(value, _name, item) => {
+                    const stat = item.payload as ConfidenceStat
+                    return [
+                      `${formatWinRate(Number(value))} (${stat.correct}/${stat.timesUsed})`,
+                      'Success rate',
+                    ]
+                  }}
                   labelFormatter={(confidence) => `Confidence ${confidence}`}
                 />
                 <Bar
-                  dataKey="correct"
+                  dataKey="successRate"
                   fill="var(--color-success)"
-                  name="Correct"
+                  name="Success rate"
                   radius={[4, 4, 0, 0]}
                 />
               </BarChart>
@@ -371,10 +430,17 @@ function SeasonStats({ weeks }: { weeks: HistoricalWeek[] }) {
 }
 
 export function ProfilePage() {
+  const completedWeeksQuery = useQuery({
+    queryKey: ['leaderboard', 'weeks'],
+    queryFn: fetchCompletedWeeks,
+    staleTime: 60_000,
+    refetchInterval: 60_000,
+  })
   const historyQuery = useQuery({
     queryKey: ['picks', 'history'],
     queryFn: fetchPickHistory,
-    staleTime: 10 * 60_000,
+    staleTime: 60_000,
+    refetchInterval: 60_000,
   })
   const [requestedWeek, setRequestedWeek] = useState<number | null>(null)
   const availableWeeks = historyQuery.data
@@ -391,7 +457,7 @@ export function ProfilePage() {
       <div>
         <p className="text-xs font-bold uppercase tracking-[0.2em] text-accent">Your record</p>
         <h1 className="mt-2 flex items-center gap-2 text-3xl font-black tracking-tight text-primary dark:text-white dev-dark:text-ink">
-          <UserRound className="text-sky" size={25} aria-hidden="true" /> Profile
+          <UserRound className="text-sky dark:text-accent" size={25} aria-hidden="true" /> Profile
         </h1>
       </div>
       {historyQuery.isPending && (
@@ -411,7 +477,7 @@ export function ProfilePage() {
       )}
       {historyQuery.data && historyQuery.data.weeks.length === 0 && (
         <div className="rounded-2xl border border-slate-200 bg-surface p-8 text-center shadow-sm dark:border-slate-800 dev-dark:border-border dark:bg-slate-900 dev-dark:bg-surface-elevated">
-          <UserRound className="mx-auto text-sky" size={40} aria-hidden="true" />
+          <UserRound className="mx-auto text-sky dark:text-accent" size={40} aria-hidden="true" />
           <h2 className="mt-4 text-xl font-bold">No picks submitted yet.</h2>
           <p className="mt-2 text-slate-600 dark:text-slate-300 dev-dark:text-text-secondary">
             Your current and completed-week picks will appear here.
@@ -419,7 +485,14 @@ export function ProfilePage() {
         </div>
       )}
       {historyQuery.data && historyQuery.data.weeks.length > 0 && (
-        <SeasonStats weeks={historyQuery.data.weeks} />
+        <SeasonStats
+          weeks={historyQuery.data.weeks}
+          completedWeekNumbers={
+            completedWeeksQuery.data
+              ? new Set(completedWeeksQuery.data.map((week) => week.weekNumber))
+              : null
+          }
+        />
       )}
       {selectedWeek && (
         <section className="space-y-3" aria-labelledby={`history-week-${selectedWeek.weekNumber}`}>

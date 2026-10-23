@@ -104,6 +104,10 @@ def client(
         "SessionLocal",
         lambda: Session(bind=db_session.get_bind()),
     )
+    # The lifespan fires the schema check on a background thread; with SessionLocal bound to
+    # the shared test connection it races the test on that connection ("another command is
+    # already in progress") and leaves it stuck, hanging later tests on DB locks.
+    monkeypatch.setattr(app_main, "_safe_validate", lambda: None)
     app.dependency_overrides[get_db] = override_get_db
     try:
         with TestClient(app) as test_client:

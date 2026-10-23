@@ -4,6 +4,7 @@ Wires together CORS, rate limiting, the standard error envelope, and API routers
 Routes must stay thin: validate request -> call service -> return response.
 """
 
+import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -53,12 +54,21 @@ def _validate_startup_schema() -> None:
         raise RuntimeError("Application startup detected database schema drift")
 
 
+def _safe_validate() -> None:
+    try:
+        _validate_startup_schema()
+    except RuntimeError:
+        pass  # already logged in _validate_startup_schema
+
+
 @asynccontextmanager
 async def lifespan(application: FastAPI):
     # No in-process scheduler: scheduled jobs run when the external cron calls
     # POST /api/v1/internal/tick (see app.jobs.tick), which is what lets the
     # machine sleep between runs.
-    _validate_startup_schema()
+    # Schema check runs off the boot path: blocking here made every cold start wait on
+    # Neon resume + full schema reflection. Drift is logged and surfaced by /health/ready.
+    asyncio.get_running_loop().run_in_executor(None, _safe_validate)
     yield
 
 

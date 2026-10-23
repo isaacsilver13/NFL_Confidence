@@ -379,3 +379,4 @@ class TestWeeklyResultsConcurrency:
         assert result.incorrect_picks == 1
         assert result.total_points == 3  # 1 + 2
         assert result.highest_confidence_win == 2  # confidence value of 2nd correct pick
+        assert result.highest_confidence_loss == 3  # the one missed pick
