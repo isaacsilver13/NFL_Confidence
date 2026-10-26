@@ -6,6 +6,20 @@ import type { AllPicks, MemberPicks } from '@/types/nfl'
 import { Button } from '@/components/ui/Button'
 import { SortableTh } from '@/components/ui/SortableTable'
 import { useTableSort, type SortColumn } from '@/components/ui/useTableSort'
+import { allGamesSettled, pickOutcome, type CellOutcome } from './pickOutcome'
+
+const OUTCOME_CELL_CLASS: Record<CellOutcome, string> = {
+  correct: 'bg-success/15 font-semibold text-success',
+  wrong: 'bg-danger/10 font-semibold text-danger',
+  pending: '',
+}
+
+const OUTCOME_MARK: Record<CellOutcome, string> = { correct: '✓', wrong: '✗', pending: '' }
+const OUTCOME_LABEL: Record<CellOutcome, string> = {
+  correct: 'Correct',
+  wrong: 'Wrong',
+  pending: '',
+}
 
 function PicksTable({ data }: { data: AllPicks }) {
   const columns: Record<string, SortColumn<MemberPicks>> = {
@@ -54,9 +68,19 @@ function PicksTable({ data }: { data: AllPicks }) {
               </td>
               {data.games.map((game) => {
                 const pick = picksByGame.get(game.id)
+                const outcome = pick ? pickOutcome(pick, game) : 'pending'
                 return (
-                  <td key={game.id} className="px-3 py-2 text-center whitespace-nowrap">
+                  <td
+                    key={game.id}
+                    className={`px-3 py-2 text-center whitespace-nowrap ${OUTCOME_CELL_CLASS[outcome]}`}
+                  >
                     {pick ? `${pick.team} (${pick.confidence})` : '—'}
+                    {outcome !== 'pending' && (
+                      <>
+                        <span aria-hidden="true"> {OUTCOME_MARK[outcome]}</span>
+                        <span className="sr-only"> — {OUTCOME_LABEL[outcome]}</span>
+                      </>
+                    )}
                   </td>
                 )
               })}
@@ -68,14 +92,28 @@ function PicksTable({ data }: { data: AllPicks }) {
   )
 }
 
-export function AllPicksModal({ week, onClose }: { week: number; onClose: () => void }) {
+/** Pass `member` to show just that member's picks (the leaderboard's per-member popup). */
+export function AllPicksModal({
+  week,
+  member,
+  onClose,
+}: {
+  week: number
+  member?: { id: string; name: string }
+  onClose: () => void
+}) {
   const closeRef = useRef<HTMLButtonElement>(null)
   const { data, isPending, error } = useQuery({
     queryKey: ['picks', 'all', week],
     queryFn: () => fetchAllPicksForWeek(week),
     staleTime: 60_000,
+    // Keep green/red in step with game results until every game is settled.
+    refetchInterval: (query) =>
+      query.state.data && allGamesSettled(query.state.data.games) ? false : 60_000,
     retry: false,
   })
+  const shown =
+    data && member ? { ...data, members: data.members.filter((m) => m.userId === member.id) } : data
 
   useEffect(() => {
     closeRef.current?.focus()
@@ -103,7 +141,7 @@ export function AllPicksModal({ week, onClose }: { week: number; onClose: () => 
             id="all-picks-title"
             className="text-lg font-black text-primary dark:text-white dev-dark:text-ink"
           >
-            Everyone&apos;s picks — Week {week}
+            {member ? `${member.name}'s picks` : "Everyone's picks"} — Week {week}
           </h2>
           <Button ref={closeRef} type="button" variant="quiet" onClick={onClose}>
             Close
@@ -120,7 +158,7 @@ export function AllPicksModal({ week, onClose }: { week: number; onClose: () => 
               {error instanceof ApiError ? error.message : "Could not load everyone's picks."}
             </p>
           )}
-          {data && <PicksTable data={data} />}
+          {shown && <PicksTable data={shown} />}
         </div>
       </div>
     </div>

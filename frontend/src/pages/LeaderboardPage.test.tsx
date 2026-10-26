@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fetchWeeklyLeaderboard, fetchWeeklyOutcomeScenarios } from '@/api/leaderboard'
@@ -74,6 +74,8 @@ describe('LeaderboardPage', () => {
           thirdPlaceFinishes: 0,
           payoutCents: 0,
           pointsRemaining: 5,
+          maxPointsPossible: 0,
+          isEliminated: false,
           nightGamePicks: [],
         },
       ],
@@ -119,7 +121,7 @@ describe('LeaderboardPage', () => {
     expect(mockedFetchWeeklyLeaderboard).not.toHaveBeenCalled()
   })
 
-  it('shows Rank, Member, Correct, Points, and Points Left columns in that order', async () => {
+  it('shows Rank, Member, Correct, Points, Points Left, and Max Points columns in that order', async () => {
     mockedFetchStartedWeeks.mockResolvedValue([])
     mockedFetchCurrentWeek.mockResolvedValue(currentWeek)
     mockedFetchWeeklyLeaderboard.mockResolvedValue({
@@ -138,6 +140,8 @@ describe('LeaderboardPage', () => {
           thirdPlaceFinishes: 0,
           payoutCents: 0,
           pointsRemaining: 5,
+          maxPointsPossible: 0,
+          isEliminated: false,
           nightGamePicks: [],
         },
       ],
@@ -149,7 +153,7 @@ describe('LeaderboardPage', () => {
 
     await screen.findByText('Owner')
     const headers = screen.getAllByRole('columnheader').map((header) => header.textContent)
-    expect(headers).toEqual(['Rank', 'Member', 'Correct', 'Points', 'Points Left'])
+    expect(headers).toEqual(['Rank', 'Member', 'Correct', 'Points', 'Points Left', 'Max Points'])
   })
 
   it('adds one SNF/MNF column listing the night-game picks per member', async () => {
@@ -171,6 +175,8 @@ describe('LeaderboardPage', () => {
           thirdPlaceFinishes: 0,
           payoutCents: 0,
           pointsRemaining: 5,
+          maxPointsPossible: 0,
+          isEliminated: false,
           nightGamePicks: [
             { gameId: 'game-1', team: 'KC', confidence: 10 },
             { gameId: 'game-2', team: 'CHI', confidence: 5 },
@@ -190,6 +196,8 @@ describe('LeaderboardPage', () => {
           thirdPlaceFinishes: 0,
           payoutCents: 0,
           pointsRemaining: 0,
+          maxPointsPossible: 0,
+          isEliminated: false,
           nightGamePicks: [],
         },
       ],
@@ -205,7 +213,15 @@ describe('LeaderboardPage', () => {
 
     await screen.findByText('Owner')
     const headers = screen.getAllByRole('columnheader').map((header) => header.textContent)
-    expect(headers).toEqual(['Rank', 'Member', 'Correct', 'Points', 'Points Left', 'SNF/MNF'])
+    expect(headers).toEqual([
+      'Rank',
+      'Member',
+      'Correct',
+      'Points',
+      'Points Left',
+      'Max Points',
+      'SNF/MNF',
+    ])
     expect(screen.getByText('KC (10), CHI (5), LAR (2)')).toBeInTheDocument()
     expect(screen.getByText('—')).toBeInTheDocument()
   })
@@ -249,6 +265,8 @@ describe('LeaderboardPage', () => {
                 thirdPlaceFinishes: 0,
                 payoutCents: 0,
                 pointsRemaining: 0,
+                maxPointsPossible: 0,
+                isEliminated: false,
                 nightGamePicks: [],
               },
             ],
@@ -311,6 +329,8 @@ describe('LeaderboardPage', () => {
           thirdPlaceFinishes: 0,
           payoutCents: 0,
           pointsRemaining: 0,
+          maxPointsPossible: 0,
+          isEliminated: false,
           nightGamePicks: [],
         },
       ],
@@ -344,6 +364,8 @@ describe('LeaderboardPage', () => {
           thirdPlaceFinishes: 0,
           payoutCents: 0,
           pointsRemaining: 12,
+          maxPointsPossible: 0,
+          isEliminated: false,
           nightGamePicks: [],
         },
       ],
@@ -399,5 +421,147 @@ describe('LeaderboardPage', () => {
 
     await user.click(screen.getByRole('button', { name: 'Close' }))
     expect(screen.queryByRole('dialog', { name: /possible finishes/i })).not.toBeInTheDocument()
+  })
+
+  describe('max points, elimination, and member picks', () => {
+    function row(
+      memberId: string,
+      memberName: string,
+      rank: number,
+      totalPoints: number,
+      pointsRemaining: number,
+      isEliminated = false,
+    ) {
+      return {
+        rank,
+        memberId,
+        memberName,
+        totalPoints,
+        correctPicks: 1,
+        incorrectPicks: 0,
+        weeklyWins: 0,
+        firstPlaceFinishes: 0,
+        secondPlaceFinishes: 0,
+        thirdPlaceFinishes: 0,
+        payoutCents: 0,
+        pointsRemaining,
+        maxPointsPossible: totalPoints + pointsRemaining,
+        isEliminated,
+        nightGamePicks: [],
+      }
+    }
+
+    function mockLeaderboard(standings: ReturnType<typeof row>[], picksRevealed = true) {
+      mockedFetchStartedWeeks.mockResolvedValue([])
+      mockedFetchCurrentWeek.mockResolvedValue(currentWeek)
+      mockedFetchWeeklyLeaderboard.mockResolvedValue({
+        week: { weekNumber: 3, seasonNumber: 2026 },
+        standings,
+        nightGames: [],
+        picksRevealed,
+      })
+    }
+
+    it('shows each member max points and tags eliminated members while points are in play', async () => {
+      mockLeaderboard([row('u1', 'Alex', 1, 30, 5), row('u2', 'Sam', 2, 10, 5, true)])
+
+      renderPage()
+
+      await screen.findByText('Alex')
+      const samRow = screen.getByText('Sam').closest('tr') as HTMLElement
+      expect(within(samRow).getByText('15')).toBeInTheDocument()
+      expect(within(samRow).getByText('Eliminated')).toBeInTheDocument()
+      const alexRow = screen.getByText('Alex').closest('tr') as HTMLElement
+      expect(within(alexRow).getByText('35')).toBeInTheDocument()
+      expect(within(alexRow).queryByText('Eliminated')).not.toBeInTheDocument()
+    })
+
+    it('drops the eliminated tag once nothing is left to play', async () => {
+      mockLeaderboard([row('u1', 'Alex', 1, 30, 0), row('u2', 'Sam', 2, 10, 0, true)])
+
+      renderPage()
+
+      await screen.findByText('Alex')
+      expect(screen.queryByText('Eliminated')).not.toBeInTheDocument()
+    })
+
+    it("opens just the clicked member's picks, colored by result", async () => {
+      const user = userEvent.setup()
+      mockLeaderboard([row('u1', 'Alex', 1, 30, 5), row('u2', 'Sam', 2, 10, 5)])
+      const game = (
+        id: string,
+        away: string,
+        home: string,
+        status: string,
+        winningTeam: string | null,
+        isTie = false,
+      ) => ({
+        id,
+        awayTeam: away,
+        homeTeam: home,
+        kickoff: '2026-09-20T17:00:00Z',
+        status,
+        winningTeam,
+        isTie,
+      })
+      const pick = (gameId: string, team: string, confidence: number) => ({
+        id: `${gameId}-${team}`,
+        gameId,
+        team,
+        confidence,
+        submittedAt: '',
+      })
+      mockedFetchAllPicksForWeek.mockResolvedValue({
+        week: currentWeek,
+        games: [
+          game('g1', 'BUF', 'KC', 'final', 'KC'),
+          game('g2', 'GB', 'CHI', 'final', 'GB'),
+          game('g3', 'DAL', 'NYG', 'final', null, true),
+          game('g4', 'MIA', 'NE', 'live', null),
+        ],
+        members: [
+          {
+            userId: 'u1',
+            displayName: 'Alex',
+            picks: [
+              pick('g1', 'KC', 4),
+              pick('g2', 'CHI', 3),
+              pick('g3', 'DAL', 2),
+              pick('g4', 'MIA', 1),
+            ],
+          },
+          { userId: 'u2', displayName: 'Sam', picks: [pick('g1', 'BUF', 4)] },
+        ],
+      } as never)
+
+      renderPage()
+
+      await user.click(await screen.findByRole('button', { name: 'Alex' }))
+
+      const dialog = await screen.findByRole('dialog', { name: /Alex's picks — Week 3/ })
+      expect(within(dialog).queryByText('Sam')).not.toBeInTheDocument()
+      const correct = within(dialog).getByText('KC (4)').closest('td') as HTMLElement
+      const wrong = within(dialog).getByText('CHI (3)').closest('td') as HTMLElement
+      expect(correct).toHaveClass('text-success')
+      expect(within(correct).getByText(/Correct/)).toBeInTheDocument()
+      expect(wrong).toHaveClass('text-danger')
+      expect(within(wrong).getByText(/Wrong/)).toBeInTheDocument()
+      // A tied game and a live game stay neutral.
+      for (const label of ['DAL (2)', 'MIA (1)']) {
+        const cell = within(dialog).getByText(label).closest('td') as HTMLElement
+        expect(cell).not.toHaveClass('text-success')
+        expect(cell).not.toHaveClass('text-danger')
+      }
+      expect(mockedFetchAllPicksForWeek).toHaveBeenCalledWith(3)
+    })
+
+    it('leaves member names as plain text until picks are revealed', async () => {
+      mockLeaderboard([row('u1', 'Alex', 1, 0, 0)], false)
+
+      renderPage()
+
+      await screen.findByText('Alex')
+      expect(screen.queryByRole('button', { name: 'Alex' })).not.toBeInTheDocument()
+    })
   })
 })
