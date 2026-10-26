@@ -283,11 +283,22 @@ def list_complete_card_user_ids(db: Session, *, week_id: uuid.UUID) -> set[uuid.
     )
 
 
+def list_submitted_user_ids(db: Session, *, week_id: uuid.UUID) -> set[uuid.UUID]:
+    """Users with an official entry for the week: a formal submission or a complete card.
+
+    Submit is the formal entry, but a complete autosaved card counts too.
+    """
+    return week_submission_repository.list_user_ids_for_week(
+        db, week_id=week_id
+    ) | list_complete_card_user_ids(db, week_id=week_id)
+
+
 def get_all_picks_for_week(
     db: Session, *, league: League, week_number: int | None = None
 ) -> tuple[NflWeek, list[NflGame], list[tuple[LeagueMember, list[Pick]]]]:
     """Every league member's picks for a week (default: the current week), once it has locked.
 
+    Members without a submitted or complete card are left out, matching the leaderboard.
     Raises ValidationError while the week is still open, so members can't see
     each other's picks before the earliest kickoff.
     """
@@ -309,7 +320,12 @@ def get_all_picks_for_week(
     if earliest_kickoff > now:
         raise ValidationError("Picks aren't revealed until the earliest game kicks off.")
 
-    members = league_member_repository.list_by_league(db, league.id)
+    submitted_user_ids = list_submitted_user_ids(db, week_id=week.id)
+    members = [
+        member
+        for member in league_member_repository.list_by_league(db, league.id)
+        if member.user_id in submitted_user_ids
+    ]
     all_picks = pick_repository.list_by_week_and_users(
         db, week_id=week.id, user_ids={member.user_id for member in members}
     )

@@ -23,7 +23,6 @@ from app.repositories import (
     nfl_game_repository,
     pick_repository,
     season_result_repository,
-    week_submission_repository,
     weekly_result_repository,
 )
 from app.schemas.leaderboard import (
@@ -43,6 +42,8 @@ from app.schemas.leaderboard import (
     WeeklyPickBreakdownRead,
 )
 from app.services import picks_service, weeks_service
+
+_PAID_PLACES = 3  # first through third, matching _weekly_payout_cents
 
 
 def _weekly_payout_cents(*, rank: int, member_count: int) -> int:
@@ -139,10 +140,32 @@ def _ranked_members(
                     else 0
                 ),
                 points_remaining=points_remaining_by_user.get(result.user_id, 0),
+                max_points_possible=(result.total_points or 0)
+                + points_remaining_by_user.get(result.user_id, 0),
                 night_game_picks=night_game_picks_by_user.get(result.user_id, []),
             )
         )
+    if not season:
+        _mark_eliminated(members)
     return members
+
+
+def _mark_eliminated(members: list[LeaderboardMemberRead]) -> None:
+    """Flag members who cannot reach the paid top three.
+
+    Sound but conservative: a member is out once three rivals already have strictly more
+    points than they can still reach. Equal points are left alive (tie-breakers could
+    still decide), and rivals are each judged on current points alone.
+    """
+    # ponytail: ignores that rivals' remaining games are shared, so a few late-week
+    # eliminations are missed; enumerate remaining outcomes if that matters.
+    for member in members:
+        ahead = sum(
+            1
+            for other in members
+            if other is not member and other.total_points > member.max_points_possible
+        )
+        member.is_eliminated = ahead >= _PAID_PLACES
 
 
 def _get_week(db: Session, league: League, week_number: int | None) -> NflWeek:
@@ -310,10 +333,7 @@ def get_weekly_leaderboard(
     results = weekly_result_repository.list_by_league_and_week(
         db, league_id=league.id, week_id=week.id
     )
-    # Submit is the formal entry, but a complete autosaved card counts too.
-    submitted_user_ids = week_submission_repository.list_user_ids_for_week(
-        db, week_id=week.id
-    ) | picks_service.list_complete_card_user_ids(db, week_id=week.id)
+    submitted_user_ids = picks_service.list_submitted_user_ids(db, week_id=week.id)
     results = [result for result in results if result.user_id in submitted_user_ids]
     night_games, night_game_picks_by_user = _night_games_picks(
         db,
@@ -355,9 +375,7 @@ def get_weekly_outcome_scenarios(
     results = weekly_result_repository.list_by_league_and_week(
         db, league_id=league.id, week_id=week.id
     )
-    submitted_user_ids = week_submission_repository.list_user_ids_for_week(
-        db, week_id=week.id
-    ) | picks_service.list_complete_card_user_ids(db, week_id=week.id)
+    submitted_user_ids = picks_service.list_submitted_user_ids(db, week_id=week.id)
     results = [result for result in results if result.user_id in submitted_user_ids]
     if not results:
         raise NotFoundError(f"Week {week.week_number} has no leaderboard data.")

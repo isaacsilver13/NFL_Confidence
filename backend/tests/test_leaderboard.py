@@ -20,6 +20,7 @@ from app.models import (
     WeekSubmission,
 )
 from app.models.enums import GameStatus, LeagueRole, WeekStatus
+from app.schemas.leaderboard import LeaderboardMemberRead
 from app.services import leaderboard_service
 
 CHICAGO = ZoneInfo("America/Chicago")
@@ -450,6 +451,100 @@ def test_weekly_leaderboard_reports_points_remaining_on_unfinished_games(
 
     owner_row = next(member for member in result.standings if member.member_name == "Owner")
     assert owner_row.points_remaining == 5
+    assert owner_row.max_points_possible == 15
+
+
+def _live_week_standings(
+    db: Session, rows: list[tuple[str, int, int]]
+) -> dict[str, LeaderboardMemberRead]:
+    """Weekly standings for a live week with one unfinished game.
+
+    Each row is (name, points so far, confidence riding on the unfinished game).
+    """
+    owner = _user(db, "Owner")
+    league = _league(db, owner)
+    week = NflWeek(
+        season=league.season,
+        week_number=6,
+        start_date=datetime(2026, 10, 8, tzinfo=timezone.utc),
+        end_date=datetime(2026, 10, 15, tzinfo=timezone.utc),
+        status=WeekStatus.REGULAR,
+    )
+    db.add(week)
+    db.flush()
+    live_game = NflGame(
+        week_id=week.id,
+        espn_game_id=f"leaderboard-test-{uuid.uuid4().hex}",
+        kickoff_time=week.start_date,
+        away_team="GB",
+        home_team="CHI",
+        game_status=GameStatus.LIVE,
+    )
+    db.add(live_game)
+    db.flush()
+    for name, points, confidence in rows:
+        user = _user(db, name)
+        db.add(LeagueMember(league_id=league.id, user_id=user.id, role=LeagueRole.MEMBER))
+        _submit(db, user=user, week=week)
+        db.add_all(
+            [
+                WeeklyResult(
+                    league_id=league.id,
+                    week_id=week.id,
+                    user_id=user.id,
+                    total_points=points,
+                    correct_picks=1,
+                    incorrect_picks=0,
+                    weekly_rank=1,
+                ),
+                Pick(
+                    user_id=user.id,
+                    game_id=live_game.id,
+                    picked_team="GB",
+                    confidence_value=confidence,
+                    locked_at=live_game.kickoff_time,
+                ),
+            ]
+        )
+    db.flush()
+    result = leaderboard_service.get_weekly_leaderboard(db, league=league, week_number=6)
+    return {member.member_name: member for member in result.standings}
+
+
+def test_weekly_leaderboard_marks_members_who_cannot_reach_the_top_three(
+    db_session: Session,
+) -> None:
+    standings = _live_week_standings(
+        db_session,
+        [
+            ("A", 30, 5),
+            ("B", 28, 5),
+            ("C", 26, 5),
+            ("D", 10, 5),  # max 15; A, B, C already above
+            ("E", 25, 5),  # max 30; nobody is strictly above, A only ties
+            ("F", 20, 5),  # max 25; A, B, C above (E only ties)
+            ("G", 20, 9),  # max 29; only A is above
+        ],
+    )
+
+    assert {name: member.is_eliminated for name, member in standings.items()} == {
+        "A": False,
+        "B": False,
+        "C": False,
+        "D": True,
+        "E": False,
+        "F": True,
+        "G": False,
+    }
+    assert standings["D"].max_points_possible == 15
+
+
+def test_weekly_leaderboard_eliminates_nobody_with_three_or_fewer_members(
+    db_session: Session,
+) -> None:
+    standings = _live_week_standings(db_session, [("A", 30, 1), ("B", 28, 1), ("C", 0, 1)])
+
+    assert not any(member.is_eliminated for member in standings.values())
 
 
 def test_outcome_scenarios_project_the_four_night_game_combinations(

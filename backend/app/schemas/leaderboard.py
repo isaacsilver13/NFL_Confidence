@@ -24,6 +24,10 @@ class LeaderboardMemberRead(CamelModel):
     third_place_finishes: int = 0
     payout_cents: int = 0
     points_remaining: int = 0
+    # total_points + points_remaining; the most this member can still finish with.
+    max_points_possible: int = 0
+    # Weekly only: can no longer reach the paid top three, whatever the remaining games do.
+    is_eliminated: bool = False
     night_game_picks: list[MemberGamePickRead] = []
 
 

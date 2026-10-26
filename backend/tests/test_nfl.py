@@ -426,7 +426,10 @@ def test_all_picks_hidden_until_earliest_kickoff_then_reveals_everyone(
         "/api/v1/picks",
         json={
             "week": week.week_number,
-            "picks": [{"gameId": str(games[0].id), "team": games[0].home_team, "confidence": 1}],
+            "picks": [
+                {"gameId": str(game.id), "team": game.home_team, "confidence": index}
+                for index, game in enumerate(games, start=1)
+            ],
         },
         headers=_auth_header(user_a),
     )
@@ -442,10 +445,65 @@ def test_all_picks_hidden_until_earliest_kickoff_then_reveals_everyone(
     assert after.status_code == 200
     members = after.json()["data"]["members"]
     user_a_entry = next(m for m in members if m["userId"] == str(user_a.id))
-    assert len(user_a_entry["picks"]) == 1
-    assert user_a_entry["picks"][0]["team"] == games[0].home_team
-    user_b_entry = next(m for m in members if m["userId"] == str(user_b.id))
-    assert user_b_entry["picks"] == []
+    assert len(user_a_entry["picks"]) == len(games)
+    assert {pick["gameId"]: pick["team"] for pick in user_a_entry["picks"]} == {
+        str(game.id): game.home_team for game in games
+    }
+    # user_b never made picks, so they are not listed at all.
+    assert all(m["userId"] != str(user_b.id) for m in members)
+
+
+def test_all_picks_omits_members_without_a_complete_card(client, db_session: Session) -> None:
+    complete = _make_user(db_session)
+    week, games = _ensure_current_fixture(db_session, complete)
+    partial = _make_user(db_session)
+    submitted = _make_user(db_session)
+    league = league_repository.get_active(db_session)
+    assert league is not None
+    db_session.add_all(
+        [
+            LeagueMember(league_id=league.id, user_id=partial.id, role=LeagueRole.MEMBER),
+            LeagueMember(league_id=league.id, user_id=submitted.id, role=LeagueRole.MEMBER),
+        ]
+    )
+    db_session.commit()
+
+    full_card = [
+        {"gameId": str(game.id), "team": game.home_team, "confidence": index}
+        for index, game in enumerate(games, start=1)
+    ]
+    client.post(
+        "/api/v1/picks",
+        json={"week": week.week_number, "picks": full_card},
+        headers=_auth_header(complete),
+    )
+    client.post(
+        "/api/v1/picks",
+        json={"week": week.week_number, "picks": full_card[:1]},
+        headers=_auth_header(partial),
+    )
+    client.post(
+        "/api/v1/picks",
+        json={"week": week.week_number, "picks": full_card},
+        headers=_auth_header(submitted),
+    )
+    client.post(
+        "/api/v1/picks/submit",
+        json={"week": week.week_number},
+        headers=_auth_header(submitted),
+    )
+
+    for game in games:
+        game.kickoff_time = datetime.now(timezone.utc) - timedelta(minutes=1)
+    db_session.commit()
+
+    response = client.get("/api/v1/picks/all/current", headers=_auth_header(complete))
+
+    assert response.status_code == 200
+    listed = {m["userId"] for m in response.json()["data"]["members"]}
+    assert str(complete.id) in listed
+    assert str(submitted.id) in listed
+    assert str(partial.id) not in listed
 
 
 def test_pick_history_is_private_and_includes_current_week(db_session: Session) -> None:
