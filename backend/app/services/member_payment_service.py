@@ -16,7 +16,7 @@ from app.repositories import (
     nfl_week_repository,
     pick_repository,
 )
-from app.services import scoring_service, weeks_service
+from app.services import picks_service, scoring_service, weeks_service
 
 # Per-member league fee, confirmed with the commissioner (2026-09-24). Not
 # stored on the league model — this league's dues have never varied, so a
@@ -28,10 +28,10 @@ _THIRD_PLACE_CENTS = 1000
 
 # Below $60 the standard $20/$10 second/third split can't be subtracted from
 # the pot without going negative, so the commissioner specified these payouts
-# directly per paid-member count (2026-09-24). $60+ (6+ paid members) uses the
-# standard formula below, which already continues this same pattern.
+# directly per submitted-member count (2026-09-24). $60+ (6+ submitted members)
+# uses the standard formula below, which already continues this same pattern.
 _SMALL_POT_SPLITS_CENTS: dict[int, tuple[int, int, int]] = {
-    # paid_member_count: (first, second, third)
+    # submitted_member_count: (first, second, third)
     1: (1000, 0, 0),
     2: (2000, 0, 0),
     3: (2000, 1000, 0),
@@ -150,7 +150,7 @@ class LeaguePot:
     week_number: int
     locks_at: datetime | None
     is_visible: bool
-    paid_member_count: int
+    submitted_member_count: int
     pot_cents: int
     first_place_cents: int
     second_place_cents: int
@@ -158,22 +158,22 @@ class LeaguePot:
 
 
 def get_league_pot(db: Session, *, league: League) -> LeaguePot:
-    """Current week's pot and prize split, from paid-member counts and the
+    """Current week's pot and prize split, from submitted-member counts and the
     current week's earliest kickoff — both already-authoritative data
-    (`MemberWeeklyPayment.is_paid`, `NflGame.kickoff_time`), not a separately
-    stored pot value.
+    (`WeekSubmission`, `NflGame.kickoff_time`), not a separately stored pot
+    value. Based on submissions, not payment status.
     """
     week = weeks_service.get_current_week(db)
-    _, statuses = list_payment_statuses(db, league=league, week_number=week.week_number)
-    paid_member_count = sum(
-        1 for _, payment, _ in statuses if payment is not None and payment.is_paid
+    _, statuses = picks_service.list_submission_statuses(
+        db, league=league, week_number=week.week_number
     )
-    pot_cents = paid_member_count * _MEMBER_FEE_CENTS
-    if paid_member_count in _SMALL_POT_SPLITS_CENTS:
+    submitted_member_count = sum(1 for _, submission, _, _ in statuses if submission is not None)
+    pot_cents = submitted_member_count * _MEMBER_FEE_CENTS
+    if submitted_member_count in _SMALL_POT_SPLITS_CENTS:
         first_place_cents, second_place_cents, third_place_cents = _SMALL_POT_SPLITS_CENTS[
-            paid_member_count
+            submitted_member_count
         ]
-    elif paid_member_count == 0:
+    elif submitted_member_count == 0:
         first_place_cents, second_place_cents, third_place_cents = 0, 0, 0
     else:
         second_place_cents = _SECOND_PLACE_CENTS
@@ -187,7 +187,7 @@ def get_league_pot(db: Session, *, league: League) -> LeaguePot:
         week_number=week.week_number,
         locks_at=locks_at,
         is_visible=is_visible,
-        paid_member_count=paid_member_count,
+        submitted_member_count=submitted_member_count,
         pot_cents=pot_cents,
         first_place_cents=first_place_cents,
         second_place_cents=second_place_cents,

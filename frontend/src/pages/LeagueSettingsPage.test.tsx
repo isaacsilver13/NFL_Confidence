@@ -142,11 +142,11 @@ function renderPage(session: SessionBootstrap = ownerSession) {
 }
 
 describe('LeagueSettingsPage', () => {
-  it('groups tools in accordions with the roster open by default', async () => {
+  it('groups tools in accordions that are all closed by default', async () => {
     renderPage()
     expect(await screen.findByRole('button', { name: /^Member roster/ })).toHaveAttribute(
       'aria-expanded',
-      'true',
+      'false',
     )
     const invites = screen.getByRole('button', { name: /^Invitations & passcode/ })
     expect(invites).toHaveAttribute('aria-expanded', 'false')
@@ -197,6 +197,7 @@ describe('LeagueSettingsPage', () => {
     const user = userEvent.setup()
     renderPage()
 
+    await user.click(await screen.findByRole('button', { name: /^Member roster/ }))
     expect((await screen.findAllByText('member@example.com')).length).toBeGreaterThan(0)
     await user.click(screen.getByRole('button', { name: 'Edit Member' }))
     expect(screen.getByLabelText('Display name')).toHaveValue('Member')
@@ -219,6 +220,7 @@ describe('LeagueSettingsPage', () => {
     const user = userEvent.setup()
     renderPage()
 
+    await user.click(await screen.findByRole('button', { name: /^Member roster/ }))
     expect((await screen.findAllByText('member@example.com')).length).toBeGreaterThan(0)
     await user.click(screen.getByRole('button', { name: 'Remove Member' }))
     await user.click(screen.getByRole('button', { name: 'Remove' }))
@@ -232,6 +234,7 @@ describe('LeagueSettingsPage', () => {
     mockedRemoveLeagueMember.mockRejectedValueOnce(new Error('request failed'))
     renderPage()
 
+    await user.click(await screen.findByRole('button', { name: /^Member roster/ }))
     expect((await screen.findAllByText('member@example.com')).length).toBeGreaterThan(0)
     await user.click(screen.getByRole('button', { name: 'Remove Member' }))
     await user.click(screen.getByRole('button', { name: 'Remove' }))
