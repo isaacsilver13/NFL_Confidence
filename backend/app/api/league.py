@@ -152,7 +152,7 @@ def get_league_pot(
             week_number=pot.week_number,
             locks_at=pot.locks_at,
             is_visible=pot.is_visible,
-            paid_member_count=pot.paid_member_count,
+            submitted_member_count=pot.submitted_member_count,
             pot_cents=pot.pot_cents,
             first_place_cents=pot.first_place_cents,
             second_place_cents=pot.second_place_cents,

@@ -588,7 +588,6 @@ export function LeagueSettingsPage() {
         id="member-roster"
         title="Member roster"
         summary={`${members?.length ?? league.memberCount} members · manage names and roles`}
-        defaultOpen
       >
         <h2 className="flex items-center gap-2 text-lg font-bold">
           <Users size={18} aria-hidden="true" /> Members
