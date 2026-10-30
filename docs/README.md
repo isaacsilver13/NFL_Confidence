@@ -1,6 +1,6 @@
 # NFL Confidence Pool
 
-A modern web application for running private NFL Confidence Pick'em leagues.
+A web application for running one private NFL confidence-pick'em league per deployment.
 
 ## Current-State Documentation
 
@@ -26,13 +26,13 @@ current product or implementation specification.
 
 ## Overview
 
-NFL Confidence Pool allows commissioners to create private leagues where members assign a unique confidence value to every NFL game each week.
+NFL Confidence Pool supports one active league per deployment. Members assign a unique confidence value to every NFL game each week.
 
 If a pick is correct, the user earns the confidence value assigned.
 
 If a pick is incorrect or the game ends in a tie, the user earns zero points.
 
-The application automatically imports NFL schedules, locks picks at kickoff, updates scores throughout the week, and maintains weekly and season-long leaderboards.
+The application automatically imports NFL schedules, locks the whole weekly card at the week's earliest kickoff, updates scores throughout the week, and maintains weekly and season-long leaderboards.
 
 ---
 
@@ -52,7 +52,7 @@ The application automatically imports NFL schedules, locks picks at kickoff, upd
 - Commissioner dashboard
 - Mobile-first responsive design
 
-Future versions include:
+Ideas recorded for possible future work (not implemented commitments):
 
 - Entry fee collection
 - Prize payouts
