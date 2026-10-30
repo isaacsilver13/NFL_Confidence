@@ -1,33 +1,30 @@
 # NFL Confidence Pool
 
-A full-stack web application for running private NFL confidence-pick'em leagues.
+A web app for running one private NFL confidence-pick'em league per deployment.
 
-Commissioners can create invite-only leagues, and members assign a unique confidence value to each NFL game every week. Correct picks earn their assigned value; incorrect picks and ties earn zero. The app imports schedules, locks picks at kickoff, scores completed games, and maintains weekly and season-long leaderboards.
+Members pick a team for each game and assign each confidence value once. Correct picks earn that value; incorrect picks and ties earn zero. Commissioners manage membership, invitations, and league settings.
 
-## Highlights
+## How it works
 
-- Private leagues with commissioner tools and member invitations
-- Weekly confidence picks, automatic scoring, and leaderboards
-- Schedule and score updates with kickoff-based pick locking
-- Mobile-first React interface with a FastAPI backend
-- Separate local, development, and production deployment configurations
+- The entire weekly card locks at the week's earliest kickoff. Sunday picks cannot be changed after a Thursday opener.
+- A complete autosaved card counts as an entry; members can also submit it explicitly.
+- Schedule imports and score refreshes feed weekly and season standings.
+- Google sign-in protects member access. Local development has a separate development-login path.
+- This is a single-league application. It does not collect entry fees or send prize payouts.
 
-## Stack
+## Run locally
 
-- Frontend: React, TypeScript, Vite, Tailwind CSS, and TanStack Query
-- Backend: FastAPI, SQLAlchemy, Alembic, and PostgreSQL
-- Delivery: Docker Compose, GitHub Actions, and Fly.io
-
-## Local development
-
-The root Docker Compose configuration starts PostgreSQL, the backend, and the frontend together:
+Copy `backend/.env.example` to `backend/.env` and review the local settings before starting the stack:
 
 ```powershell
+Copy-Item backend/.env.example backend/.env
 docker compose up --build
 ```
 
-For the complete setup, test commands, architecture, security model, and deployment guidance, see [the documentation](docs/README.md).
+Database initialization, migrations, and deterministic seed data are covered in the [development and deployment guide](docs/deployment.md). See [testing strategy](docs/testing-strategy.md) for the backend, frontend, and browser checks.
 
-## Project status
+## Stack and documentation
 
-This is an actively developed personal project. It is intended for private confidence-pool leagues and does not process entry fees or prize payouts.
+React, TypeScript, Vite, and TanStack Query on the frontend; FastAPI, SQLAlchemy, Alembic, and PostgreSQL on the backend. Docker, GitHub Actions, and Fly.io support delivery.
+
+Start with the [documentation index](docs/README.md), [product rules](docs/01-product-requirements.md), and [architecture](docs/technical-architecture.md). Dated material under `docs/dev-log/` records development history and may describe superseded behavior.
