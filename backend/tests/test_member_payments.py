@@ -202,6 +202,52 @@ def test_league_pot_reflects_submitted_member_count_and_clamps_first_place(
     assert data["thirdPlaceCents"] == 0
 
 
+def test_league_pot_counts_complete_autosaved_cards_but_not_partial_ones(
+    client, db_session: Session
+):
+    owner, member, week, _pick = _fixture(db_session, client)
+    league = db_session.query(League).one()
+    # Second game so "complete" means both picks, not just one.
+    second_game = NflGame(
+        week_id=week.id,
+        espn_game_id=f"payments-{uuid.uuid4().hex}",
+        kickoff_time=datetime.now(timezone.utc) - timedelta(hours=1),
+        away_team="DAL",
+        home_team="PHI",
+        game_status=GameStatus.FINAL,
+    )
+    db_session.add(second_game)
+    db_session.flush()
+    first_game_id = _pick.game_id
+
+    autosaver = _user(db_session, "Autosaver")
+    partial = _user(db_session, "Partial")
+    for user in (autosaver, partial):
+        db_session.add(LeagueMember(league_id=league.id, user_id=user.id, role=LeagueRole.MEMBER))
+    db_session.add_all(
+        [
+            Pick(user_id=autosaver.id, game_id=first_game_id, picked_team="KC", confidence_value=2),
+            Pick(
+                user_id=autosaver.id,
+                game_id=second_game.id,
+                picked_team="PHI",
+                confidence_value=1,
+            ),
+            Pick(user_id=partial.id, game_id=first_game_id, picked_team="KC", confidence_value=2),
+            # member's first pick (conf 1) is now incomplete for a 2-game week; submit them.
+            WeekSubmission(
+                week_id=week.id, user_id=member.id, submitted_at=datetime.now(timezone.utc)
+            ),
+        ]
+    )
+    db_session.commit()
+
+    data = client.get("/api/v1/league/pot", headers=_headers(member)).json()["data"]
+    # member (submitted) + autosaver (complete card); owner has nothing, partial is incomplete.
+    assert data["submittedMemberCount"] == 2
+    assert data["potCents"] == 2000
+
+
 def test_league_pot_not_visible_before_the_weeks_first_kickoff(client, db_session: Session):
     owner = _user(db_session, "FutureOwner")
     league_response = client.post(

@@ -161,13 +161,16 @@ def get_league_pot(db: Session, *, league: League) -> LeaguePot:
     """Current week's pot and prize split, from submitted-member counts and the
     current week's earliest kickoff — both already-authoritative data
     (`WeekSubmission`, `NflGame.kickoff_time`), not a separately stored pot
-    value. Based on submissions, not payment status.
+    value. A member counts if they submitted or autosaved a complete card (same
+    rule as the leaderboard). Based on entries, not payment status.
     """
     week = weeks_service.get_current_week(db)
     _, statuses = picks_service.list_submission_statuses(
         db, league=league, week_number=week.week_number
     )
-    submitted_member_count = sum(1 for _, submission, _, _ in statuses if submission is not None)
+    submitted_member_count = sum(
+        1 for _, submission, _, has_complete_card in statuses if submission or has_complete_card
+    )
     pot_cents = submitted_member_count * _MEMBER_FEE_CENTS
     if submitted_member_count in _SMALL_POT_SPLITS_CENTS:
         first_place_cents, second_place_cents, third_place_cents = _SMALL_POT_SPLITS_CENTS[
