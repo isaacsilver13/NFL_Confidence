@@ -1,5 +1,6 @@
 """Leaderboard queries and trend aggregation."""
 
+import itertools
 import uuid
 from collections import defaultdict
 from datetime import datetime, timezone
@@ -23,7 +24,6 @@ from app.repositories import (
     nfl_game_repository,
     pick_repository,
     season_result_repository,
-    week_submission_repository,
     weekly_result_repository,
 )
 from app.schemas.leaderboard import (
@@ -43,6 +43,8 @@ from app.schemas.leaderboard import (
     WeeklyPickBreakdownRead,
 )
 from app.services import picks_service, weeks_service
+
+_PAID_PLACES = 3  # first through third, matching _weekly_payout_cents
 
 
 def _weekly_payout_cents(*, rank: int, member_count: int) -> int:
@@ -139,10 +141,31 @@ def _ranked_members(
                     else 0
                 ),
                 points_remaining=points_remaining_by_user.get(result.user_id, 0),
+                max_points_possible=(result.total_points or 0)
+                + points_remaining_by_user.get(result.user_id, 0),
                 night_game_picks=night_game_picks_by_user.get(result.user_id, []),
             )
         )
+    if not season:
+        _mark_eliminated(members)
     return members
+
+
+def _mark_eliminated(members: list[LeaderboardMemberRead]) -> None:
+    """Flag members who cannot reach the paid top three, judged on current points alone.
+
+    Sound but conservative: a member is out once three rivals already have strictly more
+    points than they can still reach. Equal points are left alive (tie-breakers could
+    still decide). get_weekly_leaderboard replaces this with the exact check once enough
+    games are final.
+    """
+    for member in members:
+        ahead = sum(
+            1
+            for other in members
+            if other is not member and other.total_points > member.max_points_possible
+        )
+        member.is_eliminated = ahead >= _PAID_PLACES
 
 
 def _get_week(db: Session, league: League, week_number: int | None) -> NflWeek:
@@ -174,7 +197,6 @@ def _get_week(db: Session, league: League, week_number: int | None) -> NflWeek:
 
 
 _SUNDAY_NIGHT_START_HOUR = 18  # local; the afternoon slate never starts this late
-_SCENARIO_AVAILABLE_HOUR = 19
 _TERMINAL_STATUSES = {GameStatus.FINAL, GameStatus.CANCELLED}
 
 
@@ -215,15 +237,12 @@ def _night_games_picks(
     return night_games, picks_by_user
 
 
-def _outcome_scenario_games(
-    db: Session, *, week: NflWeek, now: datetime | None = None
-) -> list[NflGame]:
-    """Return the SNF and MNF games from Sunday 7pm local until the week ends.
+def _outcome_scenario_games(db: Session, *, week: NflWeek) -> list[NflGame]:
+    """Return the SNF and MNF games once they are the only unresolved games left.
 
-    Opens once those two are the only unresolved games left, and stays open after either
-    finishes so the table keeps showing the remaining outcomes."""
+    That is the moment the afternoon slate ends, so there is no clock gate. It stays open
+    after either finishes so the table keeps showing the remaining outcomes."""
     tz = ZoneInfo(get_settings().scheduler_timezone)
-    now = now or datetime.now(timezone.utc)
     games = sorted(nfl_game_repository.get_by_week_id(db, week.id), key=lambda g: g.kickoff_time)
     sunday_games = [
         g for g in games if _is_night_game(g, tz) and g.kickoff_time.astimezone(tz).weekday() == 6
@@ -233,9 +252,6 @@ def _outcome_scenario_games(
         return []
 
     sunday_game, monday_game = sunday_games[0], monday_games[-1]  # MNF doubleheader: the late one
-    sunday_local = sunday_game.kickoff_time.astimezone(tz)
-    if now.astimezone(tz) < sunday_local.replace(hour=_SCENARIO_AVAILABLE_HOUR, minute=0):
-        return []
     if any(
         game.game_status not in _TERMINAL_STATUSES
         for game in games
@@ -251,8 +267,47 @@ def _possible_winners(game: NflGame) -> tuple[str, ...]:
     return (game.winning_team or "—",)  # final: fixed; cancelled/tie: no winner
 
 
+def _projected_ranks(
+    results: list[WeeklyResult],
+    pick_by_user_game: dict[tuple[uuid.UUID, uuid.UUID], Pick],
+    outcomes: list[tuple[NflGame, str]],
+) -> list[tuple[uuid.UUID, str, int]]:
+    """Rank every member as (user id, name, rank) if each (game, winner) in `outcomes`
+    happens, using the live leaderboard tie-breakers. Equal scores share a rank. Final games
+    are already scored."""
+    projected: list[tuple[uuid.UUID, str, int, int, int]] = []
+    for result in results:
+        if result.user is None or result.user_id is None:
+            continue
+        points = result.total_points or 0
+        correct = result.correct_picks or 0
+        worst_miss = result.highest_confidence_loss or 0
+        for game, winner in outcomes:
+            if game.game_status in _TERMINAL_STATUSES:
+                continue  # already scored into the weekly result
+            pick = pick_by_user_game.get((result.user_id, game.id))
+            if pick is not None and pick.picked_team == winner:
+                points += pick.confidence_value
+                correct += 1
+            elif pick is not None:
+                worst_miss = max(worst_miss, pick.confidence_value)
+        projected.append((result.user_id, result.user.display_name, points, correct, worst_miss))
+
+    ordered = sorted(projected, key=lambda row: (-row[2], -row[3], row[4], row[1]))
+    ranked: list[tuple[uuid.UUID, str, int]] = []
+    previous_score: tuple[int, int, int] | None = None
+    rank = 0
+    for position, (user_id, name, points, correct, worst_miss) in enumerate(ordered, start=1):
+        score = (points, correct, worst_miss)
+        if score != previous_score:
+            rank = position
+            previous_score = score
+        ranked.append((user_id, name, rank))
+    return ranked
+
+
 def _outcome_scenarios(
-    *, results: list, games: list[NflGame], picks: list[Pick]
+    *, results: list[WeeklyResult], games: list[NflGame], picks: list[Pick]
 ) -> list[OutcomeScenarioRead]:
     """Project the four winner combinations with the live leaderboard tie-breakers."""
     pick_by_user_game = {
@@ -262,33 +317,13 @@ def _outcome_scenarios(
     scenarios: list[OutcomeScenarioRead] = []
     for sunday_winner in _possible_winners(sunday_game):
         for monday_winner in _possible_winners(monday_game):
-            projected: list[tuple[str, int, int, int]] = []
-            for result in results:
-                if result.user is None or result.user_id is None:
-                    continue
-                points = result.total_points or 0
-                correct = result.correct_picks or 0
-                worst_miss = result.highest_confidence_loss or 0
-                for game, winner in ((sunday_game, sunday_winner), (monday_game, monday_winner)):
-                    if game.game_status in _TERMINAL_STATUSES:
-                        continue  # already scored into the weekly result
-                    pick = pick_by_user_game.get((result.user_id, game.id))
-                    if pick is not None and pick.picked_team == winner:
-                        points += pick.confidence_value
-                        correct += 1
-                    elif pick is not None:
-                        worst_miss = max(worst_miss, pick.confidence_value)
-                projected.append((result.user.display_name, points, correct, worst_miss))
-
-            ordered = sorted(projected, key=lambda row: (-row[1], -row[2], row[3], row[0]))
+            ranked = _projected_ranks(
+                results,
+                pick_by_user_game,
+                [(sunday_game, sunday_winner), (monday_game, monday_winner)],
+            )
             placements: dict[int, list[str]] = {1: [], 2: [], 3: []}
-            previous_score: tuple[int, int, int] | None = None
-            rank = 0
-            for position, (name, points, correct, worst_miss) in enumerate(ordered, start=1):
-                score = (points, correct, worst_miss)
-                if score != previous_score:
-                    rank = position
-                    previous_score = score
+            for _, name, rank in ranked:
                 if rank in placements:
                     placements[rank].append(name)
             scenarios.append(
@@ -303,6 +338,33 @@ def _outcome_scenarios(
     return scenarios
 
 
+def _exact_eliminated_user_ids(
+    *, results: list[WeeklyResult], games: list[NflGame], picks: list[Pick]
+) -> set[uuid.UUID]:
+    """Members who finish outside the paid top three in every outcome of the unresolved games.
+
+    Ties for a paid place count as still alive. Once half the week's games are final the
+    unresolved set is small enough to enumerate (2**n outcomes) and, unlike the
+    current-points shortcut, it accounts for rivals sharing the same games.
+    """
+    # ponytail: tie games (nobody scores) are not enumerated; add a third outcome if one
+    # ever decides a paid place.
+    pick_by_user_game = {
+        (pick.user_id, pick.game_id): pick for pick in picks if pick.voided_at is None
+    }
+    unresolved = [game for game in games if game.game_status not in _TERMINAL_STATUSES]
+    everyone = {result.user_id for result in results if result.user_id is not None}
+    alive: set[uuid.UUID] = set()
+    for winners in itertools.product(*((game.away_team, game.home_team) for game in unresolved)):
+        ranked = _projected_ranks(
+            results, pick_by_user_game, list(zip(unresolved, winners, strict=True))
+        )
+        alive.update(user_id for user_id, _, rank in ranked if rank <= _PAID_PLACES)
+        if alive >= everyone:
+            break
+    return everyone - alive
+
+
 def get_weekly_leaderboard(
     db: Session, *, league: League, week_number: int | None = None
 ) -> WeeklyLeaderboardRead:
@@ -310,10 +372,7 @@ def get_weekly_leaderboard(
     results = weekly_result_repository.list_by_league_and_week(
         db, league_id=league.id, week_id=week.id
     )
-    # Submit is the formal entry, but a complete autosaved card counts too.
-    submitted_user_ids = week_submission_repository.list_user_ids_for_week(
-        db, week_id=week.id
-    ) | picks_service.list_complete_card_user_ids(db, week_id=week.id)
+    submitted_user_ids = picks_service.list_submitted_user_ids(db, week_id=week.id)
     results = [result for result in results if result.user_id in submitted_user_ids]
     night_games, night_game_picks_by_user = _night_games_picks(
         db,
@@ -328,7 +387,21 @@ def get_weekly_leaderboard(
     )
     if not standings:
         raise NotFoundError(f"Week {week.week_number} has no leaderboard data.")
-    kickoffs = [game.kickoff_time for game in nfl_game_repository.get_by_week_id(db, week.id)]
+    games = nfl_game_repository.get_by_week_id(db, week.id)
+    settled = sum(game.game_status in _TERMINAL_STATUSES for game in games)
+    if games and settled * 2 >= len(games):
+        eliminated = _exact_eliminated_user_ids(
+            results=results,
+            games=games,
+            picks=pick_repository.list_by_week_and_users(
+                db,
+                week_id=week.id,
+                user_ids={result.user_id for result in results if result.user_id is not None},
+            ),
+        )
+        for member in standings:
+            member.is_eliminated = member.member_id in eliminated
+    kickoffs = [game.kickoff_time for game in games]
     return WeeklyLeaderboardRead(
         week=WeekLabelRead(week_number=week.week_number, season_number=week.season),
         standings=standings,
@@ -355,9 +428,7 @@ def get_weekly_outcome_scenarios(
     results = weekly_result_repository.list_by_league_and_week(
         db, league_id=league.id, week_id=week.id
     )
-    submitted_user_ids = week_submission_repository.list_user_ids_for_week(
-        db, week_id=week.id
-    ) | picks_service.list_complete_card_user_ids(db, week_id=week.id)
+    submitted_user_ids = picks_service.list_submitted_user_ids(db, week_id=week.id)
     results = [result for result in results if result.user_id in submitted_user_ids]
     if not results:
         raise NotFoundError(f"Week {week.week_number} has no leaderboard data.")

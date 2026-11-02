@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.auth.jwt import create_access_token
 from app.models import League, LeagueMember, NflGame, NflWeek, Pick, User
 from app.models.enums import GameStatus, LeagueRole, WeekStatus
-from app.models.member_weekly_payment import MemberWeeklyPayment
+from app.models.week_submission import WeekSubmission
 from app.services import scoring_service
 
 
@@ -128,7 +128,9 @@ def test_only_commissioner_can_manage_payments_and_void_unpaid_picks(client, db_
     assert pick.points_earned is None
 
 
-def test_league_pot_reflects_paid_member_count_and_clamps_first_place(client, db_session: Session):
+def test_league_pot_reflects_submitted_member_count_and_clamps_first_place(
+    client, db_session: Session
+):
     owner, member, week, _pick = _fixture(db_session, client)
     league = db_session.query(League).one()
 
@@ -138,15 +140,12 @@ def test_league_pot_reflects_paid_member_count_and_clamps_first_place(client, db
     db_session.flush()
 
     now = datetime.now(timezone.utc)
-    for paid_user in [owner, member, *extra_members]:
+    for submitted_user in [owner, member, *extra_members]:
         db_session.add(
-            MemberWeeklyPayment(
-                league_id=league.id,
+            WeekSubmission(
                 week_id=week.id,
-                user_id=paid_user.id,
-                is_paid=True,
-                marked_at=now,
-                marked_by_user_id=owner.id,
+                user_id=submitted_user.id,
+                submitted_at=now,
             )
         )
     db_session.commit()
@@ -154,53 +153,99 @@ def test_league_pot_reflects_paid_member_count_and_clamps_first_place(client, db
     response = client.get("/api/v1/league/pot", headers=_headers(member))
     assert response.status_code == 200
     data = response.json()["data"]
-    assert data["paidMemberCount"] == 6
+    assert data["submittedMemberCount"] == 6
     assert data["potCents"] == 6000
     assert data["firstPlaceCents"] == 3000
     assert data["secondPlaceCents"] == 2000
     assert data["thirdPlaceCents"] == 1000
     assert data["isVisible"] is True
 
-    # Below $60 (fewer than 6 paid members), the small-pot table applies
+    # Below $60 (fewer than 6 submitted members), the small-pot table applies
     # instead of the standard $20/$10 second/third split.
-    db_session.query(MemberWeeklyPayment).filter(
-        MemberWeeklyPayment.user_id == extra_members[0].id
-    ).delete(synchronize_session=False)
+    db_session.query(WeekSubmission).filter(WeekSubmission.user_id == extra_members[0].id).delete(
+        synchronize_session=False
+    )
     db_session.commit()
 
     response = client.get("/api/v1/league/pot", headers=_headers(member))
     data = response.json()["data"]
-    assert data["paidMemberCount"] == 5
+    assert data["submittedMemberCount"] == 5
     assert data["potCents"] == 5000
     assert data["firstPlaceCents"] == 3000
     assert data["secondPlaceCents"] == 1000
     assert data["thirdPlaceCents"] == 1000
 
-    db_session.query(MemberWeeklyPayment).filter(
-        MemberWeeklyPayment.user_id == extra_members[1].id
-    ).delete(synchronize_session=False)
+    db_session.query(WeekSubmission).filter(WeekSubmission.user_id == extra_members[1].id).delete(
+        synchronize_session=False
+    )
     db_session.commit()
 
     response = client.get("/api/v1/league/pot", headers=_headers(member))
     data = response.json()["data"]
-    assert data["paidMemberCount"] == 4
+    assert data["submittedMemberCount"] == 4
     assert data["potCents"] == 4000
     assert data["firstPlaceCents"] == 2000
     assert data["secondPlaceCents"] == 1000
     assert data["thirdPlaceCents"] == 1000
 
-    db_session.query(MemberWeeklyPayment).filter(
-        MemberWeeklyPayment.user_id.in_([extra.id for extra in extra_members[1:]])
+    db_session.query(WeekSubmission).filter(
+        WeekSubmission.user_id.in_([extra.id for extra in extra_members[1:]])
     ).delete(synchronize_session=False)
     db_session.commit()
 
     response = client.get("/api/v1/league/pot", headers=_headers(member))
     data = response.json()["data"]
-    assert data["paidMemberCount"] == 2
+    assert data["submittedMemberCount"] == 2
     assert data["potCents"] == 2000
     assert data["firstPlaceCents"] == 2000
     assert data["secondPlaceCents"] == 0
     assert data["thirdPlaceCents"] == 0
+
+
+def test_league_pot_counts_complete_autosaved_cards_but_not_partial_ones(
+    client, db_session: Session
+):
+    owner, member, week, _pick = _fixture(db_session, client)
+    league = db_session.query(League).one()
+    # Second game so "complete" means both picks, not just one.
+    second_game = NflGame(
+        week_id=week.id,
+        espn_game_id=f"payments-{uuid.uuid4().hex}",
+        kickoff_time=datetime.now(timezone.utc) - timedelta(hours=1),
+        away_team="DAL",
+        home_team="PHI",
+        game_status=GameStatus.FINAL,
+    )
+    db_session.add(second_game)
+    db_session.flush()
+    first_game_id = _pick.game_id
+
+    autosaver = _user(db_session, "Autosaver")
+    partial = _user(db_session, "Partial")
+    for user in (autosaver, partial):
+        db_session.add(LeagueMember(league_id=league.id, user_id=user.id, role=LeagueRole.MEMBER))
+    db_session.add_all(
+        [
+            Pick(user_id=autosaver.id, game_id=first_game_id, picked_team="KC", confidence_value=2),
+            Pick(
+                user_id=autosaver.id,
+                game_id=second_game.id,
+                picked_team="PHI",
+                confidence_value=1,
+            ),
+            Pick(user_id=partial.id, game_id=first_game_id, picked_team="KC", confidence_value=2),
+            # member's first pick (conf 1) is now incomplete for a 2-game week; submit them.
+            WeekSubmission(
+                week_id=week.id, user_id=member.id, submitted_at=datetime.now(timezone.utc)
+            ),
+        ]
+    )
+    db_session.commit()
+
+    data = client.get("/api/v1/league/pot", headers=_headers(member)).json()["data"]
+    # member (submitted) + autosaver (complete card); owner has nothing, partial is incomplete.
+    assert data["submittedMemberCount"] == 2
+    assert data["potCents"] == 2000
 
 
 def test_league_pot_not_visible_before_the_weeks_first_kickoff(client, db_session: Session):

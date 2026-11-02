@@ -38,10 +38,15 @@ function formatPicksRemaining(picks: MemberGamePick[]): string {
 function LeaderboardTable({
   standings,
   nightGames,
+  onSelectMember,
 }: {
   standings: LeaderboardMember[]
   nightGames: GameLabel[]
+  /** Set once picks are revealed; makes each member name open that member's picks. */
+  onSelectMember?: (member: LeaderboardMember) => void
 }) {
+  // Once nothing is left to play every non-podium finisher is "eliminated", which says nothing.
+  const showEliminated = standings.some((member) => member.pointsRemaining > 0)
   // The backend sends night games only once Sunday night has kicked off.
   const showPicksRemaining = nightGames.length > 0
   const sort = useTableSort(standings, {
@@ -50,6 +55,7 @@ function LeaderboardTable({
     correct: { value: (m) => m.correctPicks, numeric: true },
     points: { value: (m) => m.totalPoints, numeric: true },
     pointsLeft: { value: (m) => m.pointsRemaining, numeric: true },
+    maxPoints: { value: (m) => m.maxPointsPossible, numeric: true },
     // Confidence points still riding on the night games.
     nightGames: {
       value: (m) =>
@@ -60,52 +66,82 @@ function LeaderboardTable({
     },
   })
   return (
-    <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-surface shadow-sm dark:border-slate-800 dev-dark:border-border dark:bg-slate-900 dev-dark:bg-surface-elevated">
-      <table className="w-full min-w-[680px] text-left text-sm">
-        <caption className="sr-only">Weekly leaderboard rankings</caption>
-        <thead className="bg-surface-muted text-xs uppercase tracking-[0.14em] text-ink-muted dark:bg-slate-950 dev-dark:bg-background dark:text-slate-400 dev-dark:text-text-muted">
-          <tr>
-            <SortableTh label="Rank" columnKey="rank" sort={sort} />
-            <SortableTh label="Member" columnKey="member" sort={sort} />
-            <SortableTh label="Correct" columnKey="correct" sort={sort} align="right" />
-            <SortableTh label="Points" columnKey="points" sort={sort} align="right" />
-            <SortableTh label="Points Left" columnKey="pointsLeft" sort={sort} align="right" />
-            {showPicksRemaining && (
-              <SortableTh
-                label="SNF/MNF"
-                columnKey="nightGames"
-                sort={sort}
-                align="right"
-                className="px-5 py-4 whitespace-nowrap"
-              />
-            )}
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-slate-200 dark:divide-slate-800 dev-dark:divide-border">
-          {sort.sortedRows.map((member) => (
-            <tr
-              key={member.memberId}
-              className="transition-colors hover:bg-surface-muted/60 dark:hover:bg-slate-950/60 dev-dark:hover:bg-surface-hover"
-            >
-              <th
-                scope="row"
-                className="px-5 py-4 font-black text-primary dark:text-white dev-dark:text-ink"
-              >
-                {member.rank}
-              </th>
-              <td className="px-5 py-4 font-bold">{member.memberName}</td>
-              <td className="px-5 py-4 text-right">{member.correctPicks}</td>
-              <td className="px-5 py-4 text-right font-black text-accent">{member.totalPoints}</td>
-              <td className="px-5 py-4 text-right">{member.pointsRemaining}</td>
+    <div className="space-y-2">
+      <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-surface shadow-sm dark:border-slate-800 dev-dark:border-border dark:bg-slate-900 dev-dark:bg-surface-elevated">
+        <table className="w-full min-w-[680px] text-left text-sm">
+          <caption className="sr-only">Weekly leaderboard rankings</caption>
+          <thead className="bg-surface-muted text-xs uppercase tracking-[0.14em] text-ink-muted dark:bg-slate-950 dev-dark:bg-background dark:text-slate-400 dev-dark:text-text-muted">
+            <tr>
+              <SortableTh label="Rank" columnKey="rank" sort={sort} />
+              <SortableTh label="Member" columnKey="member" sort={sort} />
+              <SortableTh label="Correct" columnKey="correct" sort={sort} align="right" />
+              <SortableTh label="Points" columnKey="points" sort={sort} align="right" />
+              <SortableTh label="Points Left" columnKey="pointsLeft" sort={sort} align="right" />
+              <SortableTh label="Max Points" columnKey="maxPoints" sort={sort} align="right" />
               {showPicksRemaining && (
-                <td className="px-5 py-4 text-right whitespace-nowrap">
-                  {formatPicksRemaining(member.nightGamePicks)}
-                </td>
+                <SortableTh
+                  label="SNF/MNF"
+                  columnKey="nightGames"
+                  sort={sort}
+                  align="right"
+                  className="px-5 py-4 whitespace-nowrap"
+                />
               )}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody className="divide-y divide-slate-200 dark:divide-slate-800 dev-dark:divide-border">
+            {sort.sortedRows.map((member) => (
+              <tr
+                key={member.memberId}
+                className={`transition-colors hover:bg-surface-muted/60 dark:hover:bg-slate-950/60 dev-dark:hover:bg-surface-hover ${
+                  showEliminated && member.isEliminated ? 'opacity-60' : ''
+                }`}
+              >
+                <th
+                  scope="row"
+                  className="px-5 py-4 font-black text-primary dark:text-white dev-dark:text-ink"
+                >
+                  {member.rank}
+                </th>
+                <td className="px-5 py-4 font-bold">
+                  {onSelectMember ? (
+                    <button
+                      type="button"
+                      onClick={() => onSelectMember(member)}
+                      className="text-left font-bold underline decoration-dotted underline-offset-4 hover:text-accent"
+                    >
+                      {member.memberName}
+                    </button>
+                  ) : (
+                    member.memberName
+                  )}
+                  {showEliminated && member.isEliminated && (
+                    <span className="ml-2 rounded-full bg-danger/10 px-2 py-0.5 text-[0.65rem] font-black uppercase tracking-[0.1em] text-danger">
+                      Eliminated
+                    </span>
+                  )}
+                </td>
+                <td className="px-5 py-4 text-right">{member.correctPicks}</td>
+                <td className="px-5 py-4 text-right font-black text-accent">
+                  {member.totalPoints}
+                </td>
+                <td className="px-5 py-4 text-right">{member.pointsRemaining}</td>
+                <td className="px-5 py-4 text-right">{member.maxPointsPossible}</td>
+                {showPicksRemaining && (
+                  <td className="px-5 py-4 text-right whitespace-nowrap">
+                    {formatPicksRemaining(member.nightGamePicks)}
+                  </td>
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {showEliminated && standings.some((member) => member.isEliminated) && (
+        <p className="text-xs text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
+          Eliminated: can no longer finish in the top 3, whatever the remaining games do.
+        </p>
+      )}
     </div>
   )
 }
@@ -116,6 +152,7 @@ export function LeaderboardPage({
 }: { week?: number; onWeekChange?: (week: number) => void } = {}) {
   const [week, setWeek] = useState<number>()
   const [showAllPicks, setShowAllPicks] = useState(false)
+  const [selectedMember, setSelectedMember] = useState<{ id: string; name: string }>()
   const [showOutcomeScenarios, setShowOutcomeScenarios] = useState(false)
   const weeksQuery = useQuery({
     queryKey: ['leaderboard', 'weeks', 'started'],
@@ -187,6 +224,13 @@ export function LeaderboardPage({
       {showAllPicks && selectedWeek !== undefined && (
         <AllPicksModal week={selectedWeek} onClose={() => setShowAllPicks(false)} />
       )}
+      {selectedMember && selectedWeek !== undefined && (
+        <AllPicksModal
+          week={selectedWeek}
+          member={selectedMember}
+          onClose={() => setSelectedMember(undefined)}
+        />
+      )}
       {showOutcomeScenarios && selectedWeek !== undefined && (
         <OutcomeScenariosModal week={selectedWeek} onClose={() => setShowOutcomeScenarios(false)} />
       )}
@@ -217,7 +261,15 @@ export function LeaderboardPage({
         </p>
       )}
       {query.data && query.data.standings.length > 0 && (
-        <LeaderboardTable standings={query.data.standings} nightGames={query.data.nightGames} />
+        <LeaderboardTable
+          standings={query.data.standings}
+          nightGames={query.data.nightGames}
+          onSelectMember={
+            query.data.picksRevealed
+              ? (member) => setSelectedMember({ id: member.memberId, name: member.memberName })
+              : undefined
+          }
+        />
       )}
     </div>
   )
