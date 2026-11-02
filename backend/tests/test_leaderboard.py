@@ -455,11 +455,12 @@ def test_weekly_leaderboard_reports_points_remaining_on_unfinished_games(
 
 
 def _live_week_standings(
-    db: Session, rows: list[tuple[str, int, int]]
+    db: Session, rows: list[tuple[str, int, int]], *, settled_games: int = 0
 ) -> dict[str, LeaderboardMemberRead]:
     """Weekly standings for a live week with one unfinished game.
 
     Each row is (name, points so far, confidence riding on the unfinished game).
+    `settled_games` adds that many already-final games nobody has a pick on.
     """
     owner = _user(db, "Owner")
     league = _league(db, owner)
@@ -481,6 +482,18 @@ def _live_week_standings(
         game_status=GameStatus.LIVE,
     )
     db.add(live_game)
+    db.add_all(
+        NflGame(
+            week_id=week.id,
+            espn_game_id=f"leaderboard-test-{uuid.uuid4().hex}",
+            kickoff_time=week.start_date,
+            away_team="BUF",
+            home_team="KC",
+            winning_team="KC",
+            game_status=GameStatus.FINAL,
+        )
+        for _ in range(settled_games)
+    )
     db.flush()
     for name, points, confidence in rows:
         user = _user(db, name)
@@ -537,6 +550,42 @@ def test_weekly_leaderboard_marks_members_who_cannot_reach_the_top_three(
         "G": False,
     }
     assert standings["D"].max_points_possible == 15
+
+
+def test_weekly_leaderboard_eliminates_members_whose_only_path_needs_a_shared_game_to_flip(
+    db_session: Session,
+) -> None:
+    # Everyone picked GB for 10 on the last game. D could reach 34, above every rival's
+    # current points, but a GB win lifts A, B and C too, and a GB loss leaves D on 24.
+    standings = _live_week_standings(
+        db_session,
+        [("A", 30, 10), ("B", 28, 10), ("C", 26, 10), ("D", 24, 10)],
+        settled_games=1,
+    )
+
+    assert {name: member.is_eliminated for name, member in standings.items()} == {
+        "A": False,
+        "B": False,
+        "C": False,
+        "D": True,
+    }
+
+
+def test_weekly_leaderboard_keeps_members_tied_for_third_alive(db_session: Session) -> None:
+    standings = _live_week_standings(
+        db_session,
+        [("A", 30, 5), ("B", 28, 5), ("C", 26, 5), ("D", 26, 5), ("E", 25, 5)],
+        settled_games=1,
+    )
+
+    # C and D stay level in every outcome, so both share third; E trails in every outcome.
+    assert {name: member.is_eliminated for name, member in standings.items()} == {
+        "A": False,
+        "B": False,
+        "C": False,
+        "D": False,
+        "E": True,
+    }
 
 
 def test_weekly_leaderboard_eliminates_nobody_with_three_or_fewer_members(
@@ -622,34 +671,23 @@ def test_outcome_scenarios_are_available_only_for_one_sunday_and_one_monday_game
     week, games = _night_week(db_session, league, 7, sunday=date(2026, 9, 13), final=False)
     games[0].game_status = GameStatus.FINAL
     games[2].game_status = GameStatus.FINAL
-    sunday_evening = datetime(2026, 9, 14, 0, tzinfo=timezone.utc)  # 7pm Sunday in Chicago
 
-    available = leaderboard_service._outcome_scenario_games(
-        db_session, week=week, now=sunday_evening
-    )
-
-    assert available == [games[1], games[3]]
-    assert (
-        leaderboard_service._outcome_scenario_games(
-            db_session,
-            week=week,
-            now=datetime(2026, 9, 13, 23, tzinfo=timezone.utc),  # 6pm Chicago
-        )
-        == []
-    )
+    # Opens the moment the afternoon slate is final, before Sunday night kicks off.
+    assert leaderboard_service._outcome_scenario_games(db_session, week=week) == [
+        games[1],
+        games[3],
+    ]
     games[2].game_status = GameStatus.SCHEDULED
-    assert (
-        leaderboard_service._outcome_scenario_games(db_session, week=week, now=sunday_evening) == []
-    )
+    assert leaderboard_service._outcome_scenario_games(db_session, week=week) == []
 
     # Stays available after Sunday night ends, through Monday night and the rest of the week.
     games[2].game_status = GameStatus.FINAL
     games[1].game_status = GameStatus.FINAL
     games[1].winning_team = "KC"
-    monday_afternoon = datetime(2026, 9, 14, 20, tzinfo=timezone.utc)
-    assert leaderboard_service._outcome_scenario_games(
-        db_session, week=week, now=monday_afternoon
-    ) == [games[1], games[3]]
+    assert leaderboard_service._outcome_scenario_games(db_session, week=week) == [
+        games[1],
+        games[3],
+    ]
     scenarios = leaderboard_service._outcome_scenarios(
         results=[], games=[games[1], games[3]], picks=[]
     )

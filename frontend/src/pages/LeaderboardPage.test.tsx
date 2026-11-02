@@ -540,6 +540,13 @@ describe('LeaderboardPage', () => {
 
       const dialog = await screen.findByRole('dialog', { name: /Alex's picks — Week 3/ })
       expect(within(dialog).queryByText('Sam')).not.toBeInTheDocument()
+      // One game per row, so the table scrolls down rather than sideways.
+      expect(within(dialog).getAllByRole('rowheader').map((cell) => cell.textContent)).toEqual([
+        'BUF @ KC',
+        'GB @ CHI',
+        'DAL @ NYG',
+        'MIA @ NE',
+      ])
       const correct = within(dialog).getByText('KC (4)').closest('td') as HTMLElement
       const wrong = within(dialog).getByText('CHI (3)').closest('td') as HTMLElement
       expect(correct).toHaveClass('text-success')
