@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { ApiError } from '@/api/client'
 import { fetchAllPicksForWeek } from '@/api/nfl'
-import type { AllPicks, MemberPicks } from '@/types/nfl'
+import type { AllPicks, MemberPicks, NflGame, NflPick } from '@/types/nfl'
 import { Button } from '@/components/ui/Button'
 import { SortableTh } from '@/components/ui/SortableTable'
 import { useTableSort, type SortColumn } from '@/components/ui/useTableSort'
@@ -19,6 +19,53 @@ const OUTCOME_LABEL: Record<CellOutcome, string> = {
   correct: 'Correct',
   wrong: 'Wrong',
   pending: '',
+}
+
+function PickCell({ pick, game }: { pick: NflPick | undefined; game: NflGame }) {
+  const outcome = pick ? pickOutcome(pick, game) : 'pending'
+  return (
+    <td className={`px-3 py-2 text-center whitespace-nowrap ${OUTCOME_CELL_CLASS[outcome]}`}>
+      {pick ? `${pick.team} (${pick.confidence})` : '—'}
+      {outcome !== 'pending' && (
+        <>
+          <span aria-hidden="true"> {OUTCOME_MARK[outcome]}</span>
+          <span className="sr-only"> — {OUTCOME_LABEL[outcome]}</span>
+        </>
+      )}
+    </td>
+  )
+}
+
+/** One member's picks, one game per row so the table scrolls down instead of sideways. */
+function MemberPicksTable({ data }: { data: AllPicks }) {
+  const picksByGame = new Map((data.members[0]?.picks ?? []).map((pick) => [pick.gameId, pick]))
+  return (
+    <table className="w-full border-collapse text-sm">
+      <thead>
+        <tr className="bg-surface-muted dark:bg-slate-900 dev-dark:bg-surface-elevated">
+          <th scope="col" className="sticky top-0 px-3 py-2 text-left font-bold">
+            Game
+          </th>
+          <th scope="col" className="sticky top-0 px-3 py-2 text-center font-bold">
+            Pick
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        {data.games.map((game) => (
+          <tr
+            key={game.id}
+            className="border-t border-slate-200 dark:border-slate-800 dev-dark:border-border"
+          >
+            <th scope="row" className="px-3 py-2 text-left font-semibold whitespace-nowrap">
+              {game.awayTeam} @ {game.homeTeam}
+            </th>
+            <PickCell pick={picksByGame.get(game.id)} game={game} />
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )
 }
 
 function PicksTable({ data }: { data: AllPicks }) {
@@ -67,22 +114,7 @@ function PicksTable({ data }: { data: AllPicks }) {
                 {member.displayName}
               </td>
               {data.games.map((game) => {
-                const pick = picksByGame.get(game.id)
-                const outcome = pick ? pickOutcome(pick, game) : 'pending'
-                return (
-                  <td
-                    key={game.id}
-                    className={`px-3 py-2 text-center whitespace-nowrap ${OUTCOME_CELL_CLASS[outcome]}`}
-                  >
-                    {pick ? `${pick.team} (${pick.confidence})` : '—'}
-                    {outcome !== 'pending' && (
-                      <>
-                        <span aria-hidden="true"> {OUTCOME_MARK[outcome]}</span>
-                        <span className="sr-only"> — {OUTCOME_LABEL[outcome]}</span>
-                      </>
-                    )}
-                  </td>
-                )
+                return <PickCell key={game.id} pick={picksByGame.get(game.id)} game={game} />
               })}
             </tr>
           )
@@ -134,7 +166,7 @@ export function AllPicksModal({
         aria-modal="true"
         aria-labelledby="all-picks-title"
         onClick={(event) => event.stopPropagation()}
-        className="w-full max-w-4xl rounded-2xl border border-slate-200 bg-surface p-5 shadow-lg dark:border-slate-800 dev-dark:border-border dark:bg-slate-900 dev-dark:bg-surface-elevated"
+        className={`w-full ${member ? 'max-w-md' : 'max-w-4xl'} rounded-2xl border border-slate-200 bg-surface p-5 shadow-lg dark:border-slate-800 dev-dark:border-border dark:bg-slate-900 dev-dark:bg-surface-elevated`}
       >
         <div className="flex items-center justify-between gap-3">
           <h2
@@ -158,7 +190,7 @@ export function AllPicksModal({
               {error instanceof ApiError ? error.message : "Could not load everyone's picks."}
             </p>
           )}
-          {shown && <PicksTable data={shown} />}
+          {shown && (member ? <MemberPicksTable data={shown} /> : <PicksTable data={shown} />)}
         </div>
       </div>
     </div>

@@ -4,7 +4,6 @@ import {
   LoaderCircle,
   Mail,
   Pencil,
-  RefreshCw,
   Save,
   ShieldCheck,
   UserMinus,
@@ -20,7 +19,6 @@ import {
   fetchMemberSubmissionStatuses,
   fetchLeague,
   fetchLeagueMembers,
-  refreshLeagueData,
   removeLeagueMember,
   updateLeagueMember,
   updateMemberPayment,
@@ -98,60 +96,6 @@ function InviteForm({ onInvited }: { onInvited: () => void }) {
         <p className="text-sm text-red-600 dark:text-red-400 dev-dark:text-error">{error}</p>
       )}
     </form>
-  )
-}
-
-function ScoreRefresh() {
-  const [isRefreshing, setIsRefreshing] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [successMessage, setSuccessMessage] = useState<string | null>(null)
-  const queryClient = useQueryClient()
-
-  async function handleRefresh() {
-    setError(null)
-    setSuccessMessage(null)
-    setIsRefreshing(true)
-    try {
-      const result = await refreshLeagueData()
-      await queryClient.invalidateQueries({ queryKey: ['leaderboard'] })
-      await queryClient.invalidateQueries({ queryKey: ['picks'] })
-      await queryClient.invalidateQueries({ queryKey: ['weeks'] })
-      setSuccessMessage(
-        `Refreshed ${result.weeksRefreshed} ${result.weeksRefreshed === 1 ? 'week' : 'weeks'}.`,
-      )
-    } catch (error) {
-      setError(
-        error instanceof ApiError ? error.message : 'Could not refresh scores. Please try again.',
-      )
-    } finally {
-      setIsRefreshing(false)
-    }
-  }
-
-  return (
-    <section className="space-y-3">
-      <div>
-        <h2 className="text-lg font-bold">Scores & standings</h2>
-        <p className="text-sm text-slate-600 dark:text-slate-300 dev-dark:text-text-secondary">
-          Pull the latest game results and recalculate pick outcomes and weekly standings.
-        </p>
-      </div>
-      <Button type="button" onClick={() => void handleRefresh()} disabled={isRefreshing}>
-        <RefreshCw size={16} className={isRefreshing ? 'animate-spin' : ''} aria-hidden="true" />
-        {isRefreshing ? 'Refreshing...' : 'Refresh scores & standings'}
-      </Button>
-      {error && (
-        <p className="text-sm text-red-600 dark:text-red-400 dev-dark:text-error">{error}</p>
-      )}
-      {successMessage && (
-        <p
-          className="text-sm text-green-600 dark:text-green-400 dev-dark:text-success"
-          role="status"
-        >
-          {successMessage}
-        </p>
-      )}
-    </section>
   )
 }
 
@@ -695,13 +639,6 @@ export function LeagueSettingsPage() {
         </ul>
       </AdminSection>
 
-      <AdminSection
-        id="member-refresh"
-        title="Scores & standings"
-        summary="Refresh game scores and league results"
-      >
-        <ScoreRefresh />
-      </AdminSection>
       <AdminSection
         id="member-submissions"
         title="Pick submissions"
