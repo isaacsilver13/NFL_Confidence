@@ -3,13 +3,11 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { ApiError } from '@/api/client'
 import {
   fetchLeague,
   fetchLeagueMembers,
   fetchMemberPaymentStatuses,
   fetchMemberSubmissionStatuses,
-  refreshLeagueData,
   removeLeagueMember,
   updateLeagueMember,
   updateMemberPayment,
@@ -28,7 +26,6 @@ vi.mock('@/api/league', () => ({
   fetchLeagueMembers: vi.fn(),
   fetchMemberPaymentStatuses: vi.fn(),
   fetchMemberSubmissionStatuses: vi.fn(),
-  refreshLeagueData: vi.fn(),
   removeLeagueMember: vi.fn(),
   updateLeagueMember: vi.fn(),
   updateMemberPayment: vi.fn(),
@@ -48,7 +45,6 @@ const mockedFetchLeague = vi.mocked(fetchLeague)
 const mockedFetchLeagueMembers = vi.mocked(fetchLeagueMembers)
 const mockedFetchMemberPaymentStatuses = vi.mocked(fetchMemberPaymentStatuses)
 const mockedFetchMemberSubmissionStatuses = vi.mocked(fetchMemberSubmissionStatuses)
-const mockedRefreshLeagueData = vi.mocked(refreshLeagueData)
 const mockedRemoveLeagueMember = vi.mocked(removeLeagueMember)
 const mockedUpdateLeagueMember = vi.mocked(updateLeagueMember)
 const mockedUpdateMemberPayment = vi.mocked(updateMemberPayment)
@@ -142,11 +138,11 @@ function renderPage(session: SessionBootstrap = ownerSession) {
 }
 
 describe('LeagueSettingsPage', () => {
-  it('groups tools in accordions with the roster open by default', async () => {
+  it('groups tools in accordions that are all closed by default', async () => {
     renderPage()
     expect(await screen.findByRole('button', { name: /^Member roster/ })).toHaveAttribute(
       'aria-expanded',
-      'true',
+      'false',
     )
     const invites = screen.getByRole('button', { name: /^Invitations & passcode/ })
     expect(invites).toHaveAttribute('aria-expanded', 'false')
@@ -182,7 +178,6 @@ describe('LeagueSettingsPage', () => {
     })
     mockedFetchMemberPaymentStatuses.mockResolvedValue(paymentStatuses)
     mockedFetchMemberSubmissionStatuses.mockResolvedValue(submissionStatuses)
-    mockedRefreshLeagueData.mockResolvedValue({ weeksRefreshed: 2, gamesFinal: 5 })
     mockedRemoveLeagueMember.mockResolvedValue(undefined)
     mockedUpdateLeagueMember.mockResolvedValue(members[1])
     mockedUpdateMemberPayment.mockResolvedValue(undefined)
@@ -197,6 +192,7 @@ describe('LeagueSettingsPage', () => {
     const user = userEvent.setup()
     renderPage()
 
+    await user.click(await screen.findByRole('button', { name: /^Member roster/ }))
     expect((await screen.findAllByText('member@example.com')).length).toBeGreaterThan(0)
     await user.click(screen.getByRole('button', { name: 'Edit Member' }))
     expect(screen.getByLabelText('Display name')).toHaveValue('Member')
@@ -219,6 +215,7 @@ describe('LeagueSettingsPage', () => {
     const user = userEvent.setup()
     renderPage()
 
+    await user.click(await screen.findByRole('button', { name: /^Member roster/ }))
     expect((await screen.findAllByText('member@example.com')).length).toBeGreaterThan(0)
     await user.click(screen.getByRole('button', { name: 'Remove Member' }))
     await user.click(screen.getByRole('button', { name: 'Remove' }))
@@ -232,6 +229,7 @@ describe('LeagueSettingsPage', () => {
     mockedRemoveLeagueMember.mockRejectedValueOnce(new Error('request failed'))
     renderPage()
 
+    await user.click(await screen.findByRole('button', { name: /^Member roster/ }))
     expect((await screen.findAllByText('member@example.com')).length).toBeGreaterThan(0)
     await user.click(screen.getByRole('button', { name: 'Remove Member' }))
     await user.click(screen.getByRole('button', { name: 'Remove' }))
@@ -261,63 +259,6 @@ describe('LeagueSettingsPage', () => {
     await user.click(screen.getByRole('button', { name: 'Void picks' }))
 
     await waitFor(() => expect(mockedVoidUnpaidPicks).toHaveBeenCalledWith(1))
-  })
-
-  it('lets a commissioner refresh scores and standings', async () => {
-    const user = userEvent.setup()
-    renderPage()
-
-    await user.click(await screen.findByRole('button', { name: /^Scores & standings/ }))
-    await user.click(await screen.findByRole('button', { name: 'Refresh scores & standings' }))
-
-    await waitFor(() => expect(mockedRefreshLeagueData).toHaveBeenCalledTimes(1))
-    expect(await screen.findByText('Refreshed 2 weeks.')).toBeInTheDocument()
-  })
-
-  it('disables the refresh button while a refresh is running', async () => {
-    const user = userEvent.setup()
-    let resolveRefresh: (value: { weeksRefreshed: number; gamesFinal: number }) => void = () => {}
-    mockedRefreshLeagueData.mockReturnValueOnce(
-      new Promise((resolve) => {
-        resolveRefresh = resolve
-      }),
-    )
-    renderPage()
-
-    await user.click(await screen.findByRole('button', { name: /^Scores & standings/ }))
-    await user.click(await screen.findByRole('button', { name: 'Refresh scores & standings' }))
-
-    expect(await screen.findByRole('button', { name: 'Refreshing...' })).toBeDisabled()
-    resolveRefresh({ weeksRefreshed: 1, gamesFinal: 3 })
-    expect(await screen.findByText('Refreshed 1 week.')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Refresh scores & standings' })).toBeEnabled()
-  })
-
-  it('shows the server message when a refresh fails', async () => {
-    const user = userEvent.setup()
-    mockedRefreshLeagueData.mockRejectedValueOnce(
-      new ApiError(502, 'UPSTREAM_ERROR', 'Could not reach the NFL data provider.'),
-    )
-    renderPage()
-
-    await user.click(await screen.findByRole('button', { name: /^Scores & standings/ }))
-    await user.click(await screen.findByRole('button', { name: 'Refresh scores & standings' }))
-
-    expect(await screen.findByText('Could not reach the NFL data provider.')).toBeInTheDocument()
-    expect(screen.queryByText(/^Refreshed/)).not.toBeInTheDocument()
-  })
-
-  it('falls back to a generic message when a refresh fails unexpectedly', async () => {
-    const user = userEvent.setup()
-    mockedRefreshLeagueData.mockRejectedValueOnce(new Error('network down'))
-    renderPage()
-
-    await user.click(await screen.findByRole('button', { name: /^Scores & standings/ }))
-    await user.click(await screen.findByRole('button', { name: 'Refresh scores & standings' }))
-
-    expect(
-      await screen.findByText('Could not refresh scores. Please try again.'),
-    ).toBeInTheDocument()
   })
 
   it("shows who has and hasn't submitted picks for the selected week", async () => {

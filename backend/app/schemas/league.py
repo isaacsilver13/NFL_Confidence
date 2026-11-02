@@ -50,7 +50,7 @@ class LeaguePotRead(CamelModel):
     week_number: int
     locks_at: datetime | None = None
     is_visible: bool
-    paid_member_count: int
+    submitted_member_count: int
     pot_cents: int
     first_place_cents: int
     second_place_cents: int

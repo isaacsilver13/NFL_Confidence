@@ -17,6 +17,8 @@ export interface LeaderboardMember {
   thirdPlaceFinishes: number
   payoutCents: number
   pointsRemaining: number
+  maxPointsPossible: number
+  isEliminated: boolean
   nightGamePicks: MemberGamePick[]
 }
 

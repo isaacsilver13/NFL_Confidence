@@ -1,9 +1,9 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
-import { ArrowUpRight, CalendarDays, KeyRound, LoaderCircle, Users } from 'lucide-react'
+import { ArrowUpRight, CalendarDays, KeyRound, LoaderCircle, RefreshCw, Users } from 'lucide-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { ApiError } from '@/api/client'
-import { createLeague, fetchLeaguePot, joinLeagueWithCode } from '@/api/league'
+import { createLeague, fetchLeaguePot, joinLeagueWithCode, refreshLeagueData } from '@/api/league'
 import { fetchStartedWeeks, fetchPickHistory } from '@/api/nfl'
 import { fetchWeeklyLeaderboard, fetchSeasonStandings } from '@/api/leaderboard'
 import { fetchCurrentPicksCard, fetchSessionBootstrap } from '@/api/session'
@@ -364,8 +364,81 @@ function LeaguePot() {
   )
 }
 
-export function DashboardPage() {
+function DashboardHeader({ isCommissioner }: { isCommissioner: boolean }) {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [successMessage, setSuccessMessage] = useState<string | null>(null)
+
+  async function handleRefresh() {
+    setError(null)
+    setSuccessMessage(null)
+    setIsRefreshing(true)
+    try {
+      const result = await refreshLeagueData()
+      for (const key of ['leaderboard', 'picks', 'weeks', 'session']) {
+        await queryClient.invalidateQueries({ queryKey: [key] })
+      }
+      setSuccessMessage(
+        `Refreshed ${result.weeksRefreshed} ${result.weeksRefreshed === 1 ? 'week' : 'weeks'}.`,
+      )
+    } catch (error) {
+      setError(
+        error instanceof ApiError ? error.message : 'Could not refresh scores. Please try again.',
+      )
+    } finally {
+      setIsRefreshing(false)
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.2em] text-accent">League hub</p>
+          <h1 className="mt-2 text-3xl font-black tracking-tight text-primary dark:text-white dev-dark:text-ink">
+            Dashboard
+          </h1>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          {isCommissioner && (
+            <Button
+              variant="secondary"
+              onClick={() => void handleRefresh()}
+              disabled={isRefreshing}
+            >
+              <RefreshCw
+                size={16}
+                className={isRefreshing ? 'animate-spin' : ''}
+                aria-hidden="true"
+              />
+              {isRefreshing ? 'Refreshing...' : 'Refresh'}
+            </Button>
+          )}
+          <Button variant="secondary" onClick={() => void navigate('/picks')}>
+            Make picks <ArrowUpRight size={16} aria-hidden="true" />
+          </Button>
+        </div>
+      </div>
+      {error && (
+        <p className="text-sm text-red-600 dark:text-red-400 dev-dark:text-error" role="alert">
+          {error}
+        </p>
+      )}
+      {successMessage && (
+        <p
+          className="text-sm text-green-600 dark:text-green-400 dev-dark:text-success"
+          role="status"
+        >
+          {successMessage}
+        </p>
+      )}
+    </div>
+  )
+}
+
+export function DashboardPage() {
   const {
     data: bootstrapData,
     isLoading,
@@ -441,17 +514,7 @@ export function DashboardPage() {
 
   return (
     <div className="animate-fade-in space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-[0.2em] text-accent">League hub</p>
-          <h1 className="mt-2 text-3xl font-black tracking-tight text-primary dark:text-white dev-dark:text-ink">
-            Dashboard
-          </h1>
-        </div>
-        <Button variant="secondary" onClick={() => void navigate('/picks')}>
-          Make picks <ArrowUpRight size={16} aria-hidden="true" />
-        </Button>
-      </div>
+      <DashboardHeader isCommissioner={bootstrapData?.membership.role === 'owner'} />
       {league && (
         <div className="overflow-hidden rounded-2xl border border-primary/10 bg-primary p-5 text-white shadow-lg shadow-primary/15">
           <p className="text-xs font-bold uppercase tracking-[0.2em] text-sky dark:text-accent">

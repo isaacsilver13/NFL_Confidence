@@ -1,10 +1,10 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { act, render, screen } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '@/api/client'
-import { fetchLeaguePot, joinLeagueWithCode } from '@/api/league'
+import { fetchLeaguePot, joinLeagueWithCode, refreshLeagueData } from '@/api/league'
 import { fetchCurrentPicksCard, fetchSessionBootstrap, type SessionBootstrap } from '@/api/session'
 import { fetchStartedWeeks } from '@/api/nfl'
 import { fetchSeasonStandings, fetchWeeklyLeaderboard } from '@/api/leaderboard'
@@ -34,6 +34,7 @@ vi.mock('@/api/league', () => ({
   createLeague: vi.fn(),
   joinLeagueWithCode: vi.fn(),
   fetchLeaguePot: vi.fn(),
+  refreshLeagueData: vi.fn(),
 }))
 
 vi.mock('@/api/session', () => ({
@@ -53,6 +54,7 @@ vi.mock('@/api/leaderboard', () => ({
 
 const mockedJoinLeagueWithCode = vi.mocked(joinLeagueWithCode)
 const mockedFetchLeaguePot = vi.mocked(fetchLeaguePot)
+const mockedRefreshLeagueData = vi.mocked(refreshLeagueData)
 const mockedFetchSessionBootstrap = vi.mocked(fetchSessionBootstrap)
 const mockedFetchCurrentPicksCard = vi.mocked(fetchCurrentPicksCard)
 const mockedFetchStartedWeeks = vi.mocked(fetchStartedWeeks)
@@ -98,6 +100,11 @@ const memberSession: SessionBootstrap = {
   membership: { status: 'member', role: 'member' },
 }
 
+const commissionerSession: SessionBootstrap = {
+  ...memberSession,
+  membership: { status: 'member', role: 'owner' },
+}
+
 function renderPage() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
@@ -127,7 +134,7 @@ describe('DashboardPage league access', () => {
       weekNumber: 1,
       locksAt: null,
       isVisible: false,
-      paidMemberCount: 0,
+      submittedMemberCount: 0,
       potCents: 0,
       firstPlaceCents: 0,
       secondPlaceCents: 2000,
@@ -178,6 +185,73 @@ describe('DashboardPage league access', () => {
     expect(await screen.findByText('You are already a member of this league.')).toBeInTheDocument()
   })
 
+  it('hides the Refresh button from regular members', async () => {
+    mockedFetchSessionBootstrap.mockResolvedValueOnce(memberSession)
+    renderPage()
+
+    await screen.findByRole('button', { name: /^Weekly Leaderboard/ })
+    expect(screen.getByRole('button', { name: /make picks/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Refresh' })).not.toBeInTheDocument()
+  })
+
+  it('lets a commissioner refresh picks and outcomes from the dashboard', async () => {
+    const user = userEvent.setup()
+    mockedFetchSessionBootstrap.mockResolvedValue(commissionerSession)
+    mockedRefreshLeagueData.mockResolvedValue({ weeksRefreshed: 2, gamesFinal: 5 })
+    renderPage()
+
+    await user.click(await screen.findByRole('button', { name: 'Refresh' }))
+
+    await waitFor(() => expect(mockedRefreshLeagueData).toHaveBeenCalledTimes(1))
+    expect(await screen.findByText('Refreshed 2 weeks.')).toBeInTheDocument()
+  })
+
+  it('disables Refresh while a refresh is running', async () => {
+    const user = userEvent.setup()
+    mockedFetchSessionBootstrap.mockResolvedValue(commissionerSession)
+    let resolveRefresh: (value: { weeksRefreshed: number; gamesFinal: number }) => void = () => {}
+    mockedRefreshLeagueData.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveRefresh = resolve
+      }),
+    )
+    renderPage()
+
+    await user.click(await screen.findByRole('button', { name: 'Refresh' }))
+
+    expect(await screen.findByRole('button', { name: 'Refreshing...' })).toBeDisabled()
+    resolveRefresh({ weeksRefreshed: 1, gamesFinal: 3 })
+    expect(await screen.findByText('Refreshed 1 week.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Refresh' })).toBeEnabled()
+  })
+
+  it('shows the server message when a refresh fails', async () => {
+    const user = userEvent.setup()
+    mockedFetchSessionBootstrap.mockResolvedValue(commissionerSession)
+    mockedRefreshLeagueData.mockRejectedValueOnce(
+      new ApiError(502, 'UPSTREAM_ERROR', 'Could not reach the NFL data provider.'),
+    )
+    renderPage()
+
+    await user.click(await screen.findByRole('button', { name: 'Refresh' }))
+
+    expect(await screen.findByText('Could not reach the NFL data provider.')).toBeInTheDocument()
+    expect(screen.queryByText(/^Refreshed/)).not.toBeInTheDocument()
+  })
+
+  it('falls back to a generic message when a refresh fails unexpectedly', async () => {
+    const user = userEvent.setup()
+    mockedFetchSessionBootstrap.mockResolvedValue(commissionerSession)
+    mockedRefreshLeagueData.mockRejectedValueOnce(new Error('network down'))
+    renderPage()
+
+    await user.click(await screen.findByRole('button', { name: 'Refresh' }))
+
+    expect(
+      await screen.findByText('Could not refresh scores. Please try again.'),
+    ).toBeInTheDocument()
+  })
+
   it('places Weekly Game Breakdown between the leaderboard and season standings', async () => {
     mockedFetchSessionBootstrap.mockResolvedValueOnce(memberSession)
     renderPage()
@@ -221,7 +295,7 @@ describe('DashboardPage league access', () => {
       weekNumber: 1,
       locksAt: '2026-09-10T00:00:00Z',
       isVisible: true,
-      paidMemberCount: 8,
+      submittedMemberCount: 8,
       potCents: 16000,
       firstPlaceCents: 13000,
       secondPlaceCents: 2000,
@@ -255,6 +329,8 @@ describe('DashboardPage league access', () => {
           thirdPlaceFinishes: 0,
           payoutCents: 0,
           pointsRemaining: 10,
+          maxPointsPossible: 0,
+          isEliminated: false,
           nightGamePicks: [],
         },
       ],
@@ -290,6 +366,8 @@ describe('DashboardPage league access', () => {
           thirdPlaceFinishes: 0,
           payoutCents: 0,
           pointsRemaining: 0,
+          maxPointsPossible: 0,
+          isEliminated: false,
           nightGamePicks: [],
         },
       ],

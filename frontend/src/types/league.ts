@@ -54,7 +54,7 @@ export interface LeaguePot {
   weekNumber: number
   locksAt: string | null
   isVisible: boolean
-  paidMemberCount: number
+  submittedMemberCount: number
   potCents: number
   firstPlaceCents: number
   secondPlaceCents: number
