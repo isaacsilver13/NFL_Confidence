@@ -38,8 +38,11 @@ function formatPicksRemaining(picks: MemberGamePick[]): string {
 // Rank and Member stay pinned while the wide table scrolls, so Points (third) is always
 // visible on a phone. Pinned cells need opaque backgrounds to cover what scrolls under them.
 const CELL = 'px-3 py-4 sm:px-5'
-const STICKY_RANK = 'sticky left-0 z-10 w-14 min-w-14 px-3 sm:w-16 sm:min-w-16 sm:px-5'
-const STICKY_MEMBER = 'sticky left-14 z-10 min-w-28 px-3 sm:left-16 sm:px-5'
+const STICKY_RANK = 'sticky left-0 z-10 w-12 min-w-12 px-2 sm:w-16 sm:min-w-16 sm:px-5'
+const STICKY_MEMBER =
+  'sticky left-12 z-10 w-24 min-w-24 px-2 break-words sm:left-16 sm:break-normal sm:w-auto sm:min-w-28 sm:px-5'
+// The "Rank" header is wider than its one-digit cells, so it shrinks on phones to keep the column slim.
+const RANK_HEAD_PHONE = 'text-[0.65rem] tracking-normal sm:text-xs sm:tracking-[0.14em]'
 const STICKY_HEAD_BG = 'bg-surface-muted dark:bg-night-page'
 const STICKY_BODY_BG = 'bg-surface dark:bg-night-card'
 
@@ -84,7 +87,8 @@ function LeaderboardTable({
                 label="Rank"
                 columnKey="rank"
                 sort={sort}
-                className={`${STICKY_RANK} ${STICKY_HEAD_BG} py-4`}
+                hideIconOnPhone
+                className={`${STICKY_RANK} ${STICKY_HEAD_BG} ${RANK_HEAD_PHONE} py-4`}
               />
               <SortableTh
                 label="Member"
@@ -158,7 +162,7 @@ function LeaderboardTable({
                     member.memberName
                   )}
                   {showEliminated && member.isEliminated && (
-                    <span className="ml-2 rounded-full bg-danger/10 px-2 py-0.5 text-[0.65rem] font-black uppercase tracking-[0.1em] text-danger">
+                    <span className="mt-1 block w-fit rounded-full sm:ml-2 sm:mt-0 sm:inline bg-danger/10 px-2 py-0.5 text-[0.65rem] font-black uppercase tracking-[0.1em] text-danger">
                       Eliminated
                     </span>
                   )}
