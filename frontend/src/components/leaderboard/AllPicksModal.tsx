@@ -81,7 +81,9 @@ function PicksTable({ data }: { data: AllPicks }) {
   const sort = useTableSort(data.members, columns)
 
   return (
-    <table className="w-full min-w-[640px] border-collapse text-sm">
+    <table
+      className={`w-full border-collapse text-sm ${data.games.length > 1 ? 'min-w-[640px]' : ''}`}
+    >
       <thead>
         <tr className="bg-surface-muted dark:bg-slate-900 dev-dark:bg-surface-elevated">
           <SortableTh
