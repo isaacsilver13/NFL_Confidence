@@ -77,4 +77,10 @@ describe('AppLayout commissioner navigation', () => {
     await screen.findByText('Dashboard content')
     expect(screen.queryByRole('link', { name: 'Members' })).not.toBeInTheDocument()
   })
+
+  it('keeps Sign out reachable by name even when only its icon shows on phones', async () => {
+    renderLayout({ status: 'member', role: 'member' })
+
+    expect(await screen.findByRole('button', { name: 'Sign out' })).toBeInTheDocument()
+  })
 })

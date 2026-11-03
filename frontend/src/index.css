@@ -57,6 +57,24 @@
   --color-chart-7: #5faf8a;
   --color-chart-8: #a78bc4;
 
+  /* Dark-theme palette, used as `dark:bg-night-card` next to a light-mode class. Prod dark is
+     the Tailwind slate scale; the dev Bears theme repoints each token in html.dark.dev-theme. */
+  --color-night-page: var(--color-slate-950);
+  --color-night-card: var(--color-slate-900);
+  --color-night-hover: var(--color-slate-800);
+  --color-night-accent: var(--color-sky);
+  --color-night-line: var(--color-slate-800);
+  --color-night-line-strong: var(--color-slate-700);
+  --color-night-ink: var(--color-white);
+  --color-night-ink-soft: var(--color-slate-100);
+  --color-night-ink-dim: var(--color-slate-200);
+  --color-night-text: var(--color-slate-300);
+  --color-night-muted: var(--color-slate-400);
+  --color-night-faint: var(--color-slate-500);
+  --color-night-error: var(--color-red-400);
+  --color-night-success: var(--color-green-400);
+  --color-night-warning: var(--color-amber-300);
+
   --animate-fade-in: fade-in 150ms ease-out;
   --animate-slide-up: slide-up 200ms ease-out;
 }
@@ -104,6 +122,22 @@ html.dark.dev-theme {
   --color-chart-6: #d6a23a;
   --color-chart-7: #5faf8a;
   --color-chart-8: #a78bc4;
+
+  --color-night-page: var(--color-background);
+  --color-night-card: var(--color-surface-elevated);
+  --color-night-hover: var(--color-surface-hover);
+  --color-night-accent: var(--color-accent);
+  --color-night-line: var(--color-border);
+  --color-night-line-strong: var(--color-border-hover);
+  --color-night-ink: var(--color-ink);
+  --color-night-ink-soft: var(--color-ink);
+  --color-night-ink-dim: var(--color-ink);
+  --color-night-text: var(--color-text-secondary);
+  --color-night-muted: var(--color-text-muted);
+  --color-night-faint: var(--color-text-muted);
+  --color-night-error: var(--color-error);
+  --color-night-success: var(--color-success);
+  --color-night-warning: var(--color-warning);
 }
 
 @layer base {

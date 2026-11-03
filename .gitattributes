@@ -1,0 +1,2 @@
+# Keep LF in the repo and in working copies so Prettier (LF) agrees on every platform.
+* text=auto eol=lf
