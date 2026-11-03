@@ -561,6 +561,74 @@ describe('LeaderboardPage', () => {
       expect(mockedFetchAllPicksForWeek).toHaveBeenCalledWith(3)
     })
 
+    it('says "Loading picks…" while a single member popup loads', async () => {
+      const user = userEvent.setup()
+      mockLeaderboard([row('u1', 'Alex', 1, 30, 5)])
+      mockedFetchAllPicksForWeek.mockReturnValue(new Promise(() => {}))
+
+      renderPage()
+
+      await user.click(await screen.findByRole('button', { name: 'Alex' }))
+
+      const dialog = await screen.findByRole('dialog', { name: /Alex's picks/ })
+      expect(within(dialog).getByText('Loading picks…')).toBeInTheDocument()
+      expect(within(dialog).queryByText(/everyone/i)).not.toBeInTheDocument()
+    })
+
+    it("narrows everyone's picks to one game so phones do not scroll sideways", async () => {
+      const user = userEvent.setup()
+      mockLeaderboard([row('u1', 'Alex', 1, 30, 5)])
+      const game = (id: string, away: string, home: string) => ({
+        id,
+        awayTeam: away,
+        homeTeam: home,
+        kickoff: '2026-09-20T17:00:00Z',
+        status: 'scheduled',
+        winningTeam: null,
+        isTie: false,
+      })
+      mockedFetchAllPicksForWeek.mockResolvedValue({
+        week: currentWeek,
+        games: [game('g1', 'BUF', 'KC'), game('g2', 'GB', 'CHI')],
+        members: [
+          {
+            userId: 'u1',
+            displayName: 'Alex',
+            picks: [
+              { id: 'p1', gameId: 'g1', team: 'KC', confidence: 4, submittedAt: '' },
+              { id: 'p2', gameId: 'g2', team: 'CHI', confidence: 3, submittedAt: '' },
+            ],
+          },
+        ],
+      } as never)
+
+      renderPage()
+
+      await user.click(await screen.findByRole('button', { name: /see everyone's picks/i }))
+      const dialog = await screen.findByRole('dialog', { name: /Everyone's picks/ })
+      const headers = () =>
+        within(dialog)
+          .getAllByRole('columnheader')
+          .map((header) => header.textContent)
+      await within(dialog).findByText('KC (4)')
+      expect(headers()).toEqual(['Member', 'BUF @ KC', 'GB @ CHI'])
+
+      await user.selectOptions(
+        within(dialog).getByRole('combobox', { name: 'Show game' }),
+        'GB @ CHI',
+      )
+
+      expect(headers()).toEqual(['Member', 'GB @ CHI'])
+      expect(within(dialog).getByText('CHI (3)')).toBeInTheDocument()
+      expect(within(dialog).queryByText('KC (4)')).not.toBeInTheDocument()
+
+      await user.selectOptions(
+        within(dialog).getByRole('combobox', { name: 'Show game' }),
+        'All games',
+      )
+      expect(headers()).toEqual(['Member', 'BUF @ KC', 'GB @ CHI'])
+    })
+
     it('leaves member names as plain text until picks are revealed', async () => {
       mockLeaderboard([row('u1', 'Alex', 1, 0, 0)], false)
 

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { ApiError } from '@/api/client'
 import { fetchAllPicksForWeek } from '@/api/nfl'
@@ -124,6 +124,32 @@ function PicksTable({ data }: { data: AllPicks }) {
   )
 }
 
+/** All members, with a game filter: one game at a time fits a phone without sideways scrolling. */
+function EveryonePicks({ data }: { data: AllPicks }) {
+  const [gameId, setGameId] = useState('all')
+  const games = gameId === 'all' ? data.games : data.games.filter((game) => game.id === gameId)
+  return (
+    <div className="space-y-3">
+      <label className="flex items-center gap-2 text-sm font-bold text-ink-muted dark:text-slate-300 dev-dark:text-text-secondary">
+        Show game
+        <select
+          value={gameId}
+          onChange={(event) => setGameId(event.target.value)}
+          className="min-h-11 rounded-xl border border-slate-300 bg-surface px-3 text-ink dark:border-slate-700 dev-dark:border-border-hover dark:bg-slate-900 dev-dark:bg-surface-elevated dark:text-slate-100 dev-dark:text-ink"
+        >
+          <option value="all">All games</option>
+          {data.games.map((game) => (
+            <option key={game.id} value={game.id}>
+              {game.awayTeam} @ {game.homeTeam}
+            </option>
+          ))}
+        </select>
+      </label>
+      <PicksTable key={gameId} data={{ ...data, games }} />
+    </div>
+  )
+}
+
 /** Pass `member` to show just that member's picks (the leaderboard's per-member popup). */
 export function AllPicksModal({
   week,
@@ -182,15 +208,19 @@ export function AllPicksModal({
         <div className="mt-4 max-h-[70vh] overflow-auto">
           {isPending && (
             <p className="text-sm text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
-              Loading everyone&apos;s picks…
+              {member ? 'Loading picks…' : 'Loading everyone’s picks…'}
             </p>
           )}
           {error && (
             <p className="text-sm text-danger">
-              {error instanceof ApiError ? error.message : "Could not load everyone's picks."}
+              {error instanceof ApiError
+                ? error.message
+                : member
+                  ? 'Could not load picks.'
+                  : "Could not load everyone's picks."}
             </p>
           )}
-          {shown && (member ? <MemberPicksTable data={shown} /> : <PicksTable data={shown} />)}
+          {shown && (member ? <MemberPicksTable data={shown} /> : <EveryonePicks data={shown} />)}
         </div>
       </div>
     </div>
