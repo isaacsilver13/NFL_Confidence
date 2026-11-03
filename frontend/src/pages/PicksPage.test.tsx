@@ -510,4 +510,15 @@ describe('PicksPage', () => {
       }),
     ).toBe(false)
   })
+
+  it('explains what to do, without an error, when no NFL week is loaded yet', async () => {
+    mockedFetchCurrentPicksCard.mockRejectedValue(
+      new ApiError(404, 'NOT_FOUND', 'No current NFL week is available.'),
+    )
+    renderPage()
+
+    expect(await screen.findByRole('heading', { name: 'No picks open yet' })).toBeInTheDocument()
+    expect(screen.getByText(/ask your commissioner/)).toBeInTheDocument()
+    expect(screen.queryByText('No current NFL week is available.')).not.toBeInTheDocument()
+  })
 })

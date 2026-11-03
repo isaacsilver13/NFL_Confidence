@@ -7,11 +7,11 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 const variants = {
   primary:
-    'bg-primary text-white shadow-sm hover:bg-primary-hover disabled:bg-primary/50 dark:bg-sky dev-dark:bg-accent orange-trim dev-dark:text-white dark:hover:bg-sky/90 dev-dark:hover:bg-accent-hover',
+    'bg-primary text-white shadow-sm hover:bg-primary-hover disabled:bg-primary/50 dark:bg-night-accent orange-trim dev-dark:text-white dark:hover:bg-sky/90 dev-dark:hover:bg-accent-hover',
   secondary:
-    'border border-primary/20 bg-white text-primary hover:border-sky hover:bg-sky/10 dark:border-slate-700 dev-dark:border-border-hover dark:bg-slate-900 dev-dark:bg-surface-elevated dark:text-slate-100 dev-dark:text-ink dark:hover:border-sky dev-dark:hover:border-accent',
+    'border border-primary/20 bg-white text-primary hover:border-sky hover:bg-sky/10 dark:border-night-line-strong dark:bg-night-card dark:text-night-ink-soft dark:hover:border-night-accent',
   quiet:
-    'text-ink-muted hover:bg-surface-muted hover:text-primary dark:text-slate-300 dev-dark:text-text-secondary dark:hover:bg-slate-800 dev-dark:hover:bg-surface-hover dark:hover:text-white dev-dark:hover:text-ink',
+    'text-ink-muted hover:bg-surface-muted hover:text-primary dark:text-night-text dark:hover:bg-night-hover dark:hover:text-night-ink',
   danger: 'bg-danger text-white hover:bg-danger/90 disabled:bg-danger/50',
 }
 

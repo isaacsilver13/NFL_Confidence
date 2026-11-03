@@ -1,8 +1,9 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { fetchGamePicks } from '@/api/leaderboard'
+import type { GamePicks } from '@/types/leaderboard'
 import { WeeklyPickBreakdown } from './WeeklyPickBreakdown'
 
 vi.mock('@/api/leaderboard', () => ({
@@ -112,11 +113,81 @@ describe('WeeklyPickBreakdown', () => {
 
     expect(mockedFetchGamePicks).toHaveBeenCalledWith('game-1')
     expect(await screen.findByText('Alex')).toBeInTheDocument()
-    expect(screen.getByText('CHI (5)')).toBeInTheDocument()
     expect(screen.getByText('Sam')).toBeInTheDocument()
-    expect(screen.getByText('GB (3)')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Close' }))
     expect(screen.queryByText('Alex')).not.toBeInTheDocument()
+  })
+
+  describe('game picks T-chart', () => {
+    const game = {
+      gameId: 'game-1',
+      awayTeam: 'CHI',
+      homeTeam: 'GB',
+      awayRecord: null,
+      homeRecord: null,
+      medianConfidence: 4,
+      teamCounts: [
+        { team: 'CHI', userCount: 2 },
+        { team: 'GB', userCount: 2 },
+      ],
+    }
+
+    async function openGame(picks: GamePicks['picks']) {
+      mockedFetchGamePicks.mockResolvedValue({
+        gameId: 'game-1',
+        awayTeam: 'CHI',
+        homeTeam: 'GB',
+        picks,
+      })
+      const user = userEvent.setup()
+      renderWithClient(<WeeklyPickBreakdown games={[game]} />)
+      await user.click(screen.getByRole('button', { name: 'View Picks' }))
+      await screen.findByRole('list', { name: 'CHI picks' })
+    }
+
+    function rowsOf(name: string) {
+      return within(screen.getByRole('list', { name }))
+        .getAllByRole('listitem')
+        .map((item) => item.textContent?.replace(/\s+/g, ' ').trim())
+    }
+
+    it('splits picks into a column per team, highest points first', async () => {
+      await openGame([
+        { memberName: 'Alex', team: 'CHI', confidence: 5, isCorrect: null },
+        { memberName: 'Sam', team: 'GB', confidence: 3, isCorrect: null },
+        { memberName: 'Jo', team: 'CHI', confidence: 9, isCorrect: null },
+        { memberName: 'Kim', team: 'GB', confidence: 7, isCorrect: null },
+      ])
+
+      expect(rowsOf('CHI picks')).toEqual(['Jo 9', 'Alex 5'])
+      expect(rowsOf('GB picks')).toEqual(['Kim 7', 'Sam 3'])
+    })
+
+    it('breaks equal points by member name', async () => {
+      await openGame([
+        { memberName: 'Zed', team: 'CHI', confidence: 4, isCorrect: null },
+        { memberName: 'Amy', team: 'CHI', confidence: 4, isCorrect: null },
+      ])
+
+      expect(rowsOf('CHI picks')).toEqual(['Amy 4', 'Zed 4'])
+    })
+
+    it('shows "No picks" for a team nobody picked', async () => {
+      await openGame([{ memberName: 'Alex', team: 'CHI', confidence: 5, isCorrect: null }])
+
+      expect(rowsOf('GB picks')).toEqual(['No picks'])
+    })
+
+    it('marks correct and wrong picks for screen readers, and leaves unscored picks plain', async () => {
+      await openGame([
+        { memberName: 'Alex', team: 'CHI', confidence: 5, isCorrect: true },
+        { memberName: 'Sam', team: 'GB', confidence: 3, isCorrect: false },
+        { memberName: 'Jo', team: 'CHI', confidence: 2, isCorrect: null },
+      ])
+
+      expect(rowsOf('CHI picks')).toEqual(['Alex 5 ✓ Correct', 'Jo 2'])
+      expect(rowsOf('GB picks')).toEqual(['Sam 3 ✗ Wrong'])
+    })
   })
 })

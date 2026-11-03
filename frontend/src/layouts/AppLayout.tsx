@@ -16,8 +16,8 @@ function navLinkClassName({ isActive }: { isActive: boolean }): string {
   return [
     'rounded-xl px-3 py-2 text-sm font-bold transition-colors duration-150',
     isActive
-      ? 'bg-primary text-white shadow-sm dark:bg-sky dev-dark:bg-accent orange-trim dev-dark:text-white'
-      : 'text-ink-muted hover:bg-surface-muted hover:text-primary dark:text-slate-300 dev-dark:text-text-secondary dark:hover:bg-slate-800 dev-dark:hover:bg-surface-hover dark:hover:text-white dev-dark:hover:text-ink',
+      ? 'bg-primary text-white shadow-sm dark:bg-night-accent orange-trim dev-dark:text-white'
+      : 'text-ink-muted hover:bg-surface-muted hover:text-primary dark:text-night-text dark:hover:bg-night-hover dark:hover:text-night-ink',
   ].join(' ')
 }
 
@@ -45,9 +45,9 @@ export function AppLayout() {
 
   return (
     <div className="flex min-h-screen flex-col">
-      <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/95 backdrop-blur dark:border-slate-800 dev-dark:border-border dark:bg-slate-950/95 dev-dark:bg-background/95">
-        <nav className="mx-auto flex max-w-5xl items-center gap-1 overflow-x-auto px-4 py-3">
-          <NavLink to="/" end className="mr-4 shrink-0" aria-label="NFL Confidence home">
+      <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/95 backdrop-blur dark:border-night-line dark:bg-night-page/95">
+        <nav className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-1 gap-y-2 px-4 py-3">
+          <NavLink to="/" end className="mr-2 shrink-0 sm:mr-4" aria-label="NFL Confidence home">
             <NflMark />
           </NavLink>
           {navLinks.map((link) => (
@@ -57,7 +57,7 @@ export function AppLayout() {
           ))}
           <span className="ml-auto flex shrink-0 items-center gap-3">
             {user && (
-              <span className="hidden max-w-32 truncate text-sm font-semibold text-ink-muted sm:inline dark:text-slate-300 dev-dark:text-text-secondary">
+              <span className="hidden max-w-32 truncate text-sm font-semibold text-ink-muted sm:inline dark:text-night-text">
                 {user.displayName}
               </span>
             )}
@@ -72,9 +72,10 @@ export function AppLayout() {
                 <Moon size={16} aria-hidden="true" />
               )}
             </Button>
-            <Button variant="quiet" onClick={() => void handleSignOut()}>
+            {/* Icon-only on phones so the nav never clips; the label stays for screen readers. */}
+            <Button variant="quiet" aria-label="Sign out" onClick={() => void handleSignOut()}>
               <LogOut size={16} aria-hidden="true" />
-              Sign out
+              <span className="hidden sm:inline">Sign out</span>
             </Button>
           </span>
         </nav>

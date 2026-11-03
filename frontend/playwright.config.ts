@@ -23,6 +23,10 @@ export default defineConfig({
       name: 'mobile-375',
       use: { ...devices['Desktop Chrome'], viewport: { width: 375, height: 667 } },
     },
+    {
+      name: 'desktop-1280',
+      use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 } },
+    },
   ],
   webServer: {
     command: 'npm run dev',

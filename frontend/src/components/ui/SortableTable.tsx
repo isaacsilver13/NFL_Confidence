@@ -23,7 +23,7 @@ export function SortableTh({
         type="button"
         onClick={() => sort.requestSort(columnKey)}
         aria-label={`Sort by ${label}`}
-        className="inline-flex items-center gap-1 font-bold uppercase hover:text-primary dark:hover:text-white dev-dark:hover:text-ink"
+        className="inline-flex items-center gap-1 font-bold uppercase hover:text-primary dark:hover:text-night-ink"
       >
         <span>{label}</span>
         <Icon size={14} aria-hidden="true" />

@@ -40,7 +40,7 @@ function Outcome({ pick }: { pick: HistoricalPick }) {
         ? 'text-danger'
         : pick.outcome === 'voided'
           ? 'text-gold'
-          : 'text-ink-muted dark:text-slate-400 dev-dark:text-text-muted'
+          : 'text-ink-muted dark:text-night-muted'
   return <span className={`font-bold ${color}`}>{OUTCOME_LABELS[pick.outcome]}</span>
 }
 
@@ -71,10 +71,10 @@ function HistoryTable({ picks }: { picks: HistoricalPick[] }) {
   }
 
   return (
-    <div className="w-fit max-w-full overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800 dev-dark:border-border">
+    <div className="w-fit max-w-full overflow-x-auto rounded-xl border border-slate-200 dark:border-night-line">
       <table className="w-max text-left text-sm">
         <caption className="sr-only">Your picks</caption>
-        <thead className="bg-surface-muted text-xs uppercase tracking-[0.14em] text-ink-muted dark:bg-slate-950 dev-dark:bg-background dark:text-slate-400 dev-dark:text-text-muted">
+        <thead className="bg-surface-muted text-xs uppercase tracking-[0.14em] text-ink-muted dark:bg-night-page dark:text-night-muted">
           <tr>
             <SortableHeader
               label="Kickoff"
@@ -122,10 +122,10 @@ function HistoryTable({ picks }: { picks: HistoricalPick[] }) {
             />
           </tr>
         </thead>
-        <tbody className="divide-y divide-slate-200 dark:divide-slate-800 dev-dark:divide-border">
+        <tbody className="divide-y divide-slate-200 dark:divide-night-line">
           {sortedPicks.map((pick) => (
             <tr key={pick.id}>
-              <td className="whitespace-nowrap px-3 py-2 text-xs text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
+              <td className="whitespace-nowrap px-3 py-2 text-xs text-ink-muted dark:text-night-muted">
                 {formatKickoff(pick.kickoff)}
               </td>
               <th scope="row" className="whitespace-nowrap px-3 py-2 font-semibold">
@@ -188,7 +188,7 @@ function SortableHeader({
         type="button"
         onClick={() => onSort(sortKey)}
         aria-label={`Sort by ${label}`}
-        className="inline-flex items-center gap-1 font-bold hover:text-primary dark:hover:text-white dev-dark:hover:text-ink"
+        className="inline-flex items-center gap-1 font-bold hover:text-primary dark:hover:text-night-ink"
       >
         <span>{label}</span>
         <Icon size={14} aria-hidden="true" />
@@ -286,39 +286,39 @@ function SeasonStats({
 
   return (
     <section
-      className="space-y-5 rounded-2xl border border-slate-200 bg-surface p-5 shadow-sm dark:border-slate-800 dev-dark:border-border dark:bg-slate-900 dev-dark:bg-surface-elevated"
+      className="space-y-5 rounded-2xl border border-slate-200 bg-surface p-5 shadow-sm dark:border-night-line dark:bg-night-card"
       aria-labelledby="season-stats-heading"
     >
       <div>
         <p className="text-xs font-bold uppercase tracking-[0.2em] text-accent">Season stats</p>
         <h2
           id="season-stats-heading"
-          className="mt-1 text-xl font-black text-primary dark:text-white dev-dark:text-ink"
+          className="mt-1 text-xl font-black text-primary dark:text-night-ink"
         >
           Your season so far
         </h2>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <div className="rounded-xl border border-slate-200 p-4 dark:border-slate-800 dev-dark:border-border">
-          <p className="text-xs font-bold uppercase tracking-[0.14em] text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
+        <div className="rounded-xl border border-slate-200 p-4 dark:border-night-line">
+          <p className="text-xs font-bold uppercase tracking-[0.14em] text-ink-muted dark:text-night-muted">
             Season win rate
           </p>
-          <p className="mt-1 text-2xl font-black text-primary dark:text-white dev-dark:text-ink">
+          <p className="mt-1 text-2xl font-black text-primary dark:text-night-ink">
             {formatWinRate(seasonWinRate)}
           </p>
-          <p className="text-xs text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
+          <p className="text-xs text-ink-muted dark:text-night-muted">
             {totalCorrect} of {totalScored} scored picks
           </p>
         </div>
-        <div className="rounded-xl border border-slate-200 p-4 dark:border-slate-800 dev-dark:border-border">
-          <p className="text-xs font-bold uppercase tracking-[0.14em] text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
+        <div className="rounded-xl border border-slate-200 p-4 dark:border-night-line">
+          <p className="text-xs font-bold uppercase tracking-[0.14em] text-ink-muted dark:text-night-muted">
             Average weekly points
           </p>
-          <p className="mt-1 text-2xl font-black text-primary dark:text-white dev-dark:text-ink">
+          <p className="mt-1 text-2xl font-black text-primary dark:text-night-ink">
             {averageWeeklyPoints?.toFixed(1) ?? '—'}
           </p>
-          <p className="text-xs text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
+          <p className="text-xs text-ink-muted dark:text-night-muted">
             {completedWeekNumbers
               ? `Across ${completedWeekStats.length} completed week${completedWeekStats.length === 1 ? '' : 's'}`
               : 'Completed-week average unavailable'}
@@ -327,7 +327,7 @@ function SeasonStats({
       </div>
 
       <div>
-        <p className="text-xs font-bold uppercase tracking-[0.14em] text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
+        <p className="text-xs font-bold uppercase tracking-[0.14em] text-ink-muted dark:text-night-muted">
           Win rate per week
         </p>
         <ul className="mt-2 space-y-1.5">
@@ -338,7 +338,7 @@ function SeasonStats({
             >
               <span className="whitespace-nowrap font-bold sm:w-16">Week {week.weekNumber}</span>
               <div
-                className="col-span-3 row-start-2 h-3 min-w-0 overflow-hidden rounded-full bg-surface-muted dark:bg-slate-800 dev-dark:bg-surface-hover sm:col-span-1 sm:row-start-auto"
+                className="col-span-3 row-start-2 h-3 min-w-0 overflow-hidden rounded-full bg-surface-muted dark:bg-night-hover sm:col-span-1 sm:row-start-auto"
                 role="img"
                 aria-label={`Week ${week.weekNumber}: ${formatWinRate(week.winRate)} win rate`}
               >
@@ -347,7 +347,7 @@ function SeasonStats({
                   style={{ width: `${(week.winRate ?? 0) * 100}%` }}
                 />
               </div>
-              <span className="shrink-0 text-right text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
+              <span className="shrink-0 text-right text-ink-muted dark:text-night-muted">
                 {week.correct}/{week.scoredPicks} correct · {formatWinRate(week.winRate)}
               </span>
               <span className="whitespace-nowrap text-right font-bold text-accent sm:w-16">
@@ -360,10 +360,10 @@ function SeasonStats({
 
       {confidenceHistogramData.length > 0 && (
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.14em] text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
+          <p className="text-xs font-bold uppercase tracking-[0.14em] text-ink-muted dark:text-night-muted">
             Confidence point histogram
           </p>
-          <p className="mt-1 text-xs text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
+          <p className="mt-1 text-xs text-ink-muted dark:text-night-muted">
             Success rate across scored picks; pending and voided picks are excluded.
           </p>
           <div
@@ -456,15 +456,12 @@ export function ProfilePage() {
     <div className="animate-fade-in space-y-6">
       <div>
         <p className="text-xs font-bold uppercase tracking-[0.2em] text-accent">Your record</p>
-        <h1 className="mt-2 flex items-center gap-2 text-3xl font-black tracking-tight text-primary dark:text-white dev-dark:text-ink">
+        <h1 className="mt-2 flex items-center gap-2 text-3xl font-black tracking-tight text-primary dark:text-night-ink">
           <UserRound className="text-sky dark:text-accent" size={25} aria-hidden="true" /> Profile
         </h1>
       </div>
       {historyQuery.isPending && (
-        <p
-          aria-live="polite"
-          className="text-slate-600 dark:text-slate-300 dev-dark:text-text-secondary"
-        >
+        <p aria-live="polite" className="text-slate-600 dark:text-night-text">
           Loading your pick history...
         </p>
       )}
@@ -476,10 +473,10 @@ export function ProfilePage() {
         </p>
       )}
       {historyQuery.data && historyQuery.data.weeks.length === 0 && (
-        <div className="rounded-2xl border border-slate-200 bg-surface p-8 text-center shadow-sm dark:border-slate-800 dev-dark:border-border dark:bg-slate-900 dev-dark:bg-surface-elevated">
+        <div className="rounded-2xl border border-slate-200 bg-surface p-8 text-center shadow-sm dark:border-night-line dark:bg-night-card">
           <UserRound className="mx-auto text-sky dark:text-accent" size={40} aria-hidden="true" />
           <h2 className="mt-4 text-xl font-bold">No picks submitted yet.</h2>
-          <p className="mt-2 text-slate-600 dark:text-slate-300 dev-dark:text-text-secondary">
+          <p className="mt-2 text-slate-600 dark:text-night-text">
             Your current and completed-week picks will appear here.
           </p>
         </div>
@@ -500,7 +497,7 @@ export function ProfilePage() {
             <div>
               <label
                 htmlFor="profile-week"
-                className="block text-xs font-bold uppercase tracking-[0.16em] text-ink-muted dark:text-slate-400 dev-dark:text-text-muted"
+                className="block text-xs font-bold uppercase tracking-[0.16em] text-ink-muted dark:text-night-muted"
               >
                 Review week
               </label>
@@ -508,7 +505,7 @@ export function ProfilePage() {
                 id="profile-week"
                 value={selectedWeekNumber ?? ''}
                 onChange={(event) => setRequestedWeek(Number(event.target.value))}
-                className="mt-2 min-h-11 rounded-xl border border-slate-300 bg-white px-3 text-sm font-bold text-ink dark:border-slate-700 dev-dark:border-border-hover dark:bg-slate-950 dev-dark:bg-background dark:text-slate-100 dev-dark:text-ink"
+                className="mt-2 min-h-11 rounded-xl border border-slate-300 bg-white px-3 text-sm font-bold text-ink dark:border-night-line-strong dark:bg-night-page dark:text-night-ink-soft"
               >
                 {availableWeeks.map((week) => (
                   <option key={week.weekNumber} value={week.weekNumber}>
@@ -519,7 +516,7 @@ export function ProfilePage() {
             </div>
             <h2
               id={`history-week-${selectedWeek.weekNumber}`}
-              className="text-xl font-black text-primary dark:text-white dev-dark:text-ink"
+              className="text-xl font-black text-primary dark:text-night-ink"
             >
               Week {selectedWeek.weekNumber}
             </h2>
