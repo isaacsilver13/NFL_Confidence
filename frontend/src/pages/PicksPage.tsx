@@ -684,6 +684,19 @@ function PicksScrollPane({ children }: { children: ReactNode }) {
   )
 }
 
+function NoPicksOpenYet() {
+  return (
+    <div className="animate-fade-in space-y-2">
+      <h1 className="text-3xl font-black text-primary dark:text-white dev-dark:text-ink">
+        No picks open yet
+      </h1>
+      <p className="text-slate-600 dark:text-slate-300 dev-dark:text-text-secondary">
+        Picks open once the next NFL week is loaded. Check back soon or ask your commissioner.
+      </p>
+    </div>
+  )
+}
+
 export function PicksPage() {
   const {
     data: picksCard,
@@ -703,6 +716,9 @@ export function PicksPage() {
       </p>
     )
 
+  // The server answers 404 between seasons / before the next week is loaded: not a failure.
+  if (error instanceof ApiError && error.status === 404) return <NoPicksOpenYet />
+
   if (error)
     return (
       <p className="animate-fade-in text-danger">
@@ -715,12 +731,7 @@ export function PicksPage() {
   const picks = picksCard?.picks
   const submission = picksCard?.submission
 
-  if (!week || !games || !picks || !submission)
-    return (
-      <p className="animate-fade-in text-slate-600 dark:text-slate-300 dev-dark:text-text-secondary">
-        No current week is available.
-      </p>
-    )
+  if (!week || !games || !picks || !submission) return <NoPicksOpenYet />
 
   if (games.length === 0)
     return (

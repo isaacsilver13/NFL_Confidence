@@ -46,8 +46,8 @@ export function AppLayout() {
   return (
     <div className="flex min-h-screen flex-col">
       <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/95 backdrop-blur dark:border-slate-800 dev-dark:border-border dark:bg-slate-950/95 dev-dark:bg-background/95">
-        <nav className="mx-auto flex max-w-5xl items-center gap-1 overflow-x-auto px-4 py-3">
-          <NavLink to="/" end className="mr-4 shrink-0" aria-label="NFL Confidence home">
+        <nav className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-1 gap-y-2 px-4 py-3">
+          <NavLink to="/" end className="mr-2 shrink-0 sm:mr-4" aria-label="NFL Confidence home">
             <NflMark />
           </NavLink>
           {navLinks.map((link) => (
@@ -72,9 +72,10 @@ export function AppLayout() {
                 <Moon size={16} aria-hidden="true" />
               )}
             </Button>
-            <Button variant="quiet" onClick={() => void handleSignOut()}>
+            {/* Icon-only on phones so the nav never clips; the label stays for screen readers. */}
+            <Button variant="quiet" aria-label="Sign out" onClick={() => void handleSignOut()}>
               <LogOut size={16} aria-hidden="true" />
-              Sign out
+              <span className="hidden sm:inline">Sign out</span>
             </Button>
           </span>
         </nav>

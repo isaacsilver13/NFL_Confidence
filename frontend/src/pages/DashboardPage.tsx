@@ -402,6 +402,9 @@ function DashboardHeader({ isCommissioner }: { isCommissioner: boolean }) {
           </h1>
         </div>
         <div className="flex flex-wrap items-center gap-3">
+          <Button onClick={() => void navigate('/picks')}>
+            Make picks <ArrowUpRight size={16} aria-hidden="true" />
+          </Button>
           {isCommissioner && (
             <Button
               variant="secondary"
@@ -416,9 +419,6 @@ function DashboardHeader({ isCommissioner }: { isCommissioner: boolean }) {
               {isRefreshing ? 'Refreshing...' : 'Refresh'}
             </Button>
           )}
-          <Button variant="secondary" onClick={() => void navigate('/picks')}>
-            Make picks <ArrowUpRight size={16} aria-hidden="true" />
-          </Button>
         </div>
       </div>
       {error && (

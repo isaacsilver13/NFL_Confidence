@@ -206,6 +206,18 @@ describe('DashboardPage league access', () => {
     expect(await screen.findByText('Refreshed 2 weeks.')).toBeInTheDocument()
   })
 
+  it('puts Make picks before Refresh for commissioners', async () => {
+    mockedFetchSessionBootstrap.mockResolvedValue(commissionerSession)
+    renderPage()
+
+    await screen.findByRole('button', { name: 'Refresh' })
+    const names = screen
+      .getAllByRole('button')
+      .map((button) => button.textContent?.trim())
+      .filter((name) => name === 'Refresh' || name?.startsWith('Make picks'))
+    expect(names).toEqual(['Make picks', 'Refresh'])
+  })
+
   it('disables Refresh while a refresh is running', async () => {
     const user = userEvent.setup()
     mockedFetchSessionBootstrap.mockResolvedValue(commissionerSession)
