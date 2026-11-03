@@ -5,7 +5,12 @@ import { fetchGamePicks } from '@/api/leaderboard'
 import { Button } from '@/components/ui/Button'
 import { TeamLogo } from '@/components/nfl/TeamLogo'
 import { getTeamPalette } from '@/components/nfl/teamPalette'
-import type { GamePickBreakdown, TeamPickCount } from '@/types/leaderboard'
+import type {
+  GamePickBreakdown,
+  GamePickDetail,
+  GamePicks,
+  TeamPickCount,
+} from '@/types/leaderboard'
 
 function GamePicksModal({ game, onClose }: { game: GamePickBreakdown; onClose: () => void }) {
   const closeRef = useRef<HTMLButtonElement>(null)
@@ -33,7 +38,7 @@ function GamePicksModal({ game, onClose }: { game: GamePickBreakdown; onClose: (
         aria-modal="true"
         aria-labelledby="game-picks-title"
         onClick={(event) => event.stopPropagation()}
-        className="w-full max-w-md rounded-2xl border border-slate-200 bg-surface p-5 shadow-lg dark:border-slate-800 dev-dark:border-border dark:bg-slate-900 dev-dark:bg-surface-elevated"
+        className="w-full max-w-lg rounded-2xl border border-slate-200 bg-surface p-5 shadow-lg dark:border-slate-800 dev-dark:border-border dark:bg-slate-900 dev-dark:bg-surface-elevated"
       >
         <div className="flex flex-wrap items-center justify-between gap-1">
           <h2
@@ -62,31 +67,76 @@ function GamePicksModal({ game, onClose }: { game: GamePickBreakdown; onClose: (
               No picks were submitted for this game.
             </p>
           )}
-          {data && data.picks.length > 0 && (
-            <ul className="divide-y divide-slate-200 dark:divide-slate-800 dev-dark:divide-border">
-              {data.picks.map((pick) => (
-                <li
-                  key={pick.memberName}
-                  className="flex flex-wrap items-center justify-between gap-1 py-2 text-sm"
-                >
-                  <span className="font-medium">{pick.memberName}</span>
-                  <span
-                    className={
-                      pick.isCorrect === true
-                        ? 'font-bold text-accent'
-                        : pick.isCorrect === false
-                          ? 'font-bold text-danger'
-                          : 'font-bold text-ink-muted dark:text-slate-400 dev-dark:text-text-muted'
-                    }
-                  >
-                    {pick.team} ({pick.confidence})
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
+          {data && data.picks.length > 0 && <GamePicksTChart data={data} />}
         </div>
       </div>
+    </div>
+  )
+}
+
+function sortSidePicks(picks: GamePickDetail[]): GamePickDetail[] {
+  return [...picks].sort(
+    (a, b) => b.confidence - a.confidence || a.memberName.localeCompare(b.memberName),
+  )
+}
+
+function TChartSide({ team, picks }: { team: string; picks: GamePickDetail[] }) {
+  return (
+    <div className="min-w-0">
+      <div className="sticky top-0 z-10 flex flex-wrap items-center justify-center gap-1.5 border-b-2 border-slate-300 bg-surface pb-2 text-sm font-black dark:border-slate-700 dev-dark:border-border-hover dark:bg-slate-900 dev-dark:bg-surface-elevated">
+        <TeamLogo code={team} size="sm" decorative />
+        <span>{team}</span>
+        <span className="text-xs font-semibold text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
+          {picks.length} {picks.length === 1 ? 'pick' : 'picks'}
+        </span>
+      </div>
+      <ol aria-label={`${team} picks`} className="mt-1">
+        {picks.length === 0 && (
+          <li className="py-2 text-center text-sm text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
+            No picks
+          </li>
+        )}
+        {picks.map((pick) => (
+          <li
+            key={pick.memberName}
+            className="flex items-baseline justify-between gap-2 py-2 text-sm"
+          >
+            <span className="min-w-0 break-words font-medium">{pick.memberName}</span>{' '}
+            <span
+              className={`shrink-0 font-bold ${
+                pick.isCorrect === true
+                  ? 'text-accent'
+                  : pick.isCorrect === false
+                    ? 'text-danger'
+                    : 'text-ink-muted dark:text-slate-400 dev-dark:text-text-muted'
+              }`}
+            >
+              {pick.confidence}
+              {pick.isCorrect !== null && (
+                <>
+                  <span aria-hidden="true"> {pick.isCorrect ? '✓' : '✗'}</span>
+                  <span className="sr-only"> {pick.isCorrect ? 'Correct' : 'Wrong'}</span>
+                </>
+              )}
+            </span>
+          </li>
+        ))}
+      </ol>
+    </div>
+  )
+}
+
+/** Away team on the left, home team on the right, each side highest points first. */
+function GamePicksTChart({ data }: { data: GamePicks }) {
+  return (
+    <div className="grid grid-cols-2 gap-x-4">
+      {[data.awayTeam, data.homeTeam].map((team) => (
+        <TChartSide
+          key={team}
+          team={team}
+          picks={sortSidePicks(data.picks.filter((pick) => pick.team === team))}
+        />
+      ))}
     </div>
   )
 }
