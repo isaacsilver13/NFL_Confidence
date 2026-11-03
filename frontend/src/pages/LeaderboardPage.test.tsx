@@ -239,7 +239,7 @@ describe('LeaderboardPage', () => {
     renderPage()
 
     const select = await screen.findByRole('combobox', { name: 'Week' })
-    expect(select).toHaveClass('dark:text-slate-100')
+    expect(select).toHaveClass('dark:text-night-ink-soft')
   })
 
   it("opens everyone's picks for the selected week in a popup, hidden without standings", async () => {

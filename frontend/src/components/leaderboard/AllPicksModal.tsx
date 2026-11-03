@@ -42,7 +42,7 @@ function MemberPicksTable({ data }: { data: AllPicks }) {
   return (
     <table className="w-full border-collapse text-sm">
       <thead>
-        <tr className="bg-surface-muted dark:bg-slate-900 dev-dark:bg-surface-elevated">
+        <tr className="bg-surface-muted dark:bg-night-card">
           <th scope="col" className="sticky top-0 px-3 py-2 text-left font-bold">
             Game
           </th>
@@ -53,10 +53,7 @@ function MemberPicksTable({ data }: { data: AllPicks }) {
       </thead>
       <tbody>
         {data.games.map((game) => (
-          <tr
-            key={game.id}
-            className="border-t border-slate-200 dark:border-slate-800 dev-dark:border-border"
-          >
+          <tr key={game.id} className="border-t border-slate-200 dark:border-night-line">
             <th scope="row" className="px-3 py-2 text-left font-semibold whitespace-nowrap">
               {game.awayTeam} @ {game.homeTeam}
             </th>
@@ -85,12 +82,12 @@ function PicksTable({ data }: { data: AllPicks }) {
       className={`w-full border-collapse text-sm ${data.games.length > 1 ? 'min-w-[640px]' : ''}`}
     >
       <thead>
-        <tr className="bg-surface-muted dark:bg-slate-900 dev-dark:bg-surface-elevated">
+        <tr className="bg-surface-muted dark:bg-night-card">
           <SortableTh
             label="Member"
             columnKey="member"
             sort={sort}
-            className="sticky left-0 z-10 bg-surface-muted px-3 py-2 dark:bg-slate-900 dev-dark:bg-surface-elevated"
+            className="sticky left-0 z-10 bg-surface-muted px-3 py-2 dark:bg-night-card"
           />
           {data.games.map((game) => (
             <SortableTh
@@ -108,11 +105,8 @@ function PicksTable({ data }: { data: AllPicks }) {
         {sort.sortedRows.map((member) => {
           const picksByGame = new Map(member.picks.map((pick) => [pick.gameId, pick]))
           return (
-            <tr
-              key={member.userId}
-              className="border-t border-slate-200 dark:border-slate-800 dev-dark:border-border"
-            >
-              <td className="sticky left-0 z-10 bg-surface px-3 py-2 font-semibold whitespace-nowrap dark:bg-slate-900 dev-dark:bg-surface-elevated">
+            <tr key={member.userId} className="border-t border-slate-200 dark:border-night-line">
+              <td className="sticky left-0 z-10 bg-surface px-3 py-2 font-semibold whitespace-nowrap dark:bg-night-card">
                 {member.displayName}
               </td>
               {data.games.map((game) => {
@@ -132,12 +126,12 @@ function EveryonePicks({ data }: { data: AllPicks }) {
   const games = gameId === 'all' ? data.games : data.games.filter((game) => game.id === gameId)
   return (
     <div className="space-y-3">
-      <label className="flex items-center gap-2 text-sm font-bold text-ink-muted dark:text-slate-300 dev-dark:text-text-secondary">
+      <label className="flex items-center gap-2 text-sm font-bold text-ink-muted dark:text-night-text">
         Show game
         <select
           value={gameId}
           onChange={(event) => setGameId(event.target.value)}
-          className="min-h-11 rounded-xl border border-slate-300 bg-surface px-3 text-ink dark:border-slate-700 dev-dark:border-border-hover dark:bg-slate-900 dev-dark:bg-surface-elevated dark:text-slate-100 dev-dark:text-ink"
+          className="min-h-11 rounded-xl border border-slate-300 bg-surface px-3 text-ink dark:border-night-line-strong dark:bg-night-card dark:text-night-ink-soft"
         >
           <option value="all">All games</option>
           {data.games.map((game) => (
@@ -194,13 +188,10 @@ export function AllPicksModal({
         aria-modal="true"
         aria-labelledby="all-picks-title"
         onClick={(event) => event.stopPropagation()}
-        className={`w-full ${member ? 'max-w-md' : 'max-w-4xl'} rounded-2xl border border-slate-200 bg-surface p-5 shadow-lg dark:border-slate-800 dev-dark:border-border dark:bg-slate-900 dev-dark:bg-surface-elevated`}
+        className={`w-full ${member ? 'max-w-md' : 'max-w-4xl'} rounded-2xl border border-slate-200 bg-surface p-5 shadow-lg dark:border-night-line dark:bg-night-card`}
       >
         <div className="flex items-center justify-between gap-3">
-          <h2
-            id="all-picks-title"
-            className="text-lg font-black text-primary dark:text-white dev-dark:text-ink"
-          >
+          <h2 id="all-picks-title" className="text-lg font-black text-primary dark:text-night-ink">
             {member ? `${member.name}'s picks` : "Everyone's picks"} — Week {week}
           </h2>
           <Button ref={closeRef} type="button" variant="quiet" onClick={onClose}>
@@ -209,7 +200,7 @@ export function AllPicksModal({
         </div>
         <div className="mt-4 max-h-[70vh] overflow-auto">
           {isPending && (
-            <p className="text-sm text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
+            <p className="text-sm text-ink-muted dark:text-night-muted">
               {member ? 'Loading picks…' : 'Loading everyone’s picks…'}
             </p>
           )}

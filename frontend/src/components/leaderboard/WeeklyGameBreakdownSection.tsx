@@ -4,7 +4,7 @@ import { fetchPickBreakdown } from '@/api/leaderboard'
 import { fetchStartedWeeks } from '@/api/nfl'
 import { WeeklyPickBreakdown } from '@/components/leaderboard/WeeklyPickBreakdown'
 
-const mutedText = 'text-sm text-ink-muted dark:text-slate-400 dev-dark:text-text-muted'
+const mutedText = 'text-sm text-ink-muted dark:text-night-muted'
 
 export function WeeklyGameBreakdownSection() {
   const [week, setWeek] = useState<number>()
@@ -31,17 +31,17 @@ export function WeeklyGameBreakdownSection() {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.2em] text-accent">League picks</p>
-          <h1 className="mt-2 text-3xl font-black tracking-tight text-primary dark:text-white dev-dark:text-ink">
+          <h1 className="mt-2 text-3xl font-black tracking-tight text-primary dark:text-night-ink">
             Weekly Game Breakdown
           </h1>
         </div>
         {weekNumbers.length > 0 && (
-          <label className="flex items-center gap-3 text-sm font-bold text-ink-muted dark:text-slate-300 dev-dark:text-text-secondary">
+          <label className="flex items-center gap-3 text-sm font-bold text-ink-muted dark:text-night-text">
             Week
             <select
               value={selectedWeek ?? ''}
               onChange={(event) => setWeek(Number(event.target.value))}
-              className="min-h-11 rounded-xl border border-slate-300 bg-surface px-3 text-ink shadow-sm dark:border-slate-700 dev-dark:border-border-hover dark:bg-slate-900 dev-dark:bg-surface-elevated dark:text-slate-100 dev-dark:text-ink"
+              className="min-h-11 rounded-xl border border-slate-300 bg-surface px-3 text-ink shadow-sm dark:border-night-line-strong dark:bg-night-card dark:text-night-ink-soft"
             >
               {weekNumbers.map((weekNumber) => (
                 <option key={weekNumber} value={weekNumber}>

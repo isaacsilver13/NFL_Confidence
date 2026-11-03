@@ -48,17 +48,17 @@ export function ConfirmDialog({
         aria-labelledby="confirm-dialog-title"
         aria-describedby="confirm-dialog-description"
         onClick={(event) => event.stopPropagation()}
-        className="w-full max-w-sm rounded-2xl border border-slate-200 bg-surface p-5 shadow-lg dark:border-slate-800 dev-dark:border-border dark:bg-slate-900 dev-dark:bg-surface-elevated"
+        className="w-full max-w-sm rounded-2xl border border-slate-200 bg-surface p-5 shadow-lg dark:border-night-line dark:bg-night-card"
       >
         <h2
           id="confirm-dialog-title"
-          className="text-lg font-black text-primary dark:text-white dev-dark:text-ink"
+          className="text-lg font-black text-primary dark:text-night-ink"
         >
           {title}
         </h2>
         <p
           id="confirm-dialog-description"
-          className="mt-2 text-sm text-slate-600 dark:text-slate-300 dev-dark:text-text-secondary"
+          className="mt-2 text-sm text-slate-600 dark:text-night-text"
         >
           {description}
         </p>

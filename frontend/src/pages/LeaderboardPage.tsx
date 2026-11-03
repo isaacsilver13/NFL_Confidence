@@ -40,8 +40,8 @@ function formatPicksRemaining(picks: MemberGamePick[]): string {
 const CELL = 'px-3 py-4 sm:px-5'
 const STICKY_RANK = 'sticky left-0 z-10 w-14 min-w-14 px-3 sm:w-16 sm:min-w-16 sm:px-5'
 const STICKY_MEMBER = 'sticky left-14 z-10 min-w-28 px-3 sm:left-16 sm:px-5'
-const STICKY_HEAD_BG = 'bg-surface-muted dark:bg-slate-950 dev-dark:bg-background'
-const STICKY_BODY_BG = 'bg-surface dark:bg-slate-900 dev-dark:bg-surface-elevated'
+const STICKY_HEAD_BG = 'bg-surface-muted dark:bg-night-page'
+const STICKY_BODY_BG = 'bg-surface dark:bg-night-card'
 
 function LeaderboardTable({
   standings,
@@ -75,10 +75,10 @@ function LeaderboardTable({
   })
   return (
     <div className="space-y-2">
-      <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-surface shadow-sm dark:border-slate-800 dev-dark:border-border dark:bg-slate-900 dev-dark:bg-surface-elevated">
+      <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-surface shadow-sm dark:border-night-line dark:bg-night-card">
         <table className="w-full min-w-[600px] text-left text-sm">
           <caption className="sr-only">Weekly leaderboard rankings</caption>
-          <thead className="bg-surface-muted text-xs uppercase tracking-[0.14em] text-ink-muted dark:bg-slate-950 dev-dark:bg-background dark:text-slate-400 dev-dark:text-text-muted">
+          <thead className="bg-surface-muted text-xs uppercase tracking-[0.14em] text-ink-muted dark:bg-night-page dark:text-night-muted">
             <tr>
               <SortableTh
                 label="Rank"
@@ -131,7 +131,7 @@ function LeaderboardTable({
               )}
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-200 dark:divide-slate-800 dev-dark:divide-border">
+          <tbody className="divide-y divide-slate-200 dark:divide-night-line">
             {sort.sortedRows.map((member) => (
               <tr
                 key={member.memberId}
@@ -141,7 +141,7 @@ function LeaderboardTable({
               >
                 <th
                   scope="row"
-                  className={`${STICKY_RANK} ${STICKY_BODY_BG} py-4 font-black text-primary dark:text-white dev-dark:text-ink`}
+                  className={`${STICKY_RANK} ${STICKY_BODY_BG} py-4 font-black text-primary dark:text-night-ink`}
                 >
                   {member.rank}
                 </th>
@@ -180,7 +180,7 @@ function LeaderboardTable({
         </table>
       </div>
       {showEliminated && standings.some((member) => member.isEliminated) && (
-        <p className="text-xs text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
+        <p className="text-xs text-ink-muted dark:text-night-muted">
           Eliminated: can no longer finish in the top 3, whatever the remaining games do.
         </p>
       )}
@@ -226,7 +226,7 @@ export function LeaderboardPage({
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.2em] text-accent">Weekly race</p>
-          <h1 className="mt-2 flex items-center gap-2 text-3xl font-black tracking-tight text-primary dark:text-white dev-dark:text-ink">
+          <h1 className="mt-2 flex items-center gap-2 text-3xl font-black tracking-tight text-primary dark:text-night-ink">
             <Trophy className="text-gold" size={25} aria-hidden="true" /> Weekly Leaderboard
           </h1>
           <LastRefreshed className="mt-1" />
@@ -242,7 +242,7 @@ export function LeaderboardPage({
               See possible finishes
             </Button>
           )}
-          <label className="flex items-center gap-3 text-sm font-bold text-ink-muted dark:text-slate-300 dev-dark:text-text-secondary">
+          <label className="flex items-center gap-3 text-sm font-bold text-ink-muted dark:text-night-text">
             Week
             <select
               value={selectedWeek ?? ''}
@@ -251,7 +251,7 @@ export function LeaderboardPage({
                 setWeek(nextWeek)
                 onWeekChange?.(nextWeek)
               }}
-              className="min-h-11 rounded-xl border border-slate-300 bg-surface px-3 text-ink shadow-sm dark:border-slate-700 dev-dark:border-border-hover dark:bg-slate-900 dev-dark:bg-surface-elevated dark:text-slate-100 dev-dark:text-ink"
+              className="min-h-11 rounded-xl border border-slate-300 bg-surface px-3 text-ink shadow-sm dark:border-night-line-strong dark:bg-night-card dark:text-night-ink-soft"
             >
               {weekOptions.map(({ weekNumber, isCurrent }) => (
                 <option key={weekNumber} value={weekNumber}>
@@ -278,15 +278,10 @@ export function LeaderboardPage({
       )}
 
       {selectedWeek === undefined && !weeksQuery.isPending && !currentWeekQuery.isPending && (
-        <p className="text-slate-600 dark:text-slate-300 dev-dark:text-text-secondary">
-          No weeks available yet.
-        </p>
+        <p className="text-slate-600 dark:text-night-text">No weeks available yet.</p>
       )}
       {selectedWeek !== undefined && query.isPending && (
-        <p
-          className="text-slate-600 dark:text-slate-300 dev-dark:text-text-secondary"
-          aria-live="polite"
-        >
+        <p className="text-slate-600 dark:text-night-text" aria-live="polite">
           Loading weekly results...
         </p>
       )}
@@ -298,9 +293,7 @@ export function LeaderboardPage({
         </p>
       )}
       {query.data && query.data.standings.length === 0 && (
-        <p className="text-slate-600 dark:text-slate-300 dev-dark:text-text-secondary">
-          No completed results for this week.
-        </p>
+        <p className="text-slate-600 dark:text-night-text">No completed results for this week.</p>
       )}
       {query.data && query.data.standings.length > 0 && (
         <LeaderboardTable

@@ -313,9 +313,9 @@ function GamesForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="-mx-1 space-y-2 rounded-2xl border border-slate-200 bg-surface/95 px-4 py-2 shadow-sm dark:border-slate-800 dev-dark:border-border dark:bg-slate-900/95 dev-dark:bg-surface-elevated/95 sm:mx-0 sm:space-y-3 sm:py-3">
+      <div className="-mx-1 space-y-2 rounded-2xl border border-slate-200 bg-surface/95 px-4 py-2 shadow-sm dark:border-night-line dark:bg-night-card/95 sm:mx-0 sm:space-y-3 sm:py-3">
         <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3">
-          <p className="text-sm font-black text-primary dark:text-white dev-dark:text-ink sm:text-lg">
+          <p className="text-sm font-black text-primary dark:text-night-ink sm:text-lg">
             {pickedCount} of {games.length} picked
           </p>
           <div className="flex items-center gap-2">
@@ -333,7 +333,7 @@ function GamesForm({
                 type="button"
                 onClick={handleSubmitPicks}
                 disabled={!canSubmit}
-                className="rounded-xl bg-primary px-3 py-1.5 text-xs font-black text-white transition-colors disabled:cursor-not-allowed disabled:opacity-40 dark:bg-sky dev-dark:bg-accent dark:text-white sm:px-4 sm:py-2 sm:text-sm"
+                className="rounded-xl bg-primary px-3 py-1.5 text-xs font-black text-white transition-colors disabled:cursor-not-allowed disabled:opacity-40 dark:bg-night-accent dark:text-white sm:px-4 sm:py-2 sm:text-sm"
               >
                 {submitMutation.isPending
                   ? 'Submitting…'
@@ -350,7 +350,7 @@ function GamesForm({
           aria-valuemin={0}
           aria-valuemax={games.length}
           aria-valuenow={pickedCount}
-          className="h-1.5 overflow-hidden rounded-full bg-surface-muted dark:bg-slate-800 dev-dark:bg-surface-hover sm:h-2"
+          className="h-1.5 overflow-hidden rounded-full bg-surface-muted dark:bg-night-hover sm:h-2"
         >
           <div
             className={`h-full rounded-full transition-[width] ${hasConflicts ? 'bg-danger' : 'bg-accent'}`}
@@ -359,7 +359,7 @@ function GamesForm({
         </div>
         <p
           role="status"
-          className={`text-xs font-semibold sm:text-sm ${submission.submittedAt ? 'text-accent' : 'text-ink-muted dark:text-slate-400 dev-dark:text-text-muted'}`}
+          className={`text-xs font-semibold sm:text-sm ${submission.submittedAt ? 'text-accent' : 'text-ink-muted dark:text-night-muted'}`}
         >
           {submission.submittedAt
             ? `Submitted ${formatSubmittedAt(submission.submittedAt)}`
@@ -378,7 +378,7 @@ function GamesForm({
                 key={value}
                 role="listitem"
                 aria-label={`Confidence ${value}${usedBy.length ? ' used' : ' available'}${isConflict ? ', conflict' : ''}`}
-                className={`inline-flex h-6 min-w-6 shrink-0 items-center justify-center gap-0.5 rounded-md border px-1 text-[11px] font-bold sm:h-7 sm:min-w-7 sm:px-1.5 sm:text-xs ${isConflict ? 'border-danger bg-danger/10 text-danger' : usedBy.length ? 'border-slate-300 bg-surface-muted text-ink-muted line-through dark:border-slate-700 dev-dark:border-border-hover dark:bg-slate-950 dev-dark:bg-background dark:text-slate-500 dev-dark:text-text-muted' : 'border-accent/40 bg-accent/5 text-accent'}`}
+                className={`inline-flex h-6 min-w-6 shrink-0 items-center justify-center gap-0.5 rounded-md border px-1 text-[11px] font-bold sm:h-7 sm:min-w-7 sm:px-1.5 sm:text-xs ${isConflict ? 'border-danger bg-danger/10 text-danger' : usedBy.length ? 'border-slate-300 bg-surface-muted text-ink-muted line-through dark:border-night-line-strong dark:bg-night-page dark:text-night-faint' : 'border-accent/40 bg-accent/5 text-accent'}`}
               >
                 {usedBy.length > 0 && <Check size={11} aria-hidden="true" />}
                 {value}
@@ -387,16 +387,16 @@ function GamesForm({
           })}
         </div>
       </div>
-      <div className="flex flex-wrap items-end justify-between gap-3 border-b border-slate-200 pb-5 dark:border-slate-800 dev-dark:border-border">
+      <div className="flex flex-wrap items-end justify-between gap-3 border-b border-slate-200 pb-5 dark:border-night-line">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.2em] text-accent">
             {week.status} season {week.season}
           </p>
-          <h1 className="mt-2 text-3xl font-black tracking-tight text-primary dark:text-white dev-dark:text-ink">
+          <h1 className="mt-2 text-3xl font-black tracking-tight text-primary dark:text-night-ink">
             Week {week.weekNumber} picks
           </h1>
         </div>
-        <div className="text-right text-sm text-slate-600 dark:text-slate-300 dev-dark:text-text-secondary">
+        <div className="text-right text-sm text-slate-600 dark:text-night-text">
           <p>Use each confidence value from 1 to {games.length} once.</p>
           {(week.locksAt || isLocked) && (
             <p className={isLocked ? 'font-bold text-danger' : 'font-semibold text-accent'}>
@@ -467,15 +467,15 @@ function GamesForm({
             key={game.id}
             id={`game-${game.id}`}
             data-testid={`pick-card-${game.id}`}
-            className={`animate-slide-up overflow-hidden rounded-2xl border bg-surface shadow-sm transition-shadow hover:shadow-md dark:bg-slate-900 dev-dark:bg-surface-elevated ${isConflicting ? 'border-danger bg-danger/5 dark:border-danger' : isPicked ? 'border-accent/70 bg-accent/5 dark:border-accent/70' : 'border-slate-200 dark:border-slate-800 dev-dark:border-border'}`}
+            className={`animate-slide-up overflow-hidden rounded-2xl border bg-surface shadow-sm transition-shadow hover:shadow-md dark:bg-night-card ${isConflicting ? 'border-danger bg-danger/5 dark:border-danger' : isPicked ? 'border-accent/70 bg-accent/5 dark:border-accent/70' : 'border-slate-200 dark:border-night-line'}`}
           >
             <legend className="sr-only">
               {game.awayTeam} at {game.homeTeam}
             </legend>
-            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-slate-200 bg-surface-muted/60 px-3 py-2 text-xs dark:border-slate-800 dev-dark:border-border dark:bg-slate-950/50">
-              <p className="font-semibold uppercase tracking-[0.14em] text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
+            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-slate-200 bg-surface-muted/60 px-3 py-2 text-xs dark:border-night-line dark:bg-slate-950/50">
+              <p className="font-semibold uppercase tracking-[0.14em] text-ink-muted dark:text-night-muted">
                 {formatKickoff(game.kickoff)} · {game.status}
-                <span className="normal-case tracking-normal text-ink-muted/80 dark:text-slate-500 dev-dark:text-text-muted">
+                <span className="normal-case tracking-normal text-ink-muted/80 dark:text-night-faint">
                   {' '}
                   · {game.venueName ?? 'Venue unavailable'}
                   {game.venueLocation && ` · ${game.venueLocation}`} · Line:{' '}
@@ -486,7 +486,7 @@ function GamesForm({
               </p>
               <span
                 style={draft.team && !isConflicting ? getTeamSelectionStyle(draft.team) : undefined}
-                className={`inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs font-black uppercase tracking-[0.12em] ${isConflicting ? 'text-danger' : 'text-ink-muted dark:text-slate-400 dev-dark:text-text-muted'}`}
+                className={`inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs font-black uppercase tracking-[0.12em] ${isConflicting ? 'text-danger' : 'text-ink-muted dark:text-night-muted'}`}
               >
                 {isConflicting ? (
                   <AlertTriangle size={13} aria-hidden="true" />
@@ -514,7 +514,7 @@ function GamesForm({
                     {game.awayRecord && (
                       <span
                         data-testid={`team-record-${game.id}-away`}
-                        className="text-xs font-semibold text-ink-muted dark:text-slate-400 dev-dark:text-text-muted"
+                        className="text-xs font-semibold text-ink-muted dark:text-night-muted"
                       >
                         ({game.awayRecord})
                       </span>
@@ -522,15 +522,15 @@ function GamesForm({
                   </div>
                   {game.status === 'final' ? (
                     <div className="flex flex-col items-center">
-                      <span className="text-sm font-black text-primary dark:text-white dev-dark:text-ink">
+                      <span className="text-sm font-black text-primary dark:text-night-ink">
                         {game.awayScore ?? 0}–{game.homeScore ?? 0}
                       </span>
-                      <span className="text-xs font-bold uppercase tracking-[0.08em] text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
+                      <span className="text-xs font-bold uppercase tracking-[0.08em] text-ink-muted dark:text-night-muted">
                         {game.isTie ? 'Final · Tie' : 'Final'}
                       </span>
                     </div>
                   ) : (
-                    <span className="text-sm font-semibold text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
+                    <span className="text-sm font-semibold text-ink-muted dark:text-night-muted">
                       at
                     </span>
                   )}
@@ -545,7 +545,7 @@ function GamesForm({
                     {game.homeRecord && (
                       <span
                         data-testid={`team-record-${game.id}-home`}
-                        className="text-xs font-semibold text-ink-muted dark:text-slate-400 dev-dark:text-text-muted"
+                        className="text-xs font-semibold text-ink-muted dark:text-night-muted"
                       >
                         ({game.homeRecord})
                       </span>
@@ -555,7 +555,7 @@ function GamesForm({
               </div>
               <div className="flex flex-col gap-3 sm:items-end lg:flex-row lg:items-center lg:gap-6">
                 <div>
-                  <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
+                  <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-muted dark:text-night-muted">
                     Pick a winner
                   </p>
                   <div
@@ -573,7 +573,7 @@ function GamesForm({
                           disabled={isLocked}
                           onClick={() => updateDraft(game.id, { team: isSelected ? '' : team })}
                           style={isSelected ? getTeamSelectionStyle(team) : undefined}
-                          className={`flex min-h-11 items-center gap-2 rounded-xl border px-3 py-2 text-sm font-bold transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-60 ${isSelected ? 'ring-2 ring-current ring-offset-2 ring-offset-surface shadow-sm' : 'border-slate-300 bg-white text-ink hover:border-sky hover:bg-sky/10 dark:border-slate-700 dev-dark:border-border-hover dark:bg-slate-950 dev-dark:bg-background dark:text-slate-100 dev-dark:text-ink dark:hover:border-sky dev-dark:hover:border-accent'}`}
+                          className={`flex min-h-11 items-center gap-2 rounded-xl border px-3 py-2 text-sm font-bold transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-60 ${isSelected ? 'ring-2 ring-current ring-offset-2 ring-offset-surface shadow-sm' : 'border-slate-300 bg-white text-ink hover:border-sky hover:bg-sky/10 dark:border-night-line-strong dark:bg-night-page dark:text-night-ink-soft dark:hover:border-night-accent'}`}
                         >
                           <TeamLogo code={team} size="sm" decorative />
                           {team}
@@ -583,7 +583,7 @@ function GamesForm({
                   </div>
                 </div>
                 <div>
-                  <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
+                  <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-muted dark:text-night-muted">
                     Confidence
                   </p>
                   <div
@@ -611,7 +611,7 @@ function GamesForm({
                               confidence: isSelected ? '' : String(value),
                             })
                           }
-                          className={`flex h-11 w-11 items-center justify-center rounded-xl border text-sm font-bold transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-60 ${isSelected ? 'border-gold bg-gold text-white shadow-sm' : isUsedElsewhere ? 'border-gold/60 bg-gold/10 text-gold hover:bg-gold/20' : 'border-slate-300 bg-white text-ink hover:border-gold hover:bg-gold/10 dark:border-slate-700 dev-dark:border-border-hover dark:bg-slate-950 dev-dark:bg-background dark:text-slate-100 dev-dark:text-ink'}`}
+                          className={`flex h-11 w-11 items-center justify-center rounded-xl border text-sm font-bold transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-60 ${isSelected ? 'border-gold bg-gold text-white shadow-sm' : isUsedElsewhere ? 'border-gold/60 bg-gold/10 text-gold hover:bg-gold/20' : 'border-slate-300 bg-white text-ink hover:border-gold hover:bg-gold/10 dark:border-night-line-strong dark:bg-night-page dark:text-night-ink-soft'}`}
                         >
                           {value}
                         </button>
@@ -626,12 +626,9 @@ function GamesForm({
       })}
 
       {(saveMutation.isPending || (saved && (hasConflicts || voided)) || submitError) && (
-        <div className="sticky bottom-3 z-10 -mx-1 flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-surface/95 p-3 shadow-lg shadow-primary/10 backdrop-blur sm:static sm:mx-0 sm:border-0 sm:bg-transparent sm:p-0 sm:shadow-none sm:backdrop-blur-none dark:border-slate-800 dev-dark:border-border dark:bg-slate-900/95 dev-dark:bg-surface-elevated/95 sm:dark:bg-transparent">
+        <div className="sticky bottom-3 z-10 -mx-1 flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-surface/95 p-3 shadow-lg shadow-primary/10 backdrop-blur sm:static sm:mx-0 sm:border-0 sm:bg-transparent sm:p-0 sm:shadow-none sm:backdrop-blur-none dark:border-night-line dark:bg-night-card/95 sm:dark:bg-transparent">
           {saveMutation.isPending && (
-            <p
-              role="status"
-              className="text-sm font-semibold text-ink-muted dark:text-slate-400 dev-dark:text-text-muted"
-            >
+            <p role="status" className="text-sm font-semibold text-ink-muted dark:text-night-muted">
               Saving…
             </p>
           )}
@@ -687,10 +684,8 @@ function PicksScrollPane({ children }: { children: ReactNode }) {
 function NoPicksOpenYet() {
   return (
     <div className="animate-fade-in space-y-2">
-      <h1 className="text-3xl font-black text-primary dark:text-white dev-dark:text-ink">
-        No picks open yet
-      </h1>
-      <p className="text-slate-600 dark:text-slate-300 dev-dark:text-text-secondary">
+      <h1 className="text-3xl font-black text-primary dark:text-night-ink">No picks open yet</h1>
+      <p className="text-slate-600 dark:text-night-text">
         Picks open once the next NFL week is loaded. Check back soon or ask your commissioner.
       </p>
     </div>
@@ -711,7 +706,7 @@ export function PicksPage() {
 
   if (isPending)
     return (
-      <p className="animate-fade-in text-slate-600 dark:text-slate-300 dev-dark:text-text-secondary">
+      <p className="animate-fade-in text-slate-600 dark:text-night-text">
         Loading this week&apos;s games…
       </p>
     )
@@ -736,12 +731,10 @@ export function PicksPage() {
   if (games.length === 0)
     return (
       <div className="animate-fade-in space-y-2">
-        <h1 className="text-3xl font-black text-primary dark:text-white dev-dark:text-ink">
+        <h1 className="text-3xl font-black text-primary dark:text-night-ink">
           Week {week.weekNumber}
         </h1>
-        <p className="text-slate-600 dark:text-slate-300 dev-dark:text-text-secondary">
-          No games are scheduled for this week.
-        </p>
+        <p className="text-slate-600 dark:text-night-text">No games are scheduled for this week.</p>
       </div>
     )
 

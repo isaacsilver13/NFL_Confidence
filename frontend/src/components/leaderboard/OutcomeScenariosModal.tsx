@@ -17,7 +17,7 @@ function ScenariosTable({ data }: { data: OutcomeScenarios }) {
   return (
     <table className="w-full min-w-[760px] text-left text-sm">
       <caption className="sr-only">Possible first, second, and third place finishes</caption>
-      <thead className="bg-surface-muted text-xs uppercase tracking-[0.14em] text-ink-muted dark:bg-slate-950 dev-dark:bg-background dark:text-slate-400 dev-dark:text-text-muted">
+      <thead className="bg-surface-muted text-xs uppercase tracking-[0.14em] text-ink-muted dark:bg-night-page dark:text-night-muted">
         <tr>
           <th scope="col" className="px-4 py-3 font-bold">
             Sunday night winner
@@ -36,7 +36,7 @@ function ScenariosTable({ data }: { data: OutcomeScenarios }) {
           </th>
         </tr>
       </thead>
-      <tbody className="divide-y divide-slate-200 dark:divide-slate-800 dev-dark:divide-border">
+      <tbody className="divide-y divide-slate-200 dark:divide-night-line">
         {data.scenarios.map((scenario: OutcomeScenario) => (
           <tr key={`${scenario.sundayWinner}-${scenario.mondayWinner}`}>
             <td className="px-4 py-3 font-semibold">{scenario.sundayWinner} wins</td>
@@ -79,18 +79,18 @@ export function OutcomeScenariosModal({ week, onClose }: { week: number; onClose
         aria-modal="true"
         aria-labelledby="outcome-scenarios-title"
         onClick={(event) => event.stopPropagation()}
-        className="w-full max-w-5xl rounded-2xl border border-slate-200 bg-surface p-5 shadow-lg dark:border-slate-800 dev-dark:border-border dark:bg-slate-900 dev-dark:bg-surface-elevated"
+        className="w-full max-w-5xl rounded-2xl border border-slate-200 bg-surface p-5 shadow-lg dark:border-night-line dark:bg-night-card"
       >
         <div className="flex items-center justify-between gap-3">
           <div>
             <h2
               id="outcome-scenarios-title"
-              className="text-lg font-black text-primary dark:text-white dev-dark:text-ink"
+              className="text-lg font-black text-primary dark:text-night-ink"
             >
               Possible finishes — Week {week}
             </h2>
             {data && (
-              <p className="mt-1 text-sm text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
+              <p className="mt-1 text-sm text-ink-muted dark:text-night-muted">
                 {gameLabel(data.sundayGame)} and {gameLabel(data.mondayGame)}
               </p>
             )}
@@ -101,7 +101,7 @@ export function OutcomeScenariosModal({ week, onClose }: { week: number; onClose
         </div>
         <div className="mt-4 max-h-[70vh] overflow-auto">
           {isPending && (
-            <p className="text-sm text-ink-muted dark:text-slate-400 dev-dark:text-text-muted">
+            <p className="text-sm text-ink-muted dark:text-night-muted">
               Calculating possible finishes…
             </p>
           )}
