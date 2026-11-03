@@ -121,7 +121,7 @@ describe('LeaderboardPage', () => {
     expect(mockedFetchWeeklyLeaderboard).not.toHaveBeenCalled()
   })
 
-  it('shows Rank, Member, Correct, Points, Points Left, and Max Points columns in that order', async () => {
+  it('shows Rank, Member, Points, Correct, Points Left, and Max Points columns in that order', async () => {
     mockedFetchStartedWeeks.mockResolvedValue([])
     mockedFetchCurrentWeek.mockResolvedValue(currentWeek)
     mockedFetchWeeklyLeaderboard.mockResolvedValue({
@@ -153,7 +153,7 @@ describe('LeaderboardPage', () => {
 
     await screen.findByText('Owner')
     const headers = screen.getAllByRole('columnheader').map((header) => header.textContent)
-    expect(headers).toEqual(['Rank', 'Member', 'Correct', 'Points', 'Points Left', 'Max Points'])
+    expect(headers).toEqual(['Rank', 'Member', 'Points', 'Correct', 'Points Left', 'Max Points'])
   })
 
   it('adds one SNF/MNF column listing the night-game picks per member', async () => {
@@ -216,8 +216,8 @@ describe('LeaderboardPage', () => {
     expect(headers).toEqual([
       'Rank',
       'Member',
-      'Correct',
       'Points',
+      'Correct',
       'Points Left',
       'Max Points',
       'SNF/MNF',

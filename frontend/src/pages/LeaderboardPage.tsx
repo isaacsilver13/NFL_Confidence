@@ -35,6 +35,14 @@ function formatPicksRemaining(picks: MemberGamePick[]): string {
   return formatted.length > 0 ? formatted.join(', ') : '—'
 }
 
+// Rank and Member stay pinned while the wide table scrolls, so Points (third) is always
+// visible on a phone. Pinned cells need opaque backgrounds to cover what scrolls under them.
+const CELL = 'px-3 py-4 sm:px-5'
+const STICKY_RANK = 'sticky left-0 z-10 w-14 min-w-14 px-3 sm:w-16 sm:min-w-16 sm:px-5'
+const STICKY_MEMBER = 'sticky left-14 z-10 min-w-28 px-3 sm:left-16 sm:px-5'
+const STICKY_HEAD_BG = 'bg-surface-muted dark:bg-slate-950 dev-dark:bg-background'
+const STICKY_BODY_BG = 'bg-surface dark:bg-slate-900 dev-dark:bg-surface-elevated'
+
 function LeaderboardTable({
   standings,
   nightGames,
@@ -68,23 +76,57 @@ function LeaderboardTable({
   return (
     <div className="space-y-2">
       <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-surface shadow-sm dark:border-slate-800 dev-dark:border-border dark:bg-slate-900 dev-dark:bg-surface-elevated">
-        <table className="w-full min-w-[680px] text-left text-sm">
+        <table className="w-full min-w-[600px] text-left text-sm">
           <caption className="sr-only">Weekly leaderboard rankings</caption>
           <thead className="bg-surface-muted text-xs uppercase tracking-[0.14em] text-ink-muted dark:bg-slate-950 dev-dark:bg-background dark:text-slate-400 dev-dark:text-text-muted">
             <tr>
-              <SortableTh label="Rank" columnKey="rank" sort={sort} />
-              <SortableTh label="Member" columnKey="member" sort={sort} />
-              <SortableTh label="Correct" columnKey="correct" sort={sort} align="right" />
-              <SortableTh label="Points" columnKey="points" sort={sort} align="right" />
-              <SortableTh label="Points Left" columnKey="pointsLeft" sort={sort} align="right" />
-              <SortableTh label="Max Points" columnKey="maxPoints" sort={sort} align="right" />
+              <SortableTh
+                label="Rank"
+                columnKey="rank"
+                sort={sort}
+                className={`${STICKY_RANK} ${STICKY_HEAD_BG} py-4`}
+              />
+              <SortableTh
+                label="Member"
+                columnKey="member"
+                sort={sort}
+                className={`${STICKY_MEMBER} ${STICKY_HEAD_BG} py-4`}
+              />
+              <SortableTh
+                label="Points"
+                columnKey="points"
+                sort={sort}
+                align="right"
+                className={CELL}
+              />
+              <SortableTh
+                label="Correct"
+                columnKey="correct"
+                sort={sort}
+                align="right"
+                className={CELL}
+              />
+              <SortableTh
+                label="Points Left"
+                columnKey="pointsLeft"
+                sort={sort}
+                align="right"
+                className={CELL}
+              />
+              <SortableTh
+                label="Max Points"
+                columnKey="maxPoints"
+                sort={sort}
+                align="right"
+                className={CELL}
+              />
               {showPicksRemaining && (
                 <SortableTh
                   label="SNF/MNF"
                   columnKey="nightGames"
                   sort={sort}
                   align="right"
-                  className="px-5 py-4 whitespace-nowrap"
+                  className={`${CELL} whitespace-nowrap`}
                 />
               )}
             </tr>
@@ -99,11 +141,11 @@ function LeaderboardTable({
               >
                 <th
                   scope="row"
-                  className="px-5 py-4 font-black text-primary dark:text-white dev-dark:text-ink"
+                  className={`${STICKY_RANK} ${STICKY_BODY_BG} py-4 font-black text-primary dark:text-white dev-dark:text-ink`}
                 >
                   {member.rank}
                 </th>
-                <td className="px-5 py-4 font-bold">
+                <td className={`${STICKY_MEMBER} ${STICKY_BODY_BG} py-4 font-bold`}>
                   {onSelectMember ? (
                     <button
                       type="button"
@@ -121,14 +163,14 @@ function LeaderboardTable({
                     </span>
                   )}
                 </td>
-                <td className="px-5 py-4 text-right">{member.correctPicks}</td>
-                <td className="px-5 py-4 text-right font-black text-accent">
+                <td className={`${CELL} text-right font-black text-accent`}>
                   {member.totalPoints}
                 </td>
-                <td className="px-5 py-4 text-right">{member.pointsRemaining}</td>
-                <td className="px-5 py-4 text-right">{member.maxPointsPossible}</td>
+                <td className={`${CELL} text-right`}>{member.correctPicks}</td>
+                <td className={`${CELL} text-right`}>{member.pointsRemaining}</td>
+                <td className={`${CELL} text-right`}>{member.maxPointsPossible}</td>
                 {showPicksRemaining && (
-                  <td className="px-5 py-4 text-right whitespace-nowrap">
+                  <td className={`${CELL} text-right whitespace-nowrap`}>
                     {formatPicksRemaining(member.nightGamePicks)}
                   </td>
                 )}
