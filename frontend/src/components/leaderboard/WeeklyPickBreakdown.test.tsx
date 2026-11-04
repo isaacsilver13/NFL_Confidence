@@ -179,15 +179,43 @@ describe('WeeklyPickBreakdown', () => {
       expect(rowsOf('GB picks')).toEqual(['No picks'])
     })
 
-    it('marks correct and wrong picks for screen readers, and leaves unscored picks plain', async () => {
+    function headerOf(name: string) {
+      return screen.getByRole('list', { name }).previousElementSibling as HTMLElement
+    }
+
+    it('shows the result once in each team header, with no marks on the rows', async () => {
       await openGame([
         { memberName: 'Alex', team: 'CHI', confidence: 5, isCorrect: true },
         { memberName: 'Sam', team: 'GB', confidence: 3, isCorrect: false },
-        { memberName: 'Jo', team: 'CHI', confidence: 2, isCorrect: null },
+        { memberName: 'Jo', team: 'CHI', confidence: 2, isCorrect: true },
       ])
 
-      expect(rowsOf('CHI picks')).toEqual(['Alex 5 ✓ Correct', 'Jo 2'])
-      expect(rowsOf('GB picks')).toEqual(['Sam 3 ✗ Wrong'])
+      expect(headerOf('CHI picks')).toHaveTextContent('CHI✓Correct')
+      expect(headerOf('GB picks')).toHaveTextContent('GB✗Wrong')
+      const marks = screen
+        .getAllByRole('listitem')
+        .filter((item) => /[✓✗]/.test(item.textContent ?? ''))
+      expect(marks).toEqual([])
+    })
+
+    it('colours correct picks green and wrong picks red, and leaves unscored picks plain', async () => {
+      await openGame([
+        { memberName: 'Alex', team: 'CHI', confidence: 5, isCorrect: true },
+        { memberName: 'Sam', team: 'GB', confidence: 3, isCorrect: false },
+        { memberName: 'Jo', team: 'GB', confidence: 2, isCorrect: null },
+      ])
+
+      expect(rowsOf('CHI picks')).toEqual(['Alex 5 Correct'])
+      expect(screen.getByText('Alex').closest('li')).toHaveClass('text-success')
+      expect(screen.getByText('Sam').closest('li')).toHaveClass('text-danger')
+      expect(screen.getByText('Jo').closest('li')).not.toHaveClass('text-success', 'text-danger')
+    })
+
+    it('leaves the header unmarked until the game is scored', async () => {
+      await openGame([{ memberName: 'Alex', team: 'CHI', confidence: 5, isCorrect: null }])
+
+      expect(headerOf('CHI picks')).not.toHaveTextContent(/[✓✗]/)
+      expect(headerOf('GB picks')).not.toHaveTextContent(/[✓✗]/)
     })
   })
 })

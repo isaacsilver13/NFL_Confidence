@@ -75,12 +75,32 @@ function sortSidePicks(picks: GamePickDetail[]): GamePickDetail[] {
   )
 }
 
+const PICK_RESULT_COLOR = {
+  correct: 'text-success dark:text-night-success',
+  wrong: 'text-danger dark:text-night-error',
+  pending: '',
+}
+
+/** Everyone who picked a side gets the same result, so any scored pick tells whether the side won. */
+function sideResult(picks: GamePickDetail[]): keyof typeof PICK_RESULT_COLOR {
+  if (picks.some((pick) => pick.isCorrect === true)) return 'correct'
+  if (picks.some((pick) => pick.isCorrect === false)) return 'wrong'
+  return 'pending'
+}
+
 function TChartSide({ team, picks }: { team: string; picks: GamePickDetail[] }) {
+  const result = sideResult(picks)
   return (
     <div className="min-w-0">
       <div className="sticky top-0 z-10 flex flex-wrap items-center justify-center gap-1.5 border-b-2 border-slate-300 bg-surface pb-2 text-sm font-black dark:border-night-line-strong dark:bg-night-card">
         <TeamLogo code={team} size="sm" decorative />
         <span>{team}</span>
+        {result !== 'pending' && (
+          <span className={PICK_RESULT_COLOR[result]}>
+            <span aria-hidden="true">{result === 'correct' ? '✓' : '✗'}</span>
+            <span className="sr-only">{result === 'correct' ? 'Correct' : 'Wrong'}</span>
+          </span>
+        )}
         <span className="text-xs font-semibold text-ink-muted dark:text-night-muted">
           {picks.length} {picks.length === 1 ? 'pick' : 'picks'}
         </span>
@@ -94,24 +114,15 @@ function TChartSide({ team, picks }: { team: string; picks: GamePickDetail[] }) 
         {picks.map((pick) => (
           <li
             key={pick.memberName}
-            className="flex items-baseline justify-between gap-2 py-2 text-sm"
+            className={`flex items-baseline justify-between gap-2 py-2 text-sm ${
+              pick.isCorrect === null ? '' : PICK_RESULT_COLOR[pick.isCorrect ? 'correct' : 'wrong']
+            }`}
           >
             <span className="min-w-0 break-words font-medium">{pick.memberName}</span>{' '}
-            <span
-              className={`shrink-0 font-bold ${
-                pick.isCorrect === true
-                  ? 'text-accent'
-                  : pick.isCorrect === false
-                    ? 'text-danger'
-                    : 'text-ink-muted dark:text-night-muted'
-              }`}
-            >
+            <span className="shrink-0 font-bold">
               {pick.confidence}
               {pick.isCorrect !== null && (
-                <>
-                  <span aria-hidden="true"> {pick.isCorrect ? '✓' : '✗'}</span>
-                  <span className="sr-only"> {pick.isCorrect ? 'Correct' : 'Wrong'}</span>
-                </>
+                <span className="sr-only"> {pick.isCorrect ? 'Correct' : 'Wrong'}</span>
               )}
             </span>
           </li>
