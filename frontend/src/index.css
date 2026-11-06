@@ -201,13 +201,13 @@ html.dark.dev-theme {
 }
 
 /* Navy text on the lighter-blue (sky) fills is unreadable in dark mode: use Bears
-   orange with a thin white trim instead. Not applied to the dev theme, which has its
+   white with a thin Bears-orange trim instead. Not applied to the dev theme, which has its
    own accent-filled controls. */
 html.dark:not(.dev-theme) .orange-trim {
-  color: var(--color-accent);
+  color: #fff;
   text-shadow:
-    -0.5px -0.5px 0 #fff,
-    0.5px -0.5px 0 #fff,
-    -0.5px 0.5px 0 #fff,
-    0.5px 0.5px 0 #fff;
+    -0.5px -0.5px 0 var(--color-accent),
+    0.5px -0.5px 0 var(--color-accent),
+    -0.5px 0.5px 0 var(--color-accent),
+    0.5px 0.5px 0 var(--color-accent);
 }
