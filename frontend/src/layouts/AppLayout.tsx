@@ -5,6 +5,7 @@ import { fetchSessionBootstrap } from '@/api/session'
 import { Button } from '@/components/ui/Button'
 import { NflMark } from '@/components/nfl/NflMark'
 import { useAuth } from '@/features/auth/AuthContext'
+import { useUsageTracking } from '@/features/usage/useUsageTracking'
 import { useTheme } from '@/features/theme/ThemeContext'
 
 const NAV_LINKS = [
@@ -23,6 +24,7 @@ function navLinkClassName({ isActive }: { isActive: boolean }): string {
 
 export function AppLayout() {
   const { user, signOut } = useAuth()
+  useUsageTracking()
   const { theme, toggleTheme } = useTheme()
   const navigate = useNavigate()
   const { data: bootstrapData } = useQuery({

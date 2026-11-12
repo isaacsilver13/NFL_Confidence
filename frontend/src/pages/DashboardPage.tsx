@@ -3,6 +3,7 @@ import { ArrowUpRight, CalendarDays, KeyRound, LoaderCircle, RefreshCw, Users } 
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { ApiError } from '@/api/client'
+import { trackSectionOpen } from '@/api/events'
 import { createLeague, fetchLeaguePot, joinLeagueWithCode, refreshLeagueData } from '@/api/league'
 import { fetchStartedWeeks, fetchPickHistory } from '@/api/nfl'
 import { fetchWeeklyLeaderboard, fetchSeasonStandings } from '@/api/leaderboard'
@@ -87,7 +88,9 @@ function DashboardSections({
 
   useEffect(() => {
     function handleHashChange() {
-      setHashSection(sectionFromHash())
+      const section = sectionFromHash()
+      setHashSection(section)
+      if (section) trackSectionOpen(section)
     }
     window.addEventListener('hashchange', handleHashChange)
     return () => window.removeEventListener('hashchange', handleHashChange)
@@ -95,6 +98,7 @@ function DashboardSections({
 
   function toggleSection(section: SectionId) {
     const opening = !isOpen(section)
+    if (opening) trackSectionOpen(section)
     setOpenSections((current) => {
       if (opening) return current.includes(section) ? current : [...current, section]
       return current.filter((currentSection) => currentSection !== section)
