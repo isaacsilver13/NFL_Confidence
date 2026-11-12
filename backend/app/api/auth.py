@@ -28,7 +28,7 @@ from app.db.session import get_db
 from app.models.user import User
 from app.schemas.auth import AccessTokenResponse, TokenResponse
 from app.schemas.user import UserRead
-from app.services import auth_service
+from app.services import auth_service, usage_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -174,6 +174,7 @@ async def google_callback(request: Request, db: Session = Depends(get_db)) -> Re
         )
         raise UnauthorizedError("Google sign-in could not be completed. Please try again.") from exc
 
+    usage_service.record_login(db, user.id)
     redirect = RedirectResponse(url=settings.app_url, status_code=303)
     _set_refresh_cookie(redirect, issued.refresh_token)
     return redirect
@@ -188,6 +189,7 @@ def dev_login(request: Request, response: Response, db: Session = Depends(get_db
 
     user = auth_service.get_or_create_dev_user(db)
     issued = auth_service.issue_tokens(db, user)
+    usage_service.record_login(db, user.id)
     _set_refresh_cookie(response, issued.refresh_token)
 
     return success(
