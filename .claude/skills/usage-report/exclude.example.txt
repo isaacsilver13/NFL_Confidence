@@ -1,0 +1,2 @@
+# Copy to exclude.txt (git-ignored). One test-account email per line; lines starting with # are ignored.
+# test.account@example.com
