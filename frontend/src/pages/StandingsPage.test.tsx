@@ -24,6 +24,7 @@ const standings: SeasonStandings = {
       correctPicks: 10,
       incorrectPicks: 2,
       weeklyWins: 2,
+      weeksPlayed: 3,
       firstPlaceFinishes: 2,
       secondPlaceFinishes: 1,
       thirdPlaceFinishes: 0,
@@ -77,6 +78,35 @@ describe('StandingsPage', () => {
     expect(await screen.findByText('Owner')).toBeInTheDocument()
     expect(screen.getByRole('table')).toBeInTheDocument()
     expect(screen.getByText('42')).toBeInTheDocument()
+  })
+
+  it('shows weeks played and average points per week', async () => {
+    mockedFetchSeasonStandings.mockResolvedValue(standings)
+
+    renderPage()
+
+    const row = within(await screen.findByRole('table')).getByRole('row', { name: /Owner/ })
+    const cells = within(row).getAllByRole('cell')
+    expect(cells[2]).toHaveTextContent('3')
+    expect(cells[3]).toHaveTextContent('14.0')
+  })
+
+  it('filters the standings by minimum weeks played', async () => {
+    const user = userEvent.setup()
+    mockedFetchSeasonStandings.mockResolvedValue({
+      ...standings,
+      standings: [
+        { ...standings.standings[0], memberId: 'a', memberName: 'Alpha', weeksPlayed: 3 },
+        { ...standings.standings[0], memberId: 'b', memberName: 'Bravo', weeksPlayed: 1 },
+      ],
+    })
+
+    renderPage()
+
+    await screen.findByText('Bravo')
+    await user.selectOptions(screen.getByLabelText('Minimum weeks played'), '2')
+    expect(screen.getByText('Alpha')).toBeInTheDocument()
+    expect(screen.queryByText('Bravo')).not.toBeInTheDocument()
   })
 
   it('sorts the standings when a column header is clicked', async () => {

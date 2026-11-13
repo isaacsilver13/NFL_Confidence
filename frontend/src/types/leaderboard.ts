@@ -12,6 +12,8 @@ export interface LeaderboardMember {
   correctPicks: number
   incorrectPicks: number
   weeklyWins: number
+  // Season standings only.
+  weeksPlayed?: number
   firstPlaceFinishes: number
   secondPlaceFinishes: number
   thirdPlaceFinishes: number

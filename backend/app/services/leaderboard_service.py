@@ -468,6 +468,7 @@ def get_season_standings(
             WeeklyResult.user_id,
             func.sum(WeeklyResult.correct_picks),
             func.sum(WeeklyResult.incorrect_picks),
+            func.count(WeeklyResult.id),
         )
         .join(NflWeek, WeeklyResult.week_id == NflWeek.id)
         .where(
@@ -478,10 +479,13 @@ def get_season_standings(
         .group_by(WeeklyResult.user_id)
     ).all()
     records_by_user = {
-        user_id: (correct or 0, incorrect or 0) for user_id, correct, incorrect in records
+        user_id: (correct or 0, incorrect or 0, weeks)
+        for user_id, correct, incorrect, weeks in records
     }
     for member in standings:
-        member.correct_picks, member.incorrect_picks = records_by_user.get(member.member_id, (0, 0))
+        member.correct_picks, member.incorrect_picks, member.weeks_played = records_by_user.get(
+            member.member_id, (0, 0, 0)
+        )
     if not standings:
         raise NotFoundError(f"Season {target_season} has no standings data.")
     return SeasonStandingsRead(season=target_season, standings=standings)

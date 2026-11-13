@@ -19,6 +19,8 @@ class LeaderboardMemberRead(CamelModel):
     correct_picks: int = 0
     incorrect_picks: int = 0
     weekly_wins: int = 0
+    # Season only: completed weeks this member has a result for.
+    weeks_played: int = 0
     first_place_finishes: int = 0
     second_place_finishes: int = 0
     third_place_finishes: int = 0

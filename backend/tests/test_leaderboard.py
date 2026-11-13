@@ -732,6 +732,43 @@ def test_season_standings_returns_aggregate_rows(db_session: Session) -> None:
     assert result.standings[1].third_place_finishes == 1
 
 
+def test_season_standings_count_completed_weeks_played(db_session: Session) -> None:
+    owner = _user(db_session, "Owner")
+    league = _league(db_session, owner)
+    owner, challenger = _members(db_session, league)
+    db_session.add_all(
+        [
+            SeasonResult(
+                league_id=league.id, user_id=owner.id, season=league.season, total_points=42
+            ),
+            SeasonResult(
+                league_id=league.id, user_id=challenger.id, season=league.season, total_points=9
+            ),
+        ]
+    )
+    for week_number, users in ((1, [owner, challenger]), (2, [owner])):
+        week, _ = _week_and_games(db_session, league, week_number)
+        db_session.add_all(
+            [
+                WeeklyResult(
+                    league_id=league.id,
+                    week_id=week.id,
+                    user_id=user.id,
+                    total_points=10,
+                    correct_picks=1,
+                    incorrect_picks=0,
+                    weekly_rank=1,
+                )
+                for user in users
+            ]
+        )
+
+    result = leaderboard_service.get_season_standings(db_session, league=league)
+
+    weeks_played = {m.member_name: m.weeks_played for m in result.standings}
+    assert weeks_played == {"Owner": 2, "Challenger": 1}
+
+
 def _breakdown_fixture(db: Session) -> tuple[League, User, User, User]:
     owner = _user(db, "Owner")
     league = _league(db, owner)
