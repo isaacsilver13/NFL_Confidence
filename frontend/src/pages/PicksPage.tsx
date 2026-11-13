@@ -139,7 +139,6 @@ function GamesForm({
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
   const [isDraftSaved, setIsDraftSaved] = useState(true)
-  const [voided, setVoided] = useState(false)
   const [submitPicksError, setSubmitPicksError] = useState<string | null>(null)
   const [now, setNow] = useState(() => Date.now())
   const gameKickoffs = games
@@ -228,7 +227,6 @@ function GamesForm({
     if (isLockedRef.current) {
       if (pendingSave.version === draftVersionRef.current) {
         setSaved(false)
-        setVoided(false)
         setSubmitError('Picks are locked after the earliest game kickoff.')
       }
       return
@@ -248,7 +246,6 @@ function GamesForm({
         if (pendingSave.version === draftVersionRef.current) {
           setIsDraftSaved(true)
           setSaved(true)
-          setVoided(voidedGameIds.length > 0)
           setSubmitError(null)
         }
       }
@@ -259,7 +256,6 @@ function GamesForm({
           error instanceof ApiError ? error.message : "Could not save this week's picks.",
         )
       }
-      setVoided(false)
     } finally {
       savingRef.current = false
       const queuedSave = pendingSaveRef.current
@@ -328,20 +324,6 @@ function GamesForm({
                 <Check size={14} aria-hidden="true" /> Complete
               </span>
             ) : null}
-            {!isLocked && (
-              <button
-                type="button"
-                onClick={handleSubmitPicks}
-                disabled={!canSubmit}
-                className="rounded-xl bg-primary px-3 py-1.5 text-xs font-black text-white transition-colors disabled:cursor-not-allowed disabled:opacity-40 dark:bg-night-accent dark:text-white sm:px-4 sm:py-2 sm:text-sm"
-              >
-                {submitMutation.isPending
-                  ? 'Submitting…'
-                  : submission.submittedAt
-                    ? 'Resubmit picks'
-                    : 'Submit picks'}
-              </button>
-            )}
           </div>
         </div>
         <div
@@ -625,8 +607,11 @@ function GamesForm({
         )
       })}
 
-      {(saveMutation.isPending || (saved && (hasConflicts || voided)) || submitError) && (
-        <div className="sticky bottom-3 z-10 -mx-1 flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-surface/95 p-3 shadow-lg shadow-primary/10 backdrop-blur sm:static sm:mx-0 sm:border-0 sm:bg-transparent sm:p-0 sm:shadow-none sm:backdrop-blur-none dark:border-night-line dark:bg-night-card/95 sm:dark:bg-transparent">
+      {(!isLocked || saveMutation.isPending || (saved && hasConflicts) || submitError) && (
+        <div
+          data-testid="submit-bar"
+          className="sticky bottom-3 z-10 -mx-1 flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-surface/95 p-3 shadow-lg shadow-primary/10 backdrop-blur sm:static sm:mx-0 sm:border-0 sm:bg-transparent sm:p-0 sm:shadow-none sm:backdrop-blur-none dark:border-night-line dark:bg-night-card/95 sm:dark:bg-transparent"
+        >
           {saveMutation.isPending && (
             <p role="status" className="text-sm font-semibold text-ink-muted dark:text-night-muted">
               Saving…
@@ -635,11 +620,6 @@ function GamesForm({
           {saved && hasConflicts && (
             <p role="status" className="text-sm font-semibold text-accent">
               Picks saved, but conflicts must be resolved before this week is complete.
-            </p>
-          )}
-          {saved && !hasConflicts && voided && (
-            <p role="status" className="text-sm font-semibold text-accent">
-              Picks saved. Incomplete or conflicting picks were voided.
             </p>
           )}
           {submitError && (
@@ -660,6 +640,20 @@ function GamesForm({
                 </button>
               )}
             </>
+          )}
+          {!isLocked && (
+            <button
+              type="button"
+              onClick={handleSubmitPicks}
+              disabled={!canSubmit}
+              className="rounded-xl bg-primary px-3 py-1.5 text-xs font-black text-white transition-colors disabled:cursor-not-allowed disabled:opacity-40 dark:bg-night-accent dark:text-white sm:px-4 sm:py-2 sm:text-sm"
+            >
+              {submitMutation.isPending
+                ? 'Submitting…'
+                : submission.submittedAt
+                  ? 'Resubmit picks'
+                  : 'Submit picks'}
+            </button>
           )}
         </div>
       )}

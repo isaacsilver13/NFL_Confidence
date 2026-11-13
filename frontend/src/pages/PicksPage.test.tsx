@@ -146,6 +146,19 @@ describe('PicksPage', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
+  it('keeps Submit picks pinned in a sticky bar so it is always reachable', async () => {
+    mockedFetchCurrentPicksCard.mockResolvedValue({
+      week,
+      games,
+      picks: [],
+      submission: { submittedAt: null },
+    })
+    renderPage()
+
+    const submitButton = await screen.findByRole('button', { name: 'Submit picks' })
+    expect(submitButton.closest('[data-testid="submit-bar"]')).toHaveClass('sticky')
+  })
+
   it('enables Submit picks once every game is picked, and submits', async () => {
     const user = userEvent.setup()
     mockedFetchCurrentPicksCard
@@ -273,9 +286,12 @@ describe('PicksPage', () => {
       picks: [{ gameId: 'game-1', team: 'BUF', confidence: 1 }],
       voidedGameIds: ['game-2'],
     })
+    // The save has settled once the card is refetched; the notice must not appear after it.
+    await waitFor(() => expect(mockedFetchCurrentPicksCard.mock.calls.length).toBeGreaterThan(1))
+    await new Promise((resolve) => setTimeout(resolve, 0))
     expect(
-      await screen.findByText(/incomplete or conflicting picks were voided/i),
-    ).toBeInTheDocument()
+      screen.queryByText(/incomplete or conflicting picks were voided/i),
+    ).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'GB' }))
     const secondConfidenceGroup = screen.getByRole('group', {
