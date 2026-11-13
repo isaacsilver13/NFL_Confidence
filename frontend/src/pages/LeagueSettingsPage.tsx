@@ -122,7 +122,8 @@ function formatSubmittedAt(submittedAt: string): string {
 }
 
 function SubmissionBadge({ submission }: { submission: MemberSubmissionStatus | undefined }) {
-  const pill = 'inline-flex rounded-full px-2.5 py-1 text-xs font-black uppercase tracking-[0.1em]'
+  const pill =
+    'inline-flex rounded-full px-2 py-1 text-[10px] font-black uppercase leading-tight tracking-[0.06em] sm:px-2.5 sm:text-xs sm:tracking-[0.1em]'
   if (submission?.submittedAt) {
     return (
       <span className={`${pill} bg-accent/10 text-accent`}>
@@ -230,13 +231,13 @@ function WeeklyStatus() {
               <caption className="sr-only">Weekly status</caption>
               <thead className="bg-surface-muted text-xs uppercase tracking-[0.14em] text-ink-muted dark:bg-night-page dark:text-night-muted">
                 <tr>
-                  <th scope="col" className="px-3 py-3">
+                  <th scope="col" className="px-2 py-3 sm:px-3">
                     Member
                   </th>
-                  <th scope="col" className="px-3 py-3">
+                  <th scope="col" className="px-2 py-3 sm:px-3">
                     Picks
                   </th>
-                  <th scope="col" className="px-3 py-3">
+                  <th scope="col" className="px-2 py-3 sm:px-3">
                     Paid
                   </th>
                 </tr>
@@ -246,9 +247,9 @@ function WeeklyStatus() {
                   const submission = submissionsByUser.get(payment.userId)
                   return (
                     <tr key={payment.userId}>
-                      <th scope="row" className="px-3 py-3 font-normal">
+                      <th scope="row" className="px-2 py-3 font-normal sm:px-3">
                         <p className="font-medium">{payment.displayName}</p>
-                        <p className="text-xs text-slate-500 dark:text-night-muted">
+                        <p className="break-all text-xs text-slate-500 dark:text-night-muted">
                           {payment.email}
                         </p>
                         {payment.voidedPickCount > 0 && (
@@ -257,10 +258,10 @@ function WeeklyStatus() {
                           </p>
                         )}
                       </th>
-                      <td className="px-3 py-3">
+                      <td className="px-2 py-3 sm:px-3">
                         <SubmissionBadge submission={submission} />
                       </td>
-                      <td className="px-3 py-3">
+                      <td className="px-2 py-3 sm:px-3">
                         <label className="flex min-h-11 items-center gap-2 text-sm font-semibold">
                           <input
                             type="checkbox"
@@ -271,7 +272,7 @@ function WeeklyStatus() {
                             }
                             className="h-4 w-4 accent-accent"
                           />
-                          Paid
+                          <span className="sr-only">Paid</span>
                         </label>
                       </td>
                     </tr>
