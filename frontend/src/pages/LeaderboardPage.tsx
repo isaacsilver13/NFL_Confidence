@@ -299,6 +299,29 @@ export function LeaderboardPage({
       {query.data && query.data.standings.length === 0 && (
         <p className="text-slate-600 dark:text-night-text">No completed results for this week.</p>
       )}
+      {query.data?.impactfulGames && query.data.impactfulGames.length > 0 && (
+        <section
+          aria-labelledby="impactful-games-heading"
+          className="rounded-2xl border border-slate-200 bg-surface p-4 shadow-sm dark:border-night-line dark:bg-night-card"
+        >
+          <h2
+            id="impactful-games-heading"
+            className="text-sm font-black text-primary dark:text-night-ink"
+          >
+            Games that can change the top 3
+          </h2>
+          <ul className="mt-2 flex flex-wrap gap-2">
+            {query.data.impactfulGames.map((game) => (
+              <li
+                key={game.gameId}
+                className="rounded-full bg-accent/10 px-3 py-1.5 text-xs font-black text-accent"
+              >
+                {game.awayTeam} @ {game.homeTeam}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       {query.data && query.data.standings.length > 0 && (
         <LeaderboardTable
           standings={query.data.standings}

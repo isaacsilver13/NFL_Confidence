@@ -524,6 +524,86 @@ def _live_week_standings(
     return {member.member_name: member for member in result.standings}
 
 
+def _impact_week(db: Session, *, kickoff: datetime) -> League:
+    """Live week, two unfinished games. Only game 1 can move the paid top three.
+
+    P and Q lead untouched. R (picked BUF) and S (picked KC) fight for third on game 1;
+    nobody picked game 2.
+    """
+    owner = _user(db, "Owner")
+    league = _league(db, owner)
+    week = NflWeek(
+        season=league.season,
+        week_number=7,
+        start_date=kickoff,
+        end_date=kickoff + timedelta(days=6),
+        status=WeekStatus.REGULAR,
+    )
+    db.add(week)
+    db.flush()
+    game1, game2 = (
+        NflGame(
+            week_id=week.id,
+            espn_game_id=f"leaderboard-test-{uuid.uuid4().hex}",
+            kickoff_time=kickoff,
+            away_team=away,
+            home_team=home,
+            game_status=GameStatus.LIVE,
+        )
+        for away, home in (("BUF", "KC"), ("GB", "CHI"))
+    )
+    db.add_all([game1, game2])
+    db.flush()
+    for name, points, team in (("P", 20, None), ("Q", 19, None), ("R", 10, "BUF"), ("S", 12, "KC")):
+        user = _user(db, name)
+        db.add(LeagueMember(league_id=league.id, user_id=user.id, role=LeagueRole.MEMBER))
+        _submit(db, user=user, week=week)
+        db.add(
+            WeeklyResult(
+                league_id=league.id,
+                week_id=week.id,
+                user_id=user.id,
+                total_points=points,
+                correct_picks=1,
+                incorrect_picks=0,
+                weekly_rank=1,
+            )
+        )
+        if team:
+            db.add(
+                Pick(
+                    user_id=user.id,
+                    game_id=game1.id,
+                    picked_team=team,
+                    confidence_value=5,
+                    locked_at=kickoff,
+                )
+            )
+    db.flush()
+    return league
+
+
+def test_weekly_leaderboard_flags_games_that_can_change_the_paid_top_three(
+    db_session: Session,
+) -> None:
+    league = _impact_week(db_session, kickoff=datetime(2026, 10, 15, tzinfo=timezone.utc))
+
+    result = leaderboard_service.get_weekly_leaderboard(db_session, league=league, week_number=7)
+
+    assert result.impactful_games is not None
+    assert [(g.away_team, g.home_team) for g in result.impactful_games] == [("BUF", "KC")]
+
+
+def test_weekly_leaderboard_hides_impactful_games_until_picks_are_revealed(
+    db_session: Session,
+) -> None:
+    league = _impact_week(db_session, kickoff=datetime.now(timezone.utc) + timedelta(days=2))
+
+    result = leaderboard_service.get_weekly_leaderboard(db_session, league=league, week_number=7)
+
+    assert result.impactful_games is None
+
+
 def test_weekly_leaderboard_marks_members_who_cannot_reach_the_top_three(
     db_session: Session,
 ) -> None:

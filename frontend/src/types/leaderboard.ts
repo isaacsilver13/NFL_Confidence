@@ -44,6 +44,8 @@ export interface WeeklyLeaderboard {
   nightGames: GameLabel[]
   picksRevealed: boolean
   outcomeScenariosAvailable?: boolean
+  // Unfinished games that can still change 1st-3rd; null while picks are hidden.
+  impactfulGames?: GameLabel[] | null
 }
 
 export interface OutcomeScenario {
