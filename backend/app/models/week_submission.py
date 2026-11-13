@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, UniqueConstraint, Uuid, func
+from sqlalchemy import DateTime, ForeignKey, Integer, UniqueConstraint, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.session import Base
@@ -29,6 +29,10 @@ class WeekSubmission(Base):
     submitted_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+
+    # Monday Night prediction used only to break weekly ties; yards are stored but not scored.
+    mnf_guess_points: Mapped[int | None] = mapped_column(Integer)
+    mnf_guess_yards: Mapped[int | None] = mapped_column(Integer)
 
     user: Mapped["User"] = relationship()
     week: Mapped["NflWeek"] = relationship()

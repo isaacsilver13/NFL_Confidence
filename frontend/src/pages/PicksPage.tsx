@@ -8,7 +8,7 @@ import { LastRefreshed } from '@/components/nfl/LastRefreshed'
 import { TeamLogo } from '@/components/nfl/TeamLogo'
 import { getTeamSelectionStyle } from '@/components/nfl/teamPalette'
 import { getPicksCardRefetchInterval } from '@/features/nfl/picksPolling'
-import type { NflGame, NflPick, NflWeek, PickInput, WeekSubmission } from '@/types/nfl'
+import type { MnfGuesses, NflGame, NflPick, NflWeek, PickInput, WeekSubmission } from '@/types/nfl'
 
 const AUTO_SAVE_DEBOUNCE_MS = 400
 
@@ -140,6 +140,8 @@ function GamesForm({
   const [saved, setSaved] = useState(false)
   const [isDraftSaved, setIsDraftSaved] = useState(true)
   const [submitPicksError, setSubmitPicksError] = useState<string | null>(null)
+  const [mnfPoints, setMnfPoints] = useState(String(submission.mnfGuessPoints ?? ''))
+  const [mnfYards, setMnfYards] = useState(String(submission.mnfGuessYards ?? ''))
   const [now, setNow] = useState(() => Date.now())
   const gameKickoffs = games
     .map((game) => Date.parse(game.kickoff))
@@ -199,7 +201,8 @@ function GamesForm({
     mutationFn: savePicks,
   })
   const submitMutation = useMutation({
-    mutationFn: submitPicks,
+    mutationFn: (variables: { week: number; guesses?: MnfGuesses }) =>
+      submitPicks(variables.week, variables.guesses),
     onSuccess: async () => {
       setSubmitPicksError(null)
       await queryClient.invalidateQueries({ queryKey: ['picks', 'card', 'current'] })
@@ -211,11 +214,23 @@ function GamesForm({
     },
   })
   const isComplete = pickedCount === games.length && games.length > 0
+  const requiresGuess = submission.requiresMnfGuess === true
+  const hasGuesses = mnfPoints.trim() !== '' && mnfYards.trim() !== ''
   const canSubmit =
-    isComplete && !hasConflicts && !isLocked && !submitMutation.isPending && isDraftSaved
+    isComplete &&
+    !hasConflicts &&
+    !isLocked &&
+    !submitMutation.isPending &&
+    isDraftSaved &&
+    (!requiresGuess || hasGuesses)
 
   function handleSubmitPicks() {
-    submitMutation.mutate(week.weekNumber)
+    submitMutation.mutate({
+      week: week.weekNumber,
+      guesses: requiresGuess
+        ? { mnfGuessPoints: Number(mnfPoints), mnfGuessYards: Number(mnfYards) }
+        : undefined,
+    })
   }
 
   async function saveDraft(pendingSave: PendingSave) {
@@ -347,6 +362,37 @@ function GamesForm({
             ? `Submitted ${formatSubmittedAt(submission.submittedAt)}`
             : 'Not yet submitted'}
         </p>
+        {requiresGuess && !isLocked && (
+          <div className="grid grid-cols-2 gap-2 text-xs font-semibold sm:text-sm">
+            <label className="block">
+              Monday Night total points
+              <input
+                type="number"
+                inputMode="numeric"
+                min={0}
+                max={300}
+                value={mnfPoints}
+                onChange={(event) => setMnfPoints(event.target.value)}
+                className="mt-1 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 dark:border-night-line-strong dark:bg-night-page"
+              />
+            </label>
+            <label className="block">
+              Monday Night total offense (yards)
+              <input
+                type="number"
+                inputMode="numeric"
+                min={0}
+                max={2000}
+                value={mnfYards}
+                onChange={(event) => setMnfYards(event.target.value)}
+                className="mt-1 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 dark:border-night-line-strong dark:bg-night-page"
+              />
+            </label>
+            <p className="col-span-2 text-xs text-ink-muted dark:text-night-muted">
+              Tie-breaker only. Required to submit.
+            </p>
+          </div>
+        )}
         <div
           className="-mx-4 flex gap-1.5 overflow-x-auto px-4 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0"
           role="list"

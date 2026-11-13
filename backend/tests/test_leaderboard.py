@@ -604,6 +604,57 @@ def test_weekly_leaderboard_hides_impactful_games_until_picks_are_revealed(
     assert result.impactful_games is None
 
 
+def test_weekly_leaderboard_breaks_ties_with_monday_night_points_guess(
+    db_session: Session,
+) -> None:
+    owner = _user(db_session, "Owner")
+    league = _league(db_session, owner)
+    kickoff = datetime(2026, 10, 12, 18, 0, tzinfo=timezone.utc)  # a Monday
+    week = NflWeek(
+        season=league.season,
+        week_number=8,
+        start_date=kickoff - timedelta(days=2),
+        end_date=kickoff + timedelta(days=4),
+        status=WeekStatus.COMPLETE,
+    )
+    db_session.add(week)
+    db_session.flush()
+    db_session.add(
+        NflGame(
+            week_id=week.id,
+            espn_game_id=f"leaderboard-test-{uuid.uuid4().hex}",
+            kickoff_time=kickoff,
+            away_team="DAL",
+            home_team="PHI",
+            away_score=20,
+            home_score=24,
+            winning_team="PHI",
+            game_status=GameStatus.FINAL,
+        )
+    )
+    # Identical weeks; A would win the name tie-break but guessed 60 against a real 44.
+    for name, guess in (("A", 60), ("B", 45)):
+        user = _user(db_session, name)
+        db_session.add(LeagueMember(league_id=league.id, user_id=user.id, role=LeagueRole.MEMBER))
+        db_session.add(WeekSubmission(user_id=user.id, week_id=week.id, mnf_guess_points=guess))
+        db_session.add(
+            WeeklyResult(
+                league_id=league.id,
+                week_id=week.id,
+                user_id=user.id,
+                total_points=10,
+                correct_picks=1,
+                incorrect_picks=0,
+                weekly_rank=1,
+            )
+        )
+    db_session.flush()
+
+    result = leaderboard_service.get_weekly_leaderboard(db_session, league=league, week_number=8)
+
+    assert [(m.member_name, m.rank) for m in result.standings] == [("B", 1), ("A", 2)]
+
+
 def test_weekly_leaderboard_marks_members_who_cannot_reach_the_top_three(
     db_session: Session,
 ) -> None:

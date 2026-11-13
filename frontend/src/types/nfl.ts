@@ -86,6 +86,14 @@ export interface SavePicksInput {
 
 export interface WeekSubmission {
   submittedAt: string | null
+  requiresMnfGuess?: boolean
+  mnfGuessPoints?: number | null
+  mnfGuessYards?: number | null
+}
+
+export interface MnfGuesses {
+  mnfGuessPoints: number
+  mnfGuessYards: number
 }
 
 export interface MemberPicks {

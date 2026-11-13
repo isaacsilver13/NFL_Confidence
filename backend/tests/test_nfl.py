@@ -318,7 +318,9 @@ def test_submit_picks_requires_complete_card(client, db_session: Session) -> Non
     headers = _auth_header(user)
 
     incomplete_response = client.post(
-        "/api/v1/picks/submit", json={"week": week.week_number}, headers=headers
+        "/api/v1/picks/submit",
+        json={"week": week.week_number, "mnfGuessPoints": 40, "mnfGuessYards": 700},
+        headers=headers,
     )
     assert incomplete_response.status_code == 422
     assert incomplete_response.json()["error"]["code"] == "VALIDATION_ERROR"
@@ -336,13 +338,59 @@ def test_submit_picks_requires_complete_card(client, db_session: Session) -> Non
     )
 
     submit_response = client.post(
-        "/api/v1/picks/submit", json={"week": week.week_number}, headers=headers
+        "/api/v1/picks/submit",
+        json={"week": week.week_number, "mnfGuessPoints": 40, "mnfGuessYards": 700},
+        headers=headers,
     )
     assert submit_response.status_code == 200
     assert submit_response.json()["data"]["submittedAt"] is not None
 
     card_response = client.get("/api/v1/picks/card/current", headers=headers)
     assert card_response.json()["data"]["submission"]["submittedAt"] is not None
+
+
+def _make_last_game_monday_night(db_session: Session, games: list[NflGame]) -> None:
+    """Move the last game to a future Monday midday (Monday in every US timezone)."""
+    now = datetime.now(timezone.utc)
+    days = (7 - now.weekday()) % 7 or 7
+    games[-1].kickoff_time = (now + timedelta(days=days)).replace(
+        hour=18, minute=0, second=0, microsecond=0
+    )
+    db_session.commit()
+
+
+def test_submit_requires_monday_night_guesses_and_stores_them(client, db_session: Session) -> None:
+    user = _make_user(db_session)
+    week, games = _ensure_current_fixture(db_session, user)
+    _make_last_game_monday_night(db_session, games)
+    headers = _auth_header(user)
+    client.post(
+        "/api/v1/picks",
+        json={
+            "week": week.week_number,
+            "picks": [
+                {"gameId": str(game.id), "team": game.home_team, "confidence": index}
+                for index, game in enumerate(games, start=1)
+            ],
+        },
+        headers=headers,
+    )
+
+    missing = client.post("/api/v1/picks/submit", json={"week": week.week_number}, headers=headers)
+    assert missing.status_code == 422
+
+    ok = client.post(
+        "/api/v1/picks/submit",
+        json={"week": week.week_number, "mnfGuessPoints": 44, "mnfGuessYards": 710},
+        headers=headers,
+    )
+    assert ok.status_code == 200
+
+    submission = client.get("/api/v1/picks/card/current", headers=headers).json()["data"][
+        "submission"
+    ]
+    assert submission["requiresMnfGuess"] is True
+    assert (submission["mnfGuessPoints"], submission["mnfGuessYards"]) == (44, 710)
 
 
 def test_submit_picks_can_be_resubmitted_before_lock(client, db_session: Session) -> None:
@@ -362,7 +410,9 @@ def test_submit_picks_can_be_resubmitted_before_lock(client, db_session: Session
         headers=headers,
     )
     first_submit = client.post(
-        "/api/v1/picks/submit", json={"week": week.week_number}, headers=headers
+        "/api/v1/picks/submit",
+        json={"week": week.week_number, "mnfGuessPoints": 40, "mnfGuessYards": 700},
+        headers=headers,
     )
     assert first_submit.status_code == 200
 
@@ -377,7 +427,9 @@ def test_submit_picks_can_be_resubmitted_before_lock(client, db_session: Session
         headers=headers,
     )
     second_submit = client.post(
-        "/api/v1/picks/submit", json={"week": week.week_number}, headers=headers
+        "/api/v1/picks/submit",
+        json={"week": week.week_number, "mnfGuessPoints": 40, "mnfGuessYards": 700},
+        headers=headers,
     )
     assert second_submit.status_code == 200
     assert (
@@ -406,7 +458,11 @@ def test_submit_picks_rejects_after_lock(client, db_session: Session) -> None:
     games[0].kickoff_time = datetime.now(timezone.utc) - timedelta(minutes=1)
     db_session.commit()
 
-    response = client.post("/api/v1/picks/submit", json={"week": week.week_number}, headers=headers)
+    response = client.post(
+        "/api/v1/picks/submit",
+        json={"week": week.week_number, "mnfGuessPoints": 40, "mnfGuessYards": 700},
+        headers=headers,
+    )
     assert response.status_code == 422
     assert "already kicked off" in response.json()["error"]["message"]
 
@@ -489,7 +545,7 @@ def test_all_picks_omits_members_without_a_complete_card(client, db_session: Ses
     )
     client.post(
         "/api/v1/picks/submit",
-        json={"week": week.week_number},
+        json={"week": week.week_number, "mnfGuessPoints": 40, "mnfGuessYards": 700},
         headers=_auth_header(submitted),
     )
 

@@ -94,10 +94,16 @@ class PicksCreateRequest(CamelModel):
 
 class PicksSubmitRequest(CamelModel):
     week: int
+    # Required when the week has a Monday Night game (checked in the service).
+    mnf_guess_points: int | None = Field(default=None, ge=0, le=300)
+    mnf_guess_yards: int | None = Field(default=None, ge=0, le=2000)
 
 
 class WeekSubmissionRead(CamelModel):
     submitted_at: datetime | None = None
+    requires_mnf_guess: bool = False
+    mnf_guess_points: int | None = None
+    mnf_guess_yards: int | None = None
 
 
 class MemberPicksRead(CamelModel):

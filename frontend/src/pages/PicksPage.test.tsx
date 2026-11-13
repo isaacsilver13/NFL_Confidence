@@ -146,6 +146,33 @@ describe('PicksPage', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
+  it('requires Monday Night guesses before Submit picks and sends them', async () => {
+    const user = userEvent.setup()
+    mockedFetchCurrentPicksCard.mockResolvedValue({
+      week,
+      games,
+      picks: [],
+      submission: { submittedAt: null, requiresMnfGuess: true },
+    })
+    renderPage()
+
+    const submitButton = await screen.findByRole('button', { name: 'Submit picks' })
+    await user.click(screen.getByRole('button', { name: 'KC' }))
+    await user.click(screen.getByRole('button', { name: 'GB' }))
+    await user.click(screen.getAllByRole('button', { name: '2' })[0])
+    await user.click(screen.getAllByRole('button', { name: '1' })[1])
+    await waitFor(() => expect(mockedSavePicks).toHaveBeenCalled())
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(submitButton).toBeDisabled()
+
+    await user.type(screen.getByLabelText('Monday Night total points'), '44')
+    await user.type(screen.getByLabelText('Monday Night total offense (yards)'), '710')
+    await waitFor(() => expect(submitButton).not.toBeDisabled())
+    await user.click(submitButton)
+
+    expect(mockedSubmitPicks).toHaveBeenCalledWith(1, { mnfGuessPoints: 44, mnfGuessYards: 710 })
+  })
+
   it('keeps Submit picks pinned in a sticky bar so it is always reachable', async () => {
     mockedFetchCurrentPicksCard.mockResolvedValue({
       week,
@@ -229,7 +256,7 @@ describe('PicksPage', () => {
     resolveSave([])
     await waitFor(() => expect(submit).toBeEnabled())
     await user.click(submit)
-    await waitFor(() => expect(mockedSubmitPicks).toHaveBeenCalledWith(1, expect.anything()))
+    await waitFor(() => expect(mockedSubmitPicks).toHaveBeenCalledWith(1, undefined))
   })
 
   it('lets a failed autosave be retried before submitting the latest card', async () => {

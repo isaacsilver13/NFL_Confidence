@@ -21,7 +21,7 @@ from app.schemas.nfl import (
     WeekRead,
     WeekSubmissionRead,
 )
-from app.services import picks_service, weeks_service
+from app.services import picks_service, scoring_service, weeks_service
 from app.services.picks_service import PickSubmission
 
 router = APIRouter(prefix="/picks", tags=["picks"])
@@ -96,9 +96,19 @@ def submit_picks(
     db: Session = Depends(get_db),
 ) -> dict:
     league, member = league_member
-    submission = picks_service.submit_picks(db, user=current_user, week_number=body.week)
+    submission = picks_service.submit_picks(
+        db,
+        user=current_user,
+        week_number=body.week,
+        mnf_guess_points=body.mnf_guess_points,
+        mnf_guess_yards=body.mnf_guess_yards,
+    )
     return success(
-        WeekSubmissionRead(submitted_at=submission.submitted_at).model_dump(by_alias=True)
+        WeekSubmissionRead(
+            submitted_at=submission.submitted_at,
+            mnf_guess_points=submission.mnf_guess_points,
+            mnf_guess_yards=submission.mnf_guess_yards,
+        ).model_dump(by_alias=True)
     )
 
 
@@ -164,7 +174,10 @@ def get_current_card(
         db, user=current_user, week_number=week.week_number
     )
     submission_data = WeekSubmissionRead(
-        submitted_at=submission.submitted_at if submission else None
+        submitted_at=submission.submitted_at if submission else None,
+        requires_mnf_guess=scoring_service.monday_night_game(games) is not None,
+        mnf_guess_points=submission.mnf_guess_points if submission else None,
+        mnf_guess_yards=submission.mnf_guess_yards if submission else None,
     ).model_dump(by_alias=True)
 
     return success(

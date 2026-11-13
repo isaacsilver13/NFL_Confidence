@@ -97,7 +97,7 @@ def test_submission_statuses_reflect_submitted_and_unsubmitted_members(client, d
     assert save_response.status_code == 200
     submit_response = client.post(
         "/api/v1/picks/submit",
-        json={"week": week.week_number},
+        json={"week": week.week_number, "mnfGuessPoints": 40, "mnfGuessYards": 700},
         headers=_headers(member),
     )
     assert submit_response.status_code == 200

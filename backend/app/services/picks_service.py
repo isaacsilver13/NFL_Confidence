@@ -23,7 +23,7 @@ from app.repositories import (
     week_submission_repository,
 )
 from app.schemas.nfl import HistoricalPickRead, HistoricalWeekRead, PickHistoryRead
-from app.services import weeks_service
+from app.services import scoring_service, weeks_service
 
 
 @dataclass(frozen=True)
@@ -234,7 +234,14 @@ def get_week_submission(db: Session, *, user: User, week_number: int) -> WeekSub
     return week_submission_repository.get_by_user_and_week(db, user_id=user.id, week_id=week.id)
 
 
-def submit_picks(db: Session, *, user: User, week_number: int) -> WeekSubmission:
+def submit_picks(
+    db: Session,
+    *,
+    user: User,
+    week_number: int,
+    mnf_guess_points: int | None = None,
+    mnf_guess_yards: int | None = None,
+) -> WeekSubmission:
     """Formally submit the user's current draft as their official entry for the week.
 
     Requires a complete, conflict-free card (every game picked, confidence values
@@ -254,6 +261,11 @@ def submit_picks(db: Session, *, user: User, week_number: int) -> WeekSubmission
     if earliest_kickoff <= now:
         raise ValidationError("Picks are locked after the earliest game has already kicked off.")
 
+    if scoring_service.monday_night_game(games) is not None and (
+        mnf_guess_points is None or mnf_guess_yards is None
+    ):
+        raise ValidationError("Enter your Monday Night total points and total offense guesses.")
+
     picks = pick_repository.list_by_user_and_week(db, user_id=user.id, week_id=week.id)
     active_picks = [pick for pick in picks if pick.voided_at is None]
     if len(active_picks) != len(games):
@@ -265,7 +277,13 @@ def submit_picks(db: Session, *, user: User, week_number: int) -> WeekSubmission
             f"Confidence values must use each value from 1 to {len(games)} exactly once."
         )
 
-    submission = week_submission_repository.upsert(db, user_id=user.id, week_id=week.id)
+    submission = week_submission_repository.upsert(
+        db,
+        user_id=user.id,
+        week_id=week.id,
+        mnf_guess_points=mnf_guess_points,
+        mnf_guess_yards=mnf_guess_yards,
+    )
     db.commit()
     db.refresh(submission)
     return submission

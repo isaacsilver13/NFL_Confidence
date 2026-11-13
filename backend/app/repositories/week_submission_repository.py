@@ -32,12 +32,21 @@ def list_by_week(db: Session, *, week_id: uuid.UUID) -> list[WeekSubmission]:
     )
 
 
-def upsert(db: Session, *, user_id: uuid.UUID, week_id: uuid.UUID) -> WeekSubmission:
+def upsert(
+    db: Session,
+    *,
+    user_id: uuid.UUID,
+    week_id: uuid.UUID,
+    mnf_guess_points: int | None = None,
+    mnf_guess_yards: int | None = None,
+) -> WeekSubmission:
     submission = get_by_user_and_week(db, user_id=user_id, week_id=week_id)
     if submission is None:
         submission = WeekSubmission(user_id=user_id, week_id=week_id)
         db.add(submission)
     else:
         submission.submitted_at = datetime.now(timezone.utc)
+    submission.mnf_guess_points = mnf_guess_points
+    submission.mnf_guess_yards = mnf_guess_yards
     db.flush()
     return submission
