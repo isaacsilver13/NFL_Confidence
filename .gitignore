@@ -36,3 +36,6 @@ Thumbs.db
 
 # Personal Claude Code settings overrides
 .claude/settings.local.json
+
+# Usage-report skill: test-account emails (personal data, never commit)
+.claude/skills/usage-report/exclude.txt

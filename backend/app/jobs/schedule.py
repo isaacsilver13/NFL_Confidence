@@ -98,6 +98,7 @@ def due_slots(now: datetime, cfg: ScheduleConfig) -> list[Slot]:
         daily.append("schedule_import")
     if hour >= cfg.overnight_sync_hour:
         daily.append("overnight_score_sync")
+        daily.append("prune_usage_events")
     if weekday == _weekday(cfg.reminder_day) and hour >= cfg.reminder_hour:
         daily.append("weekly_picks_reminder")
     if weekday == _weekday(cfg.report_day) and hour >= cfg.report_hour:
@@ -111,6 +112,7 @@ def due_slots(now: datetime, cfg: ScheduleConfig) -> list[Slot]:
         "sunday_score_sync",
         "monday_thursday_score_sync",
         "overnight_score_sync",
+        "prune_usage_events",
         "weekly_picks_reminder",
         "weekly_report",
     ]

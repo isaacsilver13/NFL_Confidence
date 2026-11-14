@@ -1,6 +1,7 @@
 """Tests for Google OAuth, JWT access tokens, refresh rotation, and logout."""
 
 import asyncio
+import uuid
 from collections.abc import Awaitable, Callable
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -8,12 +9,16 @@ from unittest.mock import AsyncMock
 import pytest
 from authlib.integrations.base_client.errors import OAuthError
 from fastapi.testclient import TestClient
-from sqlalchemy.exc import IntegrityError, ProgrammingError
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError, ProgrammingError, SQLAlchemyError
+from sqlalchemy.orm import Session
 
 from app.api import auth
 from app.api.auth import _database_error_details, _run_google_request
 from app.core.exceptions import UnauthorizedError
+from app.models.audit_log import AuditLog
 from app.models.user import User
+from app.services import usage_service
 
 
 async def _slow_google_operation() -> None:
@@ -116,6 +121,85 @@ def test_refresh_rotates_the_refresh_token(client: TestClient) -> None:
     client.cookies.set("refresh_token", old_refresh_cookie)
     reuse_attempt = client.post("/api/v1/auth/refresh")
     assert reuse_attempt.status_code == 401
+
+
+def _login_rows(db_session: Session) -> list[AuditLog]:
+    return list(db_session.execute(select(AuditLog).where(AuditLog.action == "login")).scalars())
+
+
+def test_dev_login_records_login_event(client: TestClient, db_session: Session) -> None:
+    client.post("/api/v1/auth/dev-login")
+
+    rows = _login_rows(db_session)
+    assert len(rows) == 1
+    assert rows[0].entity == "auth"
+    assert rows[0].user_id is not None
+    assert rows[0].event_metadata is None
+
+
+def test_refresh_does_not_record_login(client: TestClient, db_session: Session) -> None:
+    client.post("/api/v1/auth/dev-login")
+    assert client.post("/api/v1/auth/refresh").status_code == 200
+
+    assert len(_login_rows(db_session)) == 1
+
+
+def test_record_login_swallows_db_errors(
+    db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def boom(*args: object, **kwargs: object) -> None:
+        raise SQLAlchemyError("db down")
+
+    monkeypatch.setattr(usage_service.audit_log_repository, "create", boom)
+
+    usage_service.record_login(db_session, uuid.uuid4())  # must not raise
+
+
+def test_google_callback_records_login_event(
+    client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _mock_google_callback(
+        monkeypatch,
+        {"sub": "google-login-evt", "email": "evt@example.com", "name": "Evt User"},
+    )
+
+    response = client.get(
+        "/api/v1/auth/google/callback?code=test-code&state=test-state",
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert len(_login_rows(db_session)) == 1
+
+
+def test_google_callback_signs_in_when_login_tracking_fails(
+    client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """issue_tokens commits and expires `user`; the login record must not reload it."""
+    _mock_google_callback(
+        monkeypatch,
+        {"sub": "google-login-fail", "email": "fail@example.com", "name": "Fail User"},
+    )
+    real_issue_tokens = auth.auth_service.issue_tokens
+
+    def issue_then_detach(db: Session, user: User) -> object:
+        issued = real_issue_tokens(db, user)
+        db.expunge(user)  # any later reload of the expired user now fails
+        return issued
+
+    def boom(*args: object, **kwargs: object) -> None:
+        raise SQLAlchemyError("db down")
+
+    monkeypatch.setattr(auth.auth_service, "issue_tokens", issue_then_detach)
+    monkeypatch.setattr(usage_service.audit_log_repository, "create", boom)
+
+    response = client.get(
+        "/api/v1/auth/google/callback?code=test-code&state=test-state",
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert "refresh_token" in response.cookies
 
 
 def test_refresh_without_cookie_is_unauthorized(client: TestClient) -> None:
