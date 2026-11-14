@@ -106,9 +106,15 @@ def test_run_tick_runs_due_slots_once_and_records_them(db_session, calls) -> Non
     assert [(j["job"], j["status"]) for j in summary["jobs"]] == [
         ("sunday_score_sync", "success"),
         ("overnight_score_sync", "success"),  # catch-up: due all day after 02:00
+        ("prune_usage_events", "success"),
         ("lock_expired_picks", "success"),
     ]
-    assert calls == {"sunday_score_sync": 1, "overnight_score_sync": 1, "lock_expired_picks": 1}
+    assert calls == {
+        "sunday_score_sync": 1,
+        "overnight_score_sync": 1,
+        "prune_usage_events": 1,
+        "lock_expired_picks": 1,
+    }
     rows = {(e.job_name, e.slot_key): e for e in executions(db_session)}
     row = rows[("sunday_score_sync", "sunday_score_sync:2026-10-04T10")]
     assert row.status == "success"
@@ -121,8 +127,13 @@ def test_duplicate_call_in_the_same_hour_is_a_no_op(db_session, calls) -> None:
     second = tick.run_tick(sunday(10, 5))
 
     assert {j["status"] for j in second["jobs"]} == {"skipped"}
-    assert calls == {"sunday_score_sync": 1, "overnight_score_sync": 1, "lock_expired_picks": 1}
-    assert len(executions(db_session)) == 3
+    assert calls == {
+        "sunday_score_sync": 1,
+        "overnight_score_sync": 1,
+        "prune_usage_events": 1,
+        "lock_expired_picks": 1,
+    }
+    assert len(executions(db_session)) == 4
 
 
 def test_late_call_inside_the_hour_does_not_rerun_a_claimed_slot(db_session, calls) -> None:
@@ -171,12 +182,30 @@ def test_a_failing_job_is_recorded_and_does_not_stop_the_tick(
     assert statuses == {
         "sunday_score_sync": "failed",
         "overnight_score_sync": "success",
+        "prune_usage_events": "success",
         "lock_expired_picks": "success",
     }
     failed = next(e for e in executions(db_session) if e.job_name == "sunday_score_sync")
     assert failed.status == "failed"
     assert failed.error_message == "espn is down"
     assert failed.completed_at is not None
+
+
+def test_failing_prune_does_not_fail_other_jobs(client, calls, monkeypatch) -> None:
+    def boom() -> int:
+        raise RuntimeError("db is down")
+
+    monkeypatch.setitem(tick.JOB_FUNCTIONS, "prune_usage_events", boom)
+    monkeypatch.setattr(get_settings(), "tick_token", TOKEN)
+    real_due_slots = tick.due_slots  # pin the clock so the daily prune is due
+    monkeypatch.setattr(tick, "due_slots", lambda _now, cfg: real_due_slots(sunday(10), cfg))
+
+    response = client.post("/api/v1/internal/tick", headers={"Authorization": f"Bearer {TOKEN}"})
+
+    assert response.status_code == 200
+    statuses = {j["job"]: j["status"] for j in response.json()["data"]["jobs"]}
+    assert statuses.pop("prune_usage_events") == "failed"
+    assert statuses and set(statuses.values()) == {"success"}
 
 
 def test_a_failed_slot_is_retried_until_it_succeeds(db_session, calls, monkeypatch) -> None:
