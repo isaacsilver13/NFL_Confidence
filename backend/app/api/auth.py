@@ -151,6 +151,7 @@ async def google_callback(request: Request, db: Session = Depends(get_db)) -> Re
             display_name=display_name,
             avatar_url=avatar_url,
         )
+        user_id = user.id  # issue_tokens commits and expires `user`
         issued = auth_service.issue_tokens(db, user)
     except SQLAlchemyError as exc:
         db.rollback()
@@ -174,7 +175,7 @@ async def google_callback(request: Request, db: Session = Depends(get_db)) -> Re
         )
         raise UnauthorizedError("Google sign-in could not be completed. Please try again.") from exc
 
-    usage_service.record_login(db, user.id)
+    usage_service.record_login(db, user_id)
     redirect = RedirectResponse(url=settings.app_url, status_code=303)
     _set_refresh_cookie(redirect, issued.refresh_token)
     return redirect
@@ -188,8 +189,9 @@ def dev_login(request: Request, response: Response, db: Session = Depends(get_db
         raise UnauthorizedError("Dev login is only available in local development.")
 
     user = auth_service.get_or_create_dev_user(db)
+    user_id = user.id  # issue_tokens commits and expires `user`
     issued = auth_service.issue_tokens(db, user)
-    usage_service.record_login(db, user.id)
+    usage_service.record_login(db, user_id)
     _set_refresh_cookie(response, issued.refresh_token)
 
     return success(

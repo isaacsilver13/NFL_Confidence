@@ -36,7 +36,7 @@ def test_deleting_user_deletes_their_usage_events(db_session: Session) -> None:
     db_session.add_all(
         [
             UsageEvent(user_id=user.id, action="page_view", path="/picks"),
-            UsageEvent(user_id=user.id, action="section_view", section="picks"),
+            UsageEvent(user_id=user.id, action="section_open", section="standings"),
         ]
     )
     db_session.flush()

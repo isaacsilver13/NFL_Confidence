@@ -27,4 +27,4 @@ def create_many(db: Session, user_id: uuid.UUID, rows: Sequence[Mapping[str, str
 def delete_older_than(db: Session, cutoff: datetime) -> int:
     """Delete usage events created before `cutoff`; returns the number removed."""
     result = db.execute(delete(UsageEvent).where(UsageEvent.created_at < cutoff))
-    return result.rowcount  # type: ignore[attr-defined]
+    return result.rowcount

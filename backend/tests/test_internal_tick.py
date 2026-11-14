@@ -205,7 +205,8 @@ def test_failing_prune_does_not_fail_other_jobs(client, calls, monkeypatch) -> N
     assert response.status_code == 200
     statuses = {j["job"]: j["status"] for j in response.json()["data"]["jobs"]}
     assert statuses.pop("prune_usage_events") == "failed"
-    assert statuses and set(statuses.values()) == {"success"}
+    assert statuses
+    assert set(statuses.values()) == {"success"}
 
 
 def test_a_failed_slot_is_retried_until_it_succeeds(db_session, calls, monkeypatch) -> None:

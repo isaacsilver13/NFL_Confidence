@@ -11,7 +11,7 @@ DEVICES = {"phone", "desktop"}
 MAX_PATH_LENGTH = 200
 
 # Required metadata key per action. Anything else is rejected so free text and PII never land
-# in audit_log.
+# in usage_events.
 _REQUIRED_KEY: dict[str, str] = {
     "session_start": "device",
     "page_view": "path",
@@ -48,5 +48,5 @@ class EventsIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     # The SPA sends one event per request; 5 leaves room for batching without letting one
-    # request write dozens of audit_log rows.
+    # request write dozens of usage_events rows.
     events: list[EventIn] = Field(min_length=1, max_length=5)

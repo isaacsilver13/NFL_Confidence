@@ -172,6 +172,36 @@ def test_google_callback_records_login_event(
     assert len(_login_rows(db_session)) == 1
 
 
+def test_google_callback_signs_in_when_login_tracking_fails(
+    client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """issue_tokens commits and expires `user`; the login record must not reload it."""
+    _mock_google_callback(
+        monkeypatch,
+        {"sub": "google-login-fail", "email": "fail@example.com", "name": "Fail User"},
+    )
+    real_issue_tokens = auth.auth_service.issue_tokens
+
+    def issue_then_detach(db: Session, user: User) -> object:
+        issued = real_issue_tokens(db, user)
+        db.expunge(user)  # any later reload of the expired user now fails
+        return issued
+
+    def boom(*args: object, **kwargs: object) -> None:
+        raise SQLAlchemyError("db down")
+
+    monkeypatch.setattr(auth.auth_service, "issue_tokens", issue_then_detach)
+    monkeypatch.setattr(usage_service.audit_log_repository, "create", boom)
+
+    response = client.get(
+        "/api/v1/auth/google/callback?code=test-code&state=test-state",
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert "refresh_token" in response.cookies
+
+
 def test_refresh_without_cookie_is_unauthorized(client: TestClient) -> None:
     response = client.post("/api/v1/auth/refresh")
 
