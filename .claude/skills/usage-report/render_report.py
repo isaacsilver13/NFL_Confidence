@@ -144,7 +144,8 @@ def render(data: dict, out_path: str) -> None:
         _login_bars(names.get(uid, "Unknown"), by_user.get(uid, []), days) for uid in names
     )
     never = "".join(
-        f"<li>{escape(names.get(r['user_id'], 'Unknown'))} — {escape(r['status'])}</li>"
+        f"<li>{escape(names.get(r['user_id'], 'Unknown'))} — "
+        f"{escape(str(r.get('day') or r['status']))}</li>"
         for r in data["never_returned"]
     )
     devices = ", ".join(f"{escape(r['device'])}: {r['sessions']}" for r in data["device_split"])
@@ -160,7 +161,12 @@ def render(data: dict, out_path: str) -> None:
         + (f"<div class='grid'>{small_multiples}</div>" if names and days else "<p class='muted'>No data yet.</p>")
         + "<h2>Features</h2>" + _features(data["feature_adoption"])
         + "<h2>Devices</h2>" + (f"<p>{devices}</p>" if devices else "<p class='muted'>No data yet.</p>")
-        + "<h2>Not coming back</h2>" + (f"<ul>{never}</ul>" if never else "<p class='muted'>No data yet.</p>")
+        + "<h2>Active on one day only</h2>"
+        + (
+            f"<ul>{never}</ul><p class='muted'>Members who joined recently appear here too.</p>"
+            if never
+            else "<p class='muted'>No data yet.</p>"
+        )
         + "</body></html>"
     )
     with open(out_path, "w", encoding="utf-8") as handle:

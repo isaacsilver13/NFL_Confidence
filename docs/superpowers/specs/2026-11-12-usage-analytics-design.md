@@ -127,10 +127,15 @@ instead of JSONB metadata: `user_id` (FK users, ON DELETE CASCADE), `action` Str
   `USAGE_RETENTION_DAYS = 180`) deletes `usage_events` rows older than 180 days. It runs
   through the normal tick/slot machinery as a daily job due from `overnight_sync_hour`,
   slot key `prune_usage_events:YYYY-MM-DD`; no new setting.
-- "Never returned" = user whose tracked activity (`login`, `session_start` or `page_view`)
-  falls on a single day only. Login rows alone are not enough: members who stay signed in
-  through the refresh cookie have none. Users with no tracked activity at all (signed up
-  before tracking) are labelled "no data yet", not "never returned".
+- "Active" (DAU, WAU and "never returned") = any tracked activity that day: `login`,
+  `session_start`, `page_view` or `heartbeat`. Heartbeats already require interaction in the
+  last 2 minutes, so they are real activity; without them a pinned long-lived tab produces no
+  activity row on later days.
+- "Never returned" = user whose tracked activity falls on a single day only. Login rows alone
+  are not enough: members who stay signed in through the refresh cookie have none. Users with
+  no tracked activity at all (signed up before tracking) are labelled "no data yet", not
+  "never returned". There is no recency guard, so the report shows this as "Active on one day
+  only" with the date, and notes that recently joined members appear there too.
 
 ## Left to the builder
 

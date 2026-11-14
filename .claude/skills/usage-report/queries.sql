@@ -37,12 +37,13 @@ WHERE a.action = 'section_open' AND lower(u.email) NOT IN ({{EXCLUDE}})
 GROUP BY 1, 2;
 
 -- name: dau
--- Active = any login (audit_log), session_start or page_view (usage_events) that day.
+-- Active = any login (audit_log), session_start, page_view or heartbeat (usage_events) that day.
+-- Heartbeats already require interaction in the last 2 minutes, so they are real activity.
 -- Zero-filled between first and last day.
 WITH activity AS (
   SELECT user_id, created_at FROM audit_log WHERE action = 'login'
   UNION ALL
-  SELECT user_id, created_at FROM usage_events WHERE action IN ('session_start', 'page_view')
+  SELECT user_id, created_at FROM usage_events WHERE action IN ('session_start', 'page_view', 'heartbeat')
 ), active AS (
   SELECT (a.created_at AT TIME ZONE 'America/Chicago')::date AS day, a.user_id
   FROM activity a JOIN users u ON u.id = a.user_id
@@ -57,7 +58,7 @@ GROUP BY d ORDER BY d;
 WITH activity AS (
   SELECT user_id, created_at FROM audit_log WHERE action = 'login'
   UNION ALL
-  SELECT user_id, created_at FROM usage_events WHERE action IN ('session_start', 'page_view')
+  SELECT user_id, created_at FROM usage_events WHERE action IN ('session_start', 'page_view', 'heartbeat')
 )
 SELECT date_trunc('week', a.created_at AT TIME ZONE 'America/Chicago')::date::text AS week_start,
        count(DISTINCT a.user_id) AS users
@@ -100,23 +101,25 @@ WITH ev AS (
 SELECT feature, users, events FROM feats;
 
 -- name: never_returned
--- Activity = login, session_start or page_view (the same events DAU counts). Members who stay
+-- Activity = login, session_start, page_view or heartbeat (the same events DAU counts). Members who stay
 -- signed in through the refresh cookie have no login row, so a login row must not be required.
--- 'never returned' = tracked activity on a single day only (Chicago time).
+-- 'never returned' = tracked activity on a single day only (Chicago time); `day` is that day.
+-- No recency guard: someone who joined today shows here too.
 -- 'no data yet' = no tracked activity at all (signed up before tracking shipped).
 WITH activity AS (
   SELECT user_id, (created_at AT TIME ZONE 'America/Chicago')::date AS day
   FROM (
     SELECT user_id, created_at FROM audit_log WHERE action = 'login'
     UNION ALL
-    SELECT user_id, created_at FROM usage_events WHERE action IN ('session_start', 'page_view')
+    SELECT user_id, created_at FROM usage_events WHERE action IN ('session_start', 'page_view', 'heartbeat')
   ) e
   WHERE user_id IS NOT NULL
 ), span AS (
   SELECT user_id, min(day) AS first_day, max(day) AS last_day FROM activity GROUP BY user_id
 )
 SELECT u.id::text AS user_id,
-       CASE WHEN s.user_id IS NULL THEN 'no data yet' ELSE 'never returned' END AS status
+       CASE WHEN s.user_id IS NULL THEN 'no data yet' ELSE 'never returned' END AS status,
+       s.last_day::text AS day
 FROM users u
 LEFT JOIN span s ON s.user_id = u.id
 WHERE lower(u.email) NOT IN ({{EXCLUDE}})

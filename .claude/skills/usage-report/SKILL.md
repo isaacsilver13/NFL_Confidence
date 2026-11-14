@@ -27,7 +27,8 @@ show the user.
    user the full path to the HTML file.
 4. **Summarize in chat**, briefly: logins and last login per member, who is most and least
    active, which features are used versus ignored (the report marks zero-member features as
-   `ignored`), people who never returned or have no data yet, device split, and the DAU/WAU trend.
+   `ignored`), people active on one day only (with the date) or with no data yet, device split,
+   and the DAU/WAU trend.
 
 ## Caveats to state
 
@@ -36,6 +37,9 @@ show the user.
 - Active time is a floor: 30-second heartbeats counted while the tab is visible and the user
   interacted in the last 2 minutes. People reading without touching the screen are undercounted.
 - Days are bucketed in America/Chicago; "Last login" is shown in UTC.
+- "Active" (DAU/WAU, one-day-only) means a login, session start, page view or heartbeat that
+  day. Heartbeats need interaction in the last 2 minutes, so an idle open tab does not count.
+- "Active on one day only" has no recency guard: members who joined recently appear there too.
 - Picks and submissions come from the existing tables, so those counts include history.
 
 ## Self-check

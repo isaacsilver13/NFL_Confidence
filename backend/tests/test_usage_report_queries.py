@@ -166,3 +166,27 @@ def test_activity_without_login_rows_still_counts_in_dau(
     assert by_day["2026-11-11"] == 0  # zero-filled gap
     wau = {r["week_start"]: r["users"] for r in _run(db_session, "wau")}
     assert wau["2026-11-09"] == 3  # Alice, Bob (logins) and Dan (page_view only)
+
+
+def test_heartbeat_only_day_counts_in_dau_and_wau(
+    db_session: Session, seeded: dict[str, User]
+) -> None:
+    """A long-lived tab sends only heartbeats, which already require recent interaction."""
+    dan = User(google_id="g-dan", email="dan@example.com", display_name="Dan")
+    db_session.add(dan)
+    db_session.flush()
+    db_session.add(_event(dan, "heartbeat", _at(12), path="/"))
+    db_session.flush()
+
+    by_day = {r["day"]: r["users"] for r in _run(db_session, "dau")}
+    assert by_day["2026-11-12"] == 1
+    wau = {r["week_start"]: r["users"] for r in _run(db_session, "wau")}
+    assert wau["2026-11-09"] == 3  # Alice, Bob and Dan (heartbeat only)
+
+
+def test_never_returned_reports_the_single_active_day(
+    db_session: Session, seeded: dict[str, User]
+) -> None:
+    rows = {r["user_id"]: r for r in _run(db_session, "never_returned")}
+    assert rows[str(seeded["bob"].id)]["day"] == "2026-11-09"
+    assert rows[str(seeded["cara"].id)]["day"] is None

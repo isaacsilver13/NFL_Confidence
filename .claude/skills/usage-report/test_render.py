@@ -39,8 +39,8 @@ SAMPLE = {
         {"feature": "Standings section", "users": 0, "events": 0},
     ],
     "never_returned": [
-        {"user_id": "u2", "status": "never returned"},
-        {"user_id": "u3", "status": "no data yet"},
+        {"user_id": "u2", "status": "never returned", "day": "2026-11-08"},
+        {"user_id": "u3", "status": "no data yet", "day": None},
     ],
 }
 
@@ -66,7 +66,16 @@ def test_renders_sample() -> None:
     assert "<svg" in html
     # 10 heartbeat buckets x 30 s = 5 minutes of active time for Alice
     assert "5m" in html
-    assert "never returned" in html and "no data yet" in html
+    assert "no data yet" in html
+
+
+def test_single_day_members_are_labelled_with_their_day() -> None:
+    html = render(SAMPLE)
+    assert "Active on one day only" in html
+    assert "Not coming back" not in html
+    assert "Bob — 2026-11-08" in html
+    assert "Cara — no data yet" in html
+    assert "joined recently appear here too" in html
 
 
 def test_escapes_display_names() -> None:

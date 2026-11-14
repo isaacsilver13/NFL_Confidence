@@ -86,11 +86,13 @@ function DashboardSections({
     }
   }, [openSections, userId])
 
-  // A deep link (the /leaderboard-style redirects, a bookmark) opens its section from the initial
-  // hash without firing `hashchange`, so count that open once on mount.
+  // Sections open on mount (persisted/default-open ones and a deep-link hash, which never fires
+  // `hashchange`) count as opened once each per mount.
   useEffect(() => {
-    const section = sectionFromHash()
-    if (section) trackSectionOpen(section)
+    const initial = new Set(openSections)
+    if (hashSection) initial.add(hashSection)
+    initial.forEach((section) => trackSectionOpen(section))
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only: initial open state
   }, [])
 
   useEffect(() => {
