@@ -78,7 +78,8 @@ function LeaderboardTable({
   })
   return (
     <div className="space-y-2">
-      <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-surface shadow-sm dark:border-night-line dark:bg-night-card">
+      {/* isolate: keeps the pinned cells' z-10 inside the table so they can't paint over the sticky app header. */}
+      <div className="isolate overflow-x-auto rounded-2xl border border-slate-200 bg-surface shadow-sm dark:border-night-line dark:bg-night-card">
         <table className="w-full min-w-[600px] text-left text-sm">
           <caption className="sr-only">Weekly leaderboard rankings</caption>
           <thead className="bg-surface-muted text-xs uppercase tracking-[0.14em] text-ink-muted dark:bg-night-page dark:text-night-muted">
