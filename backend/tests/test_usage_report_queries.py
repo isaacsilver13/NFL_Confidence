@@ -9,6 +9,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.models.audit_log import AuditLog
+from app.models.usage_event import UsageEvent
 from app.models.user import User
 
 QUERIES_FILE = (
@@ -26,12 +27,25 @@ def _at(day: int, hour: int = 15, minute: int = 0) -> datetime:
     return datetime(2026, 11, day, hour, minute, tzinfo=timezone.utc)
 
 
-def _event(user: User | None, action: str, when: datetime, **metadata: str) -> AuditLog:
-    return AuditLog(
-        user_id=user.id if user else None,
+def _event(
+    user: User | None, action: str, when: datetime, **metadata: str
+) -> AuditLog | UsageEvent:
+    """Logins live in audit_log; every other action is a usage_events row."""
+    if action == "login":
+        return AuditLog(
+            user_id=user.id if user else None,
+            action=action,
+            entity="auth",
+            event_metadata=metadata or None,
+            created_at=when,
+        )
+    assert user is not None
+    return UsageEvent(
+        user_id=user.id,
         action=action,
-        entity="auth" if action == "login" else "usage",
-        event_metadata=metadata or None,
+        path=metadata.get("path"),
+        section=metadata.get("section"),
+        device=metadata.get("device"),
         created_at=when,
     )
 
@@ -136,3 +150,19 @@ def test_never_returned_uses_activity_when_there_is_no_login_row(
     status = {r["user_id"]: r["status"] for r in _run(db_session, "never_returned")}
     assert status[str(dan.id)] == "never returned"  # active one day only, not 'no data yet'
     assert str(erin.id) not in status  # came back on a later day
+
+
+def test_activity_without_login_rows_still_counts_in_dau(
+    db_session: Session, seeded: dict[str, User]
+) -> None:
+    dan = User(google_id="g-dan", email="dan@example.com", display_name="Dan")
+    db_session.add(dan)
+    db_session.flush()
+    db_session.add(_event(dan, "page_view", _at(12), path="/picks"))
+    db_session.flush()
+
+    by_day = {r["day"]: r["users"] for r in _run(db_session, "dau")}
+    assert by_day["2026-11-12"] == 1
+    assert by_day["2026-11-11"] == 0  # zero-filled gap
+    wau = {r["week_start"]: r["users"] for r in _run(db_session, "wau")}
+    assert wau["2026-11-09"] == 3  # Alice, Bob (logins) and Dan (page_view only)

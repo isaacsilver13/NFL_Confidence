@@ -20,29 +20,33 @@ GROUP BY a.user_id;
 -- Distinct 30-second heartbeat buckets; active time = buckets x 30 s.
 SELECT a.user_id::text AS user_id,
        count(DISTINCT floor(extract(epoch FROM a.created_at) / 30)) AS buckets
-FROM audit_log a JOIN users u ON u.id = a.user_id
+FROM usage_events a JOIN users u ON u.id = a.user_id
 WHERE a.action = 'heartbeat' AND lower(u.email) NOT IN ({{EXCLUDE}})
 GROUP BY a.user_id;
 
 -- name: page_views
-SELECT a.user_id::text AS user_id, a.metadata->>'path' AS path, count(*) AS views
-FROM audit_log a JOIN users u ON u.id = a.user_id
+SELECT a.user_id::text AS user_id, a.path, count(*) AS views
+FROM usage_events a JOIN users u ON u.id = a.user_id
 WHERE a.action = 'page_view' AND lower(u.email) NOT IN ({{EXCLUDE}})
 GROUP BY 1, 2;
 
 -- name: section_opens
-SELECT a.user_id::text AS user_id, a.metadata->>'section' AS section, count(*) AS opens
-FROM audit_log a JOIN users u ON u.id = a.user_id
+SELECT a.user_id::text AS user_id, a.section, count(*) AS opens
+FROM usage_events a JOIN users u ON u.id = a.user_id
 WHERE a.action = 'section_open' AND lower(u.email) NOT IN ({{EXCLUDE}})
 GROUP BY 1, 2;
 
 -- name: dau
--- Active = any login, session_start or page_view that day. Zero-filled between first and last day.
-WITH active AS (
+-- Active = any login (audit_log), session_start or page_view (usage_events) that day.
+-- Zero-filled between first and last day.
+WITH activity AS (
+  SELECT user_id, created_at FROM audit_log WHERE action = 'login'
+  UNION ALL
+  SELECT user_id, created_at FROM usage_events WHERE action IN ('session_start', 'page_view')
+), active AS (
   SELECT (a.created_at AT TIME ZONE 'America/Chicago')::date AS day, a.user_id
-  FROM audit_log a JOIN users u ON u.id = a.user_id
-  WHERE a.action IN ('login', 'session_start', 'page_view')
-    AND lower(u.email) NOT IN ({{EXCLUDE}})
+  FROM activity a JOIN users u ON u.id = a.user_id
+  WHERE lower(u.email) NOT IN ({{EXCLUDE}})
 ), bounds AS (SELECT min(day) AS lo, max(day) AS hi FROM active)
 SELECT d::date::text AS day, count(DISTINCT active.user_id) AS users
 FROM bounds, generate_series(bounds.lo, bounds.hi, interval '1 day') AS d
@@ -50,10 +54,15 @@ LEFT JOIN active ON active.day = d::date
 GROUP BY d ORDER BY d;
 
 -- name: wau
+WITH activity AS (
+  SELECT user_id, created_at FROM audit_log WHERE action = 'login'
+  UNION ALL
+  SELECT user_id, created_at FROM usage_events WHERE action IN ('session_start', 'page_view')
+)
 SELECT date_trunc('week', a.created_at AT TIME ZONE 'America/Chicago')::date::text AS week_start,
        count(DISTINCT a.user_id) AS users
-FROM audit_log a JOIN users u ON u.id = a.user_id
-WHERE a.action IN ('login', 'session_start', 'page_view') AND lower(u.email) NOT IN ({{EXCLUDE}})
+FROM activity a JOIN users u ON u.id = a.user_id
+WHERE lower(u.email) NOT IN ({{EXCLUDE}})
 GROUP BY 1 ORDER BY 1;
 
 -- name: login_series
@@ -64,16 +73,16 @@ WHERE a.action = 'login' AND lower(u.email) NOT IN ({{EXCLUDE}})
 GROUP BY 1, 2 ORDER BY 2;
 
 -- name: device_split
-SELECT a.metadata->>'device' AS device, count(*) AS sessions
-FROM audit_log a JOIN users u ON u.id = a.user_id
+SELECT a.device, count(*) AS sessions
+FROM usage_events a JOIN users u ON u.id = a.user_id
 WHERE a.action = 'session_start' AND lower(u.email) NOT IN ({{EXCLUDE}})
 GROUP BY 1;
 
 -- name: feature_adoption
 -- Members = distinct non-excluded users who did it; events = how many times.
 WITH ev AS (
-  SELECT a.user_id, a.action, a.metadata->>'path' AS path, a.metadata->>'section' AS section
-  FROM audit_log a JOIN users u ON u.id = a.user_id
+  SELECT a.user_id, a.action, a.path, a.section
+  FROM usage_events a JOIN users u ON u.id = a.user_id
   WHERE lower(u.email) NOT IN ({{EXCLUDE}})
 ), feats(feature, users, events) AS (
   SELECT 'Dashboard page', count(DISTINCT user_id), count(*) FROM ev WHERE action = 'page_view' AND path = '/'
@@ -97,8 +106,12 @@ SELECT feature, users, events FROM feats;
 -- 'no data yet' = no tracked activity at all (signed up before tracking shipped).
 WITH activity AS (
   SELECT user_id, (created_at AT TIME ZONE 'America/Chicago')::date AS day
-  FROM audit_log
-  WHERE action IN ('login', 'session_start', 'page_view') AND user_id IS NOT NULL
+  FROM (
+    SELECT user_id, created_at FROM audit_log WHERE action = 'login'
+    UNION ALL
+    SELECT user_id, created_at FROM usage_events WHERE action IN ('session_start', 'page_view')
+  ) e
+  WHERE user_id IS NOT NULL
 ), span AS (
   SELECT user_id, min(day) AS first_day, max(day) AS last_day FROM activity GROUP BY user_id
 )

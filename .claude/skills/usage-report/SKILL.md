@@ -5,8 +5,8 @@ description: Use when the user asks for the NFL Confidence usage report, user ac
 
 # NFL Confidence usage report
 
-Builds an HTML report from the `audit_log` events the app records (`login`, `session_start`,
-`page_view`, `section_open`, `heartbeat`) plus the `picks` and `week_submissions` tables.
+Builds an HTML report from the events the app records (`login` from `audit_log`; `session_start`,
+`page_view`, `section_open`, `heartbeat` from `usage_events`) plus the `picks` and `week_submissions` tables.
 
 Rules: SELECT only. Never write to the database, never store or print a connection string,
 and never start, wake, or poll anything on Fly. Use display names, not emails, in anything you
