@@ -114,6 +114,12 @@ function draftSavePayload(games: NflGame[], drafts: PickDrafts): DraftSavePayloa
   return { submissions, voidedGameIds }
 }
 
+// Sent with every autosave so the guesses count as part of a complete card.
+function mnfGuessPayload(guesses: { points: string; yards: string }) {
+  if (guesses.points.trim() === '' || guesses.yards.trim() === '') return {}
+  return { mnfGuessPoints: Number(guesses.points), mnfGuessYards: Number(guesses.yards) }
+}
+
 function formatSubmittedAt(submittedAt: string): string {
   return new Intl.DateTimeFormat(undefined, {
     month: 'short',
@@ -150,6 +156,7 @@ function GamesForm({
   const locksAt = week.locksAt ? Date.parse(week.locksAt) : earliestKickoff
   const isLocked = Boolean(week.isLocked || (locksAt !== null && locksAt <= now))
   const draftsRef = useRef(drafts)
+  const guessesRef = useRef({ points: mnfPoints, yards: mnfYards })
   const draftVersionRef = useRef(0)
   const isLockedRef = useRef(isLocked)
   const saveTimerRef = useRef<number | null>(null)
@@ -255,6 +262,7 @@ function GamesForm({
         week: week.weekNumber,
         picks: submissions,
         voidedGameIds,
+        ...mnfGuessPayload(guessesRef.current),
       })
       if (pendingSave.version === draftVersionRef.current) {
         await queryClient.invalidateQueries({ queryKey: ['picks', 'card', 'current'] })
@@ -317,6 +325,18 @@ function GamesForm({
     scheduleSave({ drafts: nextDrafts, version: nextVersion })
   }
 
+  function updateGuess(kind: 'points' | 'yards', value: string) {
+    guessesRef.current = { ...guessesRef.current, [kind]: value }
+    if (kind === 'points') setMnfPoints(value)
+    else setMnfYards(value)
+    const nextVersion = draftVersionRef.current + 1
+    draftVersionRef.current = nextVersion
+    setIsDraftSaved(false)
+    setSaved(false)
+    setSubmitError(null)
+    scheduleSave({ drafts: draftsRef.current, version: nextVersion })
+  }
+
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     scheduleSave({ drafts: draftsRef.current, version: draftVersionRef.current }, 0)
@@ -372,7 +392,7 @@ function GamesForm({
                 min={0}
                 max={300}
                 value={mnfPoints}
-                onChange={(event) => setMnfPoints(event.target.value)}
+                onChange={(event) => updateGuess('points', event.target.value)}
                 className="mt-1 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 dark:border-night-line-strong dark:bg-night-page"
               />
             </label>
@@ -384,7 +404,7 @@ function GamesForm({
                 min={0}
                 max={2000}
                 value={mnfYards}
-                onChange={(event) => setMnfYards(event.target.value)}
+                onChange={(event) => updateGuess('yards', event.target.value)}
                 className="mt-1 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 dark:border-night-line-strong dark:bg-night-page"
               />
             </label>

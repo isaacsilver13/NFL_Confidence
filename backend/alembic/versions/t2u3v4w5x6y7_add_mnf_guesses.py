@@ -1,4 +1,4 @@
-"""Add Monday Night guesses to week_submissions.
+"""Add Monday Night guesses table and total offense yards on games.
 
 Revision ID: t2u3v4w5x6y7
 Revises: s1u2v3w4x5y6
@@ -18,10 +18,24 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    op.add_column("week_submissions", sa.Column("mnf_guess_points", sa.Integer(), nullable=True))
-    op.add_column("week_submissions", sa.Column("mnf_guess_yards", sa.Integer(), nullable=True))
+    op.create_table(
+        "mnf_guesses",
+        sa.Column("id", sa.Uuid(), primary_key=True),
+        sa.Column(
+            "user_id", sa.Uuid(), sa.ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+        ),
+        sa.Column(
+            "week_id", sa.Uuid(), sa.ForeignKey("nfl_weeks.id", ondelete="CASCADE"), nullable=False
+        ),
+        sa.Column("points", sa.Integer(), nullable=False),
+        sa.Column("yards", sa.Integer(), nullable=False),
+        sa.UniqueConstraint("user_id", "week_id", name="uq_mnf_guesses_user_week"),
+    )
+    op.create_index("ix_mnf_guesses_user_id", "mnf_guesses", ["user_id"])
+    op.create_index("ix_mnf_guesses_week_id", "mnf_guesses", ["week_id"])
+    op.add_column("nfl_games", sa.Column("total_offense_yards", sa.Integer(), nullable=True))
 
 
 def downgrade() -> None:
-    op.drop_column("week_submissions", "mnf_guess_yards")
-    op.drop_column("week_submissions", "mnf_guess_points")
+    op.drop_column("nfl_games", "total_offense_yards")
+    op.drop_table("mnf_guesses")

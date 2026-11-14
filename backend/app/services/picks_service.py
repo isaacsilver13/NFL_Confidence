@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.core.exceptions import NotFoundError, ValidationError
 from app.models.league import League
 from app.models.league_member import LeagueMember
+from app.models.mnf_guess import MnfGuess
 from app.models.nfl_game import NflGame
 from app.models.nfl_week import NflWeek
 from app.models.pick import Pick
@@ -17,6 +18,7 @@ from app.models.user import User
 from app.models.week_submission import WeekSubmission
 from app.repositories import (
     league_member_repository,
+    mnf_guess_repository,
     nfl_game_repository,
     nfl_week_repository,
     pick_repository,
@@ -94,6 +96,8 @@ def create_picks(
     week_number: int,
     submissions: list[PickSubmission],
     voided_game_ids: list[uuid.UUID] | None = None,
+    mnf_guess_points: int | None = None,
+    mnf_guess_yards: int | None = None,
 ) -> list[Pick]:
     """Create or update confidence picks for the current week.
 
@@ -221,10 +225,19 @@ def create_picks(
             pick.points_earned = None
         saved_picks.append(pick)
 
+    if mnf_guess_points is not None and mnf_guess_yards is not None:
+        mnf_guess_repository.upsert(
+            db, user_id=user.id, week_id=week.id, points=mnf_guess_points, yards=mnf_guess_yards
+        )
+
     db.commit()
     for pick in saved_picks:
         db.refresh(pick)
     return saved_picks
+
+
+def get_mnf_guess(db: Session, *, user: User, week_id: uuid.UUID) -> MnfGuess | None:
+    return mnf_guess_repository.get(db, user_id=user.id, week_id=week_id)
 
 
 def get_week_submission(db: Session, *, user: User, week_number: int) -> WeekSubmission | None:
@@ -261,8 +274,12 @@ def submit_picks(
     if earliest_kickoff <= now:
         raise ValidationError("Picks are locked after the earliest game has already kicked off.")
 
+    if mnf_guess_points is not None and mnf_guess_yards is not None:
+        mnf_guess_repository.upsert(
+            db, user_id=user.id, week_id=week.id, points=mnf_guess_points, yards=mnf_guess_yards
+        )
     if scoring_service.monday_night_game(games) is not None and (
-        mnf_guess_points is None or mnf_guess_yards is None
+        mnf_guess_repository.get(db, user_id=user.id, week_id=week.id) is None
     ):
         raise ValidationError("Enter your Monday Night total points and total offense guesses.")
 
@@ -277,13 +294,7 @@ def submit_picks(
             f"Confidence values must use each value from 1 to {len(games)} exactly once."
         )
 
-    submission = week_submission_repository.upsert(
-        db,
-        user_id=user.id,
-        week_id=week.id,
-        mnf_guess_points=mnf_guess_points,
-        mnf_guess_yards=mnf_guess_yards,
-    )
+    submission = week_submission_repository.upsert(db, user_id=user.id, week_id=week.id)
     db.commit()
     db.refresh(submission)
     return submission
@@ -295,10 +306,15 @@ def list_complete_card_user_ids(db: Session, *, week_id: uuid.UUID) -> set[uuid.
     Autosave is the fallback for the Submit button: a member with a complete card counts
     as submitted even if they never pressed Submit.
     """
-    game_count = len(nfl_game_repository.get_by_week_id(db, week_id))
-    return pick_repository.list_complete_user_ids_for_week(
-        db, week_id=week_id, game_count=game_count
+    games = nfl_game_repository.get_by_week_id(db, week_id)
+    complete = pick_repository.list_complete_user_ids_for_week(
+        db, week_id=week_id, game_count=len(games)
     )
+    if scoring_service.monday_night_game(games) is None:
+        return complete
+    # The Monday Night guesses count as one more pick: no guesses, no complete card.
+    guessed = {guess.user_id for guess in mnf_guess_repository.list_by_week(db, week_id=week_id)}
+    return complete & guessed
 
 
 def list_submitted_user_ids(db: Session, *, week_id: uuid.UUID) -> set[uuid.UUID]:

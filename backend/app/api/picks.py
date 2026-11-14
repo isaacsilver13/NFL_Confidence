@@ -84,6 +84,8 @@ def save_picks(
         week_number=body.week,
         submissions=submissions,
         voided_game_ids=body.voided_game_ids,
+        mnf_guess_points=body.mnf_guess_points,
+        mnf_guess_yards=body.mnf_guess_yards,
     )
     return success([_pick_read(pick) for pick in saved_picks])
 
@@ -104,11 +106,7 @@ def submit_picks(
         mnf_guess_yards=body.mnf_guess_yards,
     )
     return success(
-        WeekSubmissionRead(
-            submitted_at=submission.submitted_at,
-            mnf_guess_points=submission.mnf_guess_points,
-            mnf_guess_yards=submission.mnf_guess_yards,
-        ).model_dump(by_alias=True)
+        WeekSubmissionRead(submitted_at=submission.submitted_at).model_dump(by_alias=True)
     )
 
 
@@ -173,11 +171,12 @@ def get_current_card(
     submission = picks_service.get_week_submission(
         db, user=current_user, week_number=week.week_number
     )
+    guess = picks_service.get_mnf_guess(db, user=current_user, week_id=week.id)
     submission_data = WeekSubmissionRead(
         submitted_at=submission.submitted_at if submission else None,
         requires_mnf_guess=scoring_service.monday_night_game(games) is not None,
-        mnf_guess_points=submission.mnf_guess_points if submission else None,
-        mnf_guess_yards=submission.mnf_guess_yards if submission else None,
+        mnf_guess_points=guess.points if guess else None,
+        mnf_guess_yards=guess.yards if guess else None,
     ).model_dump(by_alias=True)
 
     return success(

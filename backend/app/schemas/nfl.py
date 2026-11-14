@@ -90,6 +90,8 @@ class PicksCreateRequest(CamelModel):
     week: int
     picks: list[PickCreate]
     voided_game_ids: list[uuid.UUID] = Field(default_factory=list)
+    mnf_guess_points: int | None = Field(default=None, ge=0, le=300)
+    mnf_guess_yards: int | None = Field(default=None, ge=0, le=2000)
 
 
 class PicksSubmitRequest(CamelModel):

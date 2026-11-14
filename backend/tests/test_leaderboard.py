@@ -11,6 +11,7 @@ from app.core.exceptions import NotFoundError
 from app.models import (
     League,
     LeagueMember,
+    MnfGuess,
     NflGame,
     NflWeek,
     Pick,
@@ -636,7 +637,8 @@ def test_weekly_leaderboard_breaks_ties_with_monday_night_points_guess(
     for name, guess in (("A", 60), ("B", 45)):
         user = _user(db_session, name)
         db_session.add(LeagueMember(league_id=league.id, user_id=user.id, role=LeagueRole.MEMBER))
-        db_session.add(WeekSubmission(user_id=user.id, week_id=week.id, mnf_guess_points=guess))
+        db_session.add(MnfGuess(user_id=user.id, week_id=week.id, points=guess, yards=500))
+        db_session.add(WeekSubmission(user_id=user.id, week_id=week.id))
         db_session.add(
             WeeklyResult(
                 league_id=league.id,

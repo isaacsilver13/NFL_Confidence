@@ -170,6 +170,10 @@ describe('PicksPage', () => {
     await waitFor(() => expect(submitButton).not.toBeDisabled())
     await user.click(submitButton)
 
+    expect(mockedSavePicks.mock.lastCall?.[0]).toMatchObject({
+      mnfGuessPoints: 44,
+      mnfGuessYards: 710,
+    })
     expect(mockedSubmitPicks).toHaveBeenCalledWith(1, { mnfGuessPoints: 44, mnfGuessYards: 710 })
   })
 

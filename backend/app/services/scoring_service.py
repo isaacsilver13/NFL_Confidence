@@ -12,11 +12,11 @@ from app.core.exceptions import NotFoundError
 from app.models.enums import GameStatus, WeekStatus
 from app.models.league import League
 from app.models.league_member import LeagueMember
+from app.models.mnf_guess import MnfGuess
 from app.models.nfl_game import NflGame
 from app.models.nfl_week import NflWeek
 from app.models.pick import Pick
 from app.models.season_result import SeasonResult
-from app.models.week_submission import WeekSubmission
 from app.models.weekly_result import WeeklyResult
 
 
@@ -28,7 +28,7 @@ def _pick_points(pick: Pick) -> int:
 
 
 # Sorts after every real guess distance, so members without a guess rank last in the tie-break.
-NO_GUESS_DISTANCE = 10**9
+NO_GUESS_DISTANCE = (10**9, 10**9)
 
 
 def monday_night_game(games: list[NflGame]) -> NflGame | None:
@@ -38,13 +38,13 @@ def monday_night_game(games: list[NflGame]) -> NflGame | None:
     return max(mondays, key=lambda g: g.kickoff_time) if mondays else None
 
 
-def mnf_point_distances(
+def mnf_distances(
     db: Session, *, week_id: uuid.UUID, games: list[NflGame] | None = None
-) -> dict[uuid.UUID, int]:
-    """Each member's distance between their Monday Night total-points guess and the real total.
+) -> dict[uuid.UUID, tuple[int, int]]:
+    """Each member's (points, yards) distance from their Monday Night guesses to the real totals.
 
-    Empty until that game is final. Yards guesses are stored but not scored: no yardage data
-    source exists yet.
+    Empty until that game is final. Until total offense is fetched, yards distance is 0 for
+    everyone who guessed, so only the points distance separates them.
     """
     if games is None:
         games = list(db.execute(select(NflGame).where(NflGame.week_id == week_id)).scalars())
@@ -56,13 +56,15 @@ def mnf_point_distances(
         or game.away_score is None
     ):
         return {}
-    actual = game.home_score + game.away_score
-    rows = db.execute(
-        select(WeekSubmission.user_id, WeekSubmission.mnf_guess_points).where(
-            WeekSubmission.week_id == week_id, WeekSubmission.mnf_guess_points.is_not(None)
+    actual_points = game.home_score + game.away_score
+    guesses = db.execute(select(MnfGuess).where(MnfGuess.week_id == week_id)).scalars()
+    return {
+        guess.user_id: (
+            abs(guess.points - actual_points),
+            abs(guess.yards - game.total_offense_yards) if game.total_offense_yards else 0,
         )
-    ).all()
-    return {user_id: abs(guess - actual) for user_id, guess in rows}
+        for guess in guesses
+    }
 
 
 def _rank_key(result: WeeklyResult) -> tuple[int, int, int, str]:
@@ -75,12 +77,13 @@ def _rank_key(result: WeeklyResult) -> tuple[int, int, int, str]:
 
 
 def _assign_weekly_ranks(
-    results: list[WeeklyResult], distances: dict[uuid.UUID, int] | None = None
+    results: list[WeeklyResult], distances: dict[uuid.UUID, tuple[int, int]] | None = None
 ) -> None:
-    """Rank by points, correct picks, lowest missed confidence, then Monday Night guess distance."""
+    """Rank by points, correct picks, lowest missed confidence, then Monday Night guess distance
+    (points, then yards)."""
     distances = distances or {}
 
-    def key(result: WeeklyResult) -> tuple[int, int, int, int]:
+    def key(result: WeeklyResult) -> tuple[int, int, int, tuple[int, int]]:
         points, correct, loss, _ = _rank_key(result)
         return (
             points,
@@ -94,7 +97,7 @@ def _assign_weekly_ranks(
         )
 
     ordered = sorted(results, key=lambda r: (key(r), str(r.user_id)))
-    previous_key: tuple[int, int, int, int] | None = None
+    previous_key: tuple[int, int, int, tuple[int, int]] | None = None
     previous_rank = 0
     for position, result in enumerate(ordered, start=1):
         if key(result) != previous_key:
@@ -232,7 +235,7 @@ def score_week(db: Session, *, league: League, week_id: uuid.UUID) -> int:
         weekly_results.append(result)
 
     db.flush()
-    _assign_weekly_ranks(weekly_results, mnf_point_distances(db, week_id=week.id, games=games))
+    _assign_weekly_ranks(weekly_results, mnf_distances(db, week_id=week.id, games=games))
 
     terminal_statuses = {GameStatus.FINAL, GameStatus.CANCELLED}
     if games and all(game.game_status in terminal_statuses for game in games):

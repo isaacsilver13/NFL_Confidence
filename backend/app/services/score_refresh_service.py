@@ -12,7 +12,7 @@ from app.integrations.espn import fetch_schedule
 from app.models.job_execution import JobExecution
 from app.models.league import League
 from app.services import scoring_service, weeks_service
-from app.services.nfl_schedule_service import import_games
+from app.services.nfl_schedule_service import import_games, sync_monday_night_offense
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +47,7 @@ def refresh_league_scores(db: Session, *, league: League) -> RefreshResult:
         games_final = 0
         for week in weeks:
             import_games(db, fetch_schedule(league.season, week.week_number))
+            sync_monday_night_offense(db, week_id=week.id)
             games_final += scoring_service.score_week(db, league=league, week_id=week.id)
     except (httpx.HTTPError, ValueError) as exc:
         db.rollback()

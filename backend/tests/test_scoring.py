@@ -128,7 +128,24 @@ def test_monday_night_points_guess_breaks_ties_after_existing_rules() -> None:
     near, far, none, ahead = (_uuid.uuid4() for _ in range(4))
     results = [result(far), result(none), result(near), result(ahead, points=21)]
 
-    scoring_service._assign_weekly_ranks(results, {near: 1, far: 9})
+    scoring_service._assign_weekly_ranks(results, {near: (1, 0), far: (9, 0)})
 
     ranks = {r.user_id: r.weekly_rank for r in results}
     assert ranks == {ahead: 1, near: 2, far: 3, none: 4}
+
+
+def test_monday_night_yards_guess_breaks_a_points_guess_tie() -> None:
+    import uuid as _uuid
+
+    from app.models.weekly_result import WeeklyResult
+    from app.services import scoring_service
+
+    close, wide = _uuid.uuid4(), _uuid.uuid4()
+    results = [
+        WeeklyResult(user_id=u, total_points=20, correct_picks=3, highest_confidence_loss=4)
+        for u in (wide, close)
+    ]
+
+    scoring_service._assign_weekly_ranks(results, {close: (2, 5), wide: (2, 90)})
+
+    assert {r.user_id: r.weekly_rank for r in results} == {close: 1, wide: 2}

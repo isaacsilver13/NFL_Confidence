@@ -4,6 +4,7 @@ import itertools
 import uuid
 from collections import defaultdict
 from datetime import datetime, timezone
+from typing import Any
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import ColumnElement, desc, distinct, exists, func, or_, select
@@ -82,7 +83,7 @@ def _ranked_members(
     member_count: int = 0,
     points_remaining_by_user: dict[uuid.UUID, int] | None = None,
     night_game_picks_by_user: dict[uuid.UUID, list[MemberGamePickRead]] | None = None,
-    mnf_distance_by_user: dict[uuid.UUID, int] | None = None,
+    mnf_distance_by_user: dict[uuid.UUID, tuple[int, int]] | None = None,
 ) -> list[LeaderboardMemberRead]:
     mnf_distance_by_user = mnf_distance_by_user or {}
     points_remaining_by_user = points_remaining_by_user or {}
@@ -107,7 +108,7 @@ def _ranked_members(
         ),
     )
     members: list[LeaderboardMemberRead] = []
-    previous_key: tuple[int, ...] | None = None
+    previous_key: tuple[Any, ...] | None = None
     previous_rank = 0
     for position, result in enumerate(ordered, start=1):
         current_key = (
@@ -431,7 +432,7 @@ def get_weekly_leaderboard(
         member_count=league_repository.count_members(db, league.id),
         points_remaining_by_user=_points_remaining_by_user(db, week_id=week.id),
         night_game_picks_by_user=night_game_picks_by_user,
-        mnf_distance_by_user=scoring_service.mnf_point_distances(db, week_id=week.id),
+        mnf_distance_by_user=scoring_service.mnf_distances(db, week_id=week.id),
     )
     if not standings:
         raise NotFoundError(f"Week {week.week_number} has no leaderboard data.")
