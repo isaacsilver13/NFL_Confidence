@@ -1,7 +1,7 @@
 """create usage_events table for client usage telemetry
 
 Revision ID: t1v2w3x4y5z6
-Revises: s1u2v3w4x5y6
+Revises: t2u3v4w5x6y7
 """
 
 from collections.abc import Sequence
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "t1v2w3x4y5z6"
-down_revision: str | None = "s1u2v3w4x5y6"
+down_revision: str | None = "t2u3v4w5x6y7"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
