@@ -91,6 +91,41 @@ describe('LeaderboardPage', () => {
     expect(screen.getByRole('option', { name: 'Week 3 — Live' })).toBeInTheDocument()
   })
 
+  it('lists the games that can still change the paid top three', async () => {
+    mockedFetchStartedWeeks.mockResolvedValue([])
+    mockedFetchCurrentWeek.mockResolvedValue(currentWeek)
+    mockedFetchWeeklyLeaderboard.mockResolvedValue({
+      week: { weekNumber: 3, seasonNumber: 2026 },
+      standings: [
+        {
+          rank: 1,
+          memberId: 'user-1',
+          memberName: 'Owner',
+          totalPoints: 10,
+          correctPicks: 1,
+          incorrectPicks: 0,
+          weeklyWins: 0,
+          firstPlaceFinishes: 0,
+          secondPlaceFinishes: 0,
+          thirdPlaceFinishes: 0,
+          payoutCents: 0,
+          pointsRemaining: 0,
+          maxPointsPossible: 0,
+          isEliminated: false,
+          nightGamePicks: [],
+        },
+      ],
+      nightGames: [],
+      picksRevealed: true,
+      impactfulGames: [{ gameId: 'game-1', awayTeam: 'BUF', homeTeam: 'KC' }],
+    })
+
+    renderPage()
+
+    const section = await screen.findByRole('region', { name: 'Games that can change the top 3' })
+    expect(section).toHaveTextContent('BUF @ KC')
+  })
+
   it('lists completed weeks alongside the live current week, sorted ascending', async () => {
     mockedFetchStartedWeeks.mockResolvedValue([
       { weekNumber: 1, seasonNumber: 2026 },

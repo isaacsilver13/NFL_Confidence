@@ -11,6 +11,7 @@ from app.models.job_run import JobRun
 from app.models.league import League
 from app.models.league_member import LeagueMember
 from app.models.member_weekly_payment import MemberWeeklyPayment
+from app.models.mnf_guess import MnfGuess
 from app.models.nfl_game import NflGame
 from app.models.nfl_week import NflWeek
 from app.models.notification_delivery import NotificationDelivery
@@ -19,6 +20,7 @@ from app.models.refresh_token import RefreshToken
 from app.models.reminder_preference import ReminderPreference
 from app.models.season_result import SeasonResult
 from app.models.seed_run import SeedRun
+from app.models.usage_event import UsageEvent
 from app.models.user import User
 from app.models.week_submission import WeekSubmission
 from app.models.weekly_result import WeeklyResult
@@ -39,7 +41,9 @@ __all__ = [
     "ReminderPreference",
     "SeasonResult",
     "SeedRun",
+    "UsageEvent",
     "User",
+    "MnfGuess",
     "WeekSubmission",
     "WeeklyResult",
 ]

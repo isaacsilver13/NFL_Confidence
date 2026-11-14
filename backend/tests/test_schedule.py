@@ -100,6 +100,17 @@ def test_single_shot_slot_key_is_per_day_not_per_hour() -> None:
     assert early["lock_expired_picks"] != late["lock_expired_picks"]  # lock stays hourly
 
 
+def test_prune_usage_events_is_due_daily_from_the_overnight_hour() -> None:
+    for day in range(4, 11):
+        assert "prune_usage_events" not in names(at(2026, 10, day, 1, 59))
+        assert "prune_usage_events" in names(at(2026, 10, day, 2, 0))
+        assert "prune_usage_events" in names(at(2026, 10, day, 7, 0))
+    keys = {s.key for h in (2, 7, 23) for s in due_slots(at(2026, 10, 6, h, 5), CFG)}
+    assert {k for k in keys if k.startswith("prune_usage_events")} == {
+        "prune_usage_events:2026-10-06"
+    }
+
+
 def test_default_import_is_tuesday_9am() -> None:
     assert "schedule_import" not in names(at(2026, 10, 6, 8, 59))
     assert "schedule_import" in names(at(2026, 10, 6, 9, 10))  # Tuesday
@@ -132,9 +143,13 @@ def test_lock_slot_is_due_every_hour() -> None:
     assert all("lock_expired_picks" in names(at(2026, 10, 6, h, 5)) for h in range(24))
 
 
-def test_quiet_hour_has_only_overnight_catch_up_and_lock() -> None:
+def test_quiet_hour_has_only_daily_catch_ups_and_lock() -> None:
     # Friday 14:00 Chicago: no sync window, import, reminder or report.
-    assert names(at(2026, 10, 9, 14, 5)) == ["overnight_score_sync", "lock_expired_picks"]
+    assert names(at(2026, 10, 9, 14, 5)) == [
+        "overnight_score_sync",
+        "prune_usage_events",
+        "lock_expired_picks",
+    ]
     assert names(at(2026, 10, 9, 1, 5)) == ["lock_expired_picks"]
 
 
@@ -144,6 +159,7 @@ def test_import_runs_before_sync_and_lock_is_last() -> None:
         "schedule_import",
         "sunday_score_sync",
         "overnight_score_sync",
+        "prune_usage_events",
         "lock_expired_picks",
     ]
 

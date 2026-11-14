@@ -4,6 +4,7 @@ import itertools
 import uuid
 from collections import defaultdict
 from datetime import datetime, timezone
+from typing import Any
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import ColumnElement, desc, distinct, exists, func, or_, select
@@ -42,7 +43,7 @@ from app.schemas.leaderboard import (
     WeeklyLeaderboardRead,
     WeeklyPickBreakdownRead,
 )
-from app.services import picks_service, weeks_service
+from app.services import picks_service, scoring_service, weeks_service
 
 _PAID_PLACES = 3  # first through third, matching _weekly_payout_cents
 
@@ -82,7 +83,9 @@ def _ranked_members(
     member_count: int = 0,
     points_remaining_by_user: dict[uuid.UUID, int] | None = None,
     night_game_picks_by_user: dict[uuid.UUID, list[MemberGamePickRead]] | None = None,
+    mnf_distance_by_user: dict[uuid.UUID, tuple[int, int]] | None = None,
 ) -> list[LeaderboardMemberRead]:
+    mnf_distance_by_user = mnf_distance_by_user or {}
     points_remaining_by_user = points_remaining_by_user or {}
     night_game_picks_by_user = night_game_picks_by_user or {}
     usable_results = [result for result in results if result.user is not None]
@@ -100,11 +103,12 @@ def _ranked_members(
                 if season
                 else (getattr(result, "highest_confidence_loss", 0) or 0)
             ),
+            mnf_distance_by_user.get(result.user_id, scoring_service.NO_GUESS_DISTANCE),
             result.user.display_name,
         ),
     )
     members: list[LeaderboardMemberRead] = []
-    previous_key: tuple[int, int, int] | None = None
+    previous_key: tuple[Any, ...] | None = None
     previous_rank = 0
     for position, result in enumerate(ordered, start=1):
         current_key = (
@@ -119,6 +123,7 @@ def _ranked_members(
                 if season
                 else getattr(result, "highest_confidence_loss", 0) or 0
             ),
+            mnf_distance_by_user.get(result.user_id, scoring_service.NO_GUESS_DISTANCE),
         )
         if current_key != previous_key:
             previous_rank = position
@@ -365,6 +370,49 @@ def _exact_eliminated_user_ids(
     return everyone - alive
 
 
+# ponytail: enumerates 2**n outcomes; above this many unfinished games, report nothing instead.
+_MAX_IMPACT_GAMES = 12
+
+
+def _impactful_games(
+    *, results: list[WeeklyResult], games: list[NflGame], picks: list[Pick]
+) -> list[NflGame] | None:
+    """Unfinished games whose winner changes who holds a paid place in some scenario.
+
+    Flipping the game alone, with every other unfinished game held fixed, must change the
+    (member, paid place) pairs for the game to count. Ties for a place share it.
+    """
+    # ponytail: tie games (nobody scores) are not enumerated, as in _exact_eliminated_user_ids.
+    unresolved = [game for game in games if game.game_status not in _TERMINAL_STATUSES]
+    if not unresolved or len(unresolved) > _MAX_IMPACT_GAMES:
+        return None if unresolved else []
+    pick_by_user_game = {
+        (pick.user_id, pick.game_id): pick for pick in picks if pick.voided_at is None
+    }
+    podium: dict[tuple[bool, ...], frozenset[tuple[uuid.UUID, int]]] = {}
+    for home_wins in itertools.product((False, True), repeat=len(unresolved)):
+        winners = [
+            g.home_team if home else g.away_team
+            for g, home in zip(unresolved, home_wins, strict=False)
+        ]
+        ranked = _projected_ranks(
+            results, pick_by_user_game, list(zip(unresolved, winners, strict=False))
+        )
+        podium[home_wins] = frozenset(
+            (user_id, rank) for user_id, _, rank in ranked if rank <= _PAID_PLACES
+        )
+    return [
+        game
+        for index, game in enumerate(unresolved)
+        if any(
+            podium[outcome]
+            != podium[outcome[:index] + (not outcome[index],) + outcome[index + 1 :]]
+            for outcome in podium
+            if not outcome[index]
+        )
+    ]
+
+
 def get_weekly_leaderboard(
     db: Session, *, league: League, week_number: int | None = None
 ) -> WeeklyLeaderboardRead:
@@ -384,24 +432,26 @@ def get_weekly_leaderboard(
         member_count=league_repository.count_members(db, league.id),
         points_remaining_by_user=_points_remaining_by_user(db, week_id=week.id),
         night_game_picks_by_user=night_game_picks_by_user,
+        mnf_distance_by_user=scoring_service.mnf_distances(db, week_id=week.id),
     )
     if not standings:
         raise NotFoundError(f"Week {week.week_number} has no leaderboard data.")
     games = nfl_game_repository.get_by_week_id(db, week.id)
+    picks = pick_repository.list_by_week_and_users(
+        db,
+        week_id=week.id,
+        user_ids={result.user_id for result in results if result.user_id is not None},
+    )
     settled = sum(game.game_status in _TERMINAL_STATUSES for game in games)
     if games and settled * 2 >= len(games):
-        eliminated = _exact_eliminated_user_ids(
-            results=results,
-            games=games,
-            picks=pick_repository.list_by_week_and_users(
-                db,
-                week_id=week.id,
-                user_ids={result.user_id for result in results if result.user_id is not None},
-            ),
-        )
+        eliminated = _exact_eliminated_user_ids(results=results, games=games, picks=picks)
         for member in standings:
             member.is_eliminated = member.member_id in eliminated
     kickoffs = [game.kickoff_time for game in games]
+    picks_revealed = bool(kickoffs) and min(kickoffs) <= datetime.now(timezone.utc)
+    impactful = (
+        _impactful_games(results=results, games=games, picks=picks) if picks_revealed else None
+    )
     return WeeklyLeaderboardRead(
         week=WeekLabelRead(week_number=week.week_number, season_number=week.season),
         standings=standings,
@@ -409,8 +459,16 @@ def get_weekly_leaderboard(
             GameLabelRead(game_id=game.id, away_team=game.away_team, home_team=game.home_team)
             for game in night_games
         ],
-        picks_revealed=bool(kickoffs) and min(kickoffs) <= datetime.now(timezone.utc),
+        picks_revealed=picks_revealed,
         outcome_scenarios_available=bool(_outcome_scenario_games(db, week=week)),
+        impactful_games=(
+            None
+            if impactful is None
+            else [
+                GameLabelRead(game_id=g.id, away_team=g.away_team, home_team=g.home_team)
+                for g in impactful
+            ]
+        ),
     )
 
 
@@ -468,6 +526,7 @@ def get_season_standings(
             WeeklyResult.user_id,
             func.sum(WeeklyResult.correct_picks),
             func.sum(WeeklyResult.incorrect_picks),
+            func.count(WeeklyResult.id),
         )
         .join(NflWeek, WeeklyResult.week_id == NflWeek.id)
         .where(
@@ -478,10 +537,13 @@ def get_season_standings(
         .group_by(WeeklyResult.user_id)
     ).all()
     records_by_user = {
-        user_id: (correct or 0, incorrect or 0) for user_id, correct, incorrect in records
+        user_id: (correct or 0, incorrect or 0, weeks)
+        for user_id, correct, incorrect, weeks in records
     }
     for member in standings:
-        member.correct_picks, member.incorrect_picks = records_by_user.get(member.member_id, (0, 0))
+        member.correct_picks, member.incorrect_picks, member.weeks_played = records_by_user.get(
+            member.member_id, (0, 0, 0)
+        )
     if not standings:
         raise NotFoundError(f"Season {target_season} has no standings data.")
     return SeasonStandingsRead(season=target_season, standings=standings)

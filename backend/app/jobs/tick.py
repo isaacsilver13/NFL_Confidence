@@ -27,6 +27,7 @@ from app.jobs.nfl_schedule import (
     send_weekly_report,
 )
 from app.jobs.schedule import ScheduleConfig, due_slots
+from app.jobs.usage_retention import prune_usage_events
 from app.models.job_execution import JobExecution
 
 logger = logging.getLogger(__name__)
@@ -44,6 +45,7 @@ JOB_FUNCTIONS: dict[str, Callable[[], Any]] = {
     "sunday_score_sync": run_current_week_sync,
     "monday_thursday_score_sync": run_current_week_sync,
     "overnight_score_sync": run_current_week_sync,
+    "prune_usage_events": prune_usage_events,
     "weekly_picks_reminder": send_weekly_reminders,
     "weekly_report": send_weekly_report,
     "lock_expired_picks": lock_expired_picks,

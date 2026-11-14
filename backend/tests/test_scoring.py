@@ -109,3 +109,43 @@ def test_score_week_recomputes_points_and_is_idempotent(db_session: Session) -> 
         db_session.query(league.weekly_results[0].__class__).filter_by(week_id=week.id).count() == 2
     )
     assert db_session.query(league.season_results[0].__class__).filter_by(season=2026).count() == 2
+
+
+def test_monday_night_points_guess_breaks_ties_after_existing_rules() -> None:
+    import uuid as _uuid
+
+    from app.models.weekly_result import WeeklyResult
+    from app.services import scoring_service
+
+    def result(user_id: _uuid.UUID, points: int = 20) -> WeeklyResult:
+        return WeeklyResult(
+            user_id=user_id,
+            total_points=points,
+            correct_picks=3,
+            highest_confidence_loss=4,
+        )
+
+    near, far, none, ahead = (_uuid.uuid4() for _ in range(4))
+    results = [result(far), result(none), result(near), result(ahead, points=21)]
+
+    scoring_service._assign_weekly_ranks(results, {near: (1, 0), far: (9, 0)})
+
+    ranks = {r.user_id: r.weekly_rank for r in results}
+    assert ranks == {ahead: 1, near: 2, far: 3, none: 4}
+
+
+def test_monday_night_yards_guess_breaks_a_points_guess_tie() -> None:
+    import uuid as _uuid
+
+    from app.models.weekly_result import WeeklyResult
+    from app.services import scoring_service
+
+    close, wide = _uuid.uuid4(), _uuid.uuid4()
+    results = [
+        WeeklyResult(user_id=u, total_points=20, correct_picks=3, highest_confidence_loss=4)
+        for u in (wide, close)
+    ]
+
+    scoring_service._assign_weekly_ranks(results, {close: (2, 5), wide: (2, 90)})
+
+    assert {r.user_id: r.weekly_rank for r in results} == {close: 1, wide: 2}

@@ -41,6 +41,8 @@ class NflGame(TimestampMixin, Base):
         default=GameStatus.SCHEDULED,
         index=True,
     )
+    # Both teams' total yards, fetched from ESPN once the game is final (Monday Night only).
+    total_offense_yards: Mapped[int | None] = mapped_column(Integer, nullable=True)
     is_tie: Mapped[bool] = mapped_column(Boolean, default=False)
     clock: Mapped[str | None] = mapped_column(String, nullable=True)
     period: Mapped[int | None] = mapped_column(Integer, nullable=True)

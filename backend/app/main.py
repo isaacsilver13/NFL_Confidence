@@ -19,6 +19,7 @@ from slowapi.errors import RateLimitExceeded
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.api.auth import router as auth_router
+from app.api.events import router as events_router
 from app.api.games import router as games_router
 from app.api.health import router as health_router
 from app.api.internal import router as internal_router
@@ -117,6 +118,7 @@ app.include_router(weeks_router, prefix="/api/v1")
 app.include_router(picks_router, prefix="/api/v1")
 app.include_router(session_router, prefix="/api/v1")
 app.include_router(leaderboard_router, prefix="/api/v1")
+app.include_router(events_router, prefix="/api/v1")
 app.include_router(jobs_router)
 app.include_router(internal_router, prefix="/api/v1")
 

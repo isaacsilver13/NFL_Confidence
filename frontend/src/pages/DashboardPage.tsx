@@ -3,6 +3,7 @@ import { ArrowUpRight, CalendarDays, KeyRound, LoaderCircle, RefreshCw, Users } 
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { ApiError } from '@/api/client'
+import { trackSectionOpen } from '@/api/events'
 import { createLeague, fetchLeaguePot, joinLeagueWithCode, refreshLeagueData } from '@/api/league'
 import { fetchStartedWeeks, fetchPickHistory } from '@/api/nfl'
 import { fetchWeeklyLeaderboard, fetchSeasonStandings } from '@/api/leaderboard'
@@ -85,9 +86,20 @@ function DashboardSections({
     }
   }, [openSections, userId])
 
+  // Sections open on mount (persisted/default-open ones and a deep-link hash, which never fires
+  // `hashchange`) count as opened once each per mount.
+  useEffect(() => {
+    const initial = new Set(openSections)
+    if (hashSection) initial.add(hashSection)
+    initial.forEach((section) => trackSectionOpen(section))
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only: initial open state
+  }, [])
+
   useEffect(() => {
     function handleHashChange() {
-      setHashSection(sectionFromHash())
+      const section = sectionFromHash()
+      setHashSection(section)
+      if (section) trackSectionOpen(section)
     }
     window.addEventListener('hashchange', handleHashChange)
     return () => window.removeEventListener('hashchange', handleHashChange)
@@ -95,6 +107,7 @@ function DashboardSections({
 
   function toggleSection(section: SectionId) {
     const opening = !isOpen(section)
+    if (opening) trackSectionOpen(section)
     setOpenSections((current) => {
       if (opening) return current.includes(section) ? current : [...current, section]
       return current.filter((currentSection) => currentSection !== section)

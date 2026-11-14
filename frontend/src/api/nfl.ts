@@ -7,6 +7,7 @@ import type {
   NflWeek,
   PickHistory,
   SavePicksInput,
+  MnfGuesses,
   WeekSubmission,
 } from '@/types/nfl'
 import { apiFetch } from './client'
@@ -50,10 +51,10 @@ export function savePicks(input: SavePicksInput): Promise<NflPick[]> {
   })
 }
 
-export function submitPicks(week: number): Promise<WeekSubmission> {
+export function submitPicks(week: number, guesses?: MnfGuesses): Promise<WeekSubmission> {
   return apiFetch<WeekSubmission>('/picks/submit', {
     method: 'POST',
-    body: JSON.stringify({ week }),
+    body: JSON.stringify({ week, ...guesses }),
   })
 }
 

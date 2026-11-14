@@ -29,7 +29,9 @@ import { fetchSessionBootstrap } from '@/api/session'
 import { Button } from '@/components/ui/Button'
 import { AccordionSection } from '@/components/ui/AccordionSection'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
-import type { LeagueMember } from '@/types/league'
+import { SortableTh } from '@/components/ui/SortableTable'
+import { useTableSort } from '@/components/ui/useTableSort'
+import type { LeagueMember, MemberSubmissionStatus } from '@/types/league'
 
 function SectionLoader() {
   return (
@@ -112,7 +114,42 @@ function useWeekSelection(selectedWeek: number | null) {
   return { weeks, weekNumber: selectedWeek ?? currentWeek?.weekNumber ?? fallback }
 }
 
-function PaymentAdmin() {
+function formatSubmittedAt(submittedAt: string): string {
+  return new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(new Date(submittedAt))
+}
+
+type PicksStatus = 'submitted' | 'complete' | 'not-submitted'
+
+function picksStatus(submission: MemberSubmissionStatus | undefined): PicksStatus {
+  if (submission?.submittedAt) return 'submitted'
+  return submission?.isComplete ? 'complete' : 'not-submitted'
+}
+
+const PICKS_ORDER: Record<PicksStatus, number> = { submitted: 0, complete: 1, 'not-submitted': 2 }
+
+function SubmissionBadge({ submission }: { submission: MemberSubmissionStatus | undefined }) {
+  const pill =
+    'inline-flex rounded-full px-2 py-1 text-[10px] font-black uppercase leading-tight tracking-[0.06em] sm:px-2.5 sm:text-xs sm:tracking-[0.1em]'
+  if (submission?.submittedAt) {
+    return (
+      <span className={`${pill} bg-accent/10 text-accent`}>
+        Submitted {formatSubmittedAt(submission.submittedAt)}
+      </span>
+    )
+  }
+  if (submission?.isComplete) {
+    return <span className={`${pill} bg-accent/10 text-accent`}>Complete (autosaved)</span>
+  }
+  const saved = submission && submission.pickCount > 0 ? ` (${submission.pickCount} saved)` : ''
+  return <span className={`${pill} bg-danger/10 text-danger`}>Not submitted{saved}</span>
+}
+
+function WeeklyStatus() {
   const [selectedWeek, setSelectedWeek] = useState<number | null>(null)
   const [actionUserId, setActionUserId] = useState<string | null>(null)
   const [isVoiding, setIsVoiding] = useState(false)
@@ -124,6 +161,27 @@ function PaymentAdmin() {
     queryKey: ['league', 'payments', weekNumber],
     queryFn: () => fetchMemberPaymentStatuses(weekNumber),
     enabled: weekNumber > 0,
+  })
+  const { data: submissionStatuses, isLoading: isLoadingSubmissions } = useQuery({
+    queryKey: ['league', 'submissions', weekNumber],
+    queryFn: () => fetchMemberSubmissionStatuses(weekNumber),
+    enabled: weekNumber > 0,
+  })
+  const submissionsByUser = new Map(submissionStatuses?.members.map((m) => [m.userId, m]))
+  const [picksFilter, setPicksFilter] = useState<'all' | PicksStatus>('all')
+  const [paidFilter, setPaidFilter] = useState<'all' | 'paid' | 'unpaid'>('all')
+  const visibleMembers = (paymentStatuses?.members ?? []).filter(
+    (payment) =>
+      (picksFilter === 'all' ||
+        picksStatus(submissionsByUser.get(payment.userId)) === picksFilter) &&
+      (paidFilter === 'all' || payment.isPaid === (paidFilter === 'paid')),
+  )
+  const sort = useTableSort(visibleMembers, {
+    member: { value: (payment) => payment.displayName },
+    picks: {
+      value: (payment) => PICKS_ORDER[picksStatus(submissionsByUser.get(payment.userId))],
+    },
+    paid: { value: (payment) => (payment.isPaid ? 1 : 0), numeric: true },
   })
 
   async function handlePaymentChange(userId: string, isPaid: boolean) {
@@ -168,15 +226,15 @@ function PaymentAdmin() {
     <section className="space-y-3">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="text-lg font-bold">Weekly payments</h2>
+          <h2 className="text-lg font-bold">Weekly status</h2>
           <p className="text-sm text-slate-600 dark:text-night-text">
-            Mark who has paid before voiding unpaid picks.
+            See who has submitted picks and mark who has paid before voiding unpaid picks.
           </p>
         </div>
         <label className="text-sm font-medium">
           Week
           <select
-            aria-label="Payment week"
+            aria-label="Status week"
             value={weekNumber || ''}
             onChange={(event) => setSelectedWeek(Number(event.target.value))}
             className="ml-2 min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2 dark:border-night-line-strong dark:bg-night-card"
@@ -189,41 +247,104 @@ function PaymentAdmin() {
           </select>
         </label>
       </div>
+      <div className="grid grid-cols-2 gap-3 text-sm font-medium">
+        <label>
+          Picks
+          <select
+            aria-label="Filter by picks"
+            value={picksFilter}
+            onChange={(event) => setPicksFilter(event.target.value as 'all' | PicksStatus)}
+            className="mt-1 block min-h-11 w-full rounded-md border border-slate-300 bg-white px-2 py-2 dark:border-night-line-strong dark:bg-night-card"
+          >
+            <option value="all">All</option>
+            <option value="submitted">Submitted</option>
+            <option value="complete">Complete (autosaved)</option>
+            <option value="not-submitted">Not submitted</option>
+          </select>
+        </label>
+        <label>
+          Paid
+          <select
+            aria-label="Filter by paid"
+            value={paidFilter}
+            onChange={(event) => setPaidFilter(event.target.value as 'all' | 'paid' | 'unpaid')}
+            className="mt-1 block min-h-11 w-full rounded-md border border-slate-300 bg-white px-2 py-2 dark:border-night-line-strong dark:bg-night-card"
+          >
+            <option value="all">All</option>
+            <option value="paid">Paid</option>
+            <option value="unpaid">Unpaid</option>
+          </select>
+        </label>
+      </div>
       {error && <p className="text-sm text-red-600 dark:text-night-error">{error}</p>}
-      {isLoading ? (
-        <p className="text-sm text-slate-500 dark:text-night-muted">Loading payment status...</p>
+      {isLoading || isLoadingSubmissions ? (
+        <p className="text-sm text-slate-500 dark:text-night-muted">Loading weekly status...</p>
       ) : (
         <>
-          <ul className="divide-y divide-slate-200 overflow-hidden rounded-2xl border border-slate-200 bg-surface shadow-sm dark:divide-night-line dark:border-night-line dark:bg-night-card">
-            {paymentStatuses?.members.map((payment) => (
-              <li
-                key={payment.userId}
-                className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
-              >
-                <div>
-                  <p className="font-medium">{payment.displayName}</p>
-                  <p className="text-sm text-slate-500 dark:text-night-muted">{payment.email}</p>
-                  {payment.voidedPickCount > 0 && (
-                    <p className="text-xs text-amber-700 dark:text-night-warning">
-                      {payment.voidedPickCount} pick(s) already voided
-                    </p>
-                  )}
-                </div>
-                <label className="flex min-h-11 items-center gap-2 text-sm font-semibold">
-                  <input
-                    type="checkbox"
-                    checked={payment.isPaid}
-                    disabled={actionUserId === payment.userId || isVoiding}
-                    onChange={(event) =>
-                      void handlePaymentChange(payment.userId, event.target.checked)
-                    }
-                    className="h-4 w-4 accent-accent"
+          <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-surface shadow-sm dark:border-night-line dark:bg-night-card">
+            <table className="w-full text-left text-sm">
+              <caption className="sr-only">Weekly status</caption>
+              <thead className="bg-surface-muted text-xs uppercase tracking-[0.14em] text-ink-muted dark:bg-night-page dark:text-night-muted">
+                <tr>
+                  <SortableTh
+                    label="Member"
+                    columnKey="member"
+                    sort={sort}
+                    className="px-2 py-3 sm:px-3"
                   />
-                  Paid
-                </label>
-              </li>
-            ))}
-          </ul>
+                  <SortableTh
+                    label="Picks"
+                    columnKey="picks"
+                    sort={sort}
+                    className="px-2 py-3 sm:px-3"
+                  />
+                  <SortableTh
+                    label="Paid"
+                    columnKey="paid"
+                    sort={sort}
+                    className="px-2 py-3 sm:px-3"
+                  />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200 dark:divide-night-line">
+                {sort.sortedRows.map((payment) => {
+                  const submission = submissionsByUser.get(payment.userId)
+                  return (
+                    <tr key={payment.userId}>
+                      <th scope="row" className="px-2 py-3 font-normal sm:px-3">
+                        <p className="font-medium">{payment.displayName}</p>
+                        <p className="break-all text-xs text-slate-500 dark:text-night-muted">
+                          {payment.email}
+                        </p>
+                        {payment.voidedPickCount > 0 && (
+                          <p className="text-xs text-amber-700 dark:text-night-warning">
+                            {payment.voidedPickCount} pick(s) already voided
+                          </p>
+                        )}
+                      </th>
+                      <td className="px-2 py-3 sm:px-3">
+                        <SubmissionBadge submission={submission} />
+                      </td>
+                      <td className="px-2 py-3 sm:px-3">
+                        <label className="flex min-h-11 items-center gap-2 text-sm font-semibold">
+                          <input
+                            type="checkbox"
+                            checked={payment.isPaid}
+                            disabled={actionUserId === payment.userId || isVoiding}
+                            onChange={(event) =>
+                              void handlePaymentChange(payment.userId, event.target.checked)
+                            }
+                            className="h-4 w-4 accent-accent"
+                          />
+                          <span className="sr-only">Paid</span>
+                        </label>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
           <Button
             type="button"
             variant="danger"
@@ -246,83 +367,6 @@ function PaymentAdmin() {
         }}
         onCancel={() => setConfirmingVoid(false)}
       />
-    </section>
-  )
-}
-
-function formatSubmittedAt(submittedAt: string): string {
-  return new Intl.DateTimeFormat(undefined, {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  }).format(new Date(submittedAt))
-}
-
-function SubmissionStatus() {
-  const [selectedWeek, setSelectedWeek] = useState<number | null>(null)
-  const { weeks, weekNumber } = useWeekSelection(selectedWeek)
-  const { data: submissionStatuses, isLoading } = useQuery({
-    queryKey: ['league', 'submissions', weekNumber],
-    queryFn: () => fetchMemberSubmissionStatuses(weekNumber),
-    enabled: weekNumber > 0,
-  })
-
-  return (
-    <section className="space-y-3">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-bold">Who has submitted picks</h2>
-          <p className="text-sm text-slate-600 dark:text-night-text">
-            See which members have formally submitted their picks for the week.
-          </p>
-        </div>
-        <label className="text-sm font-medium">
-          Week
-          <select
-            aria-label="Submissions week"
-            value={weekNumber || ''}
-            onChange={(event) => setSelectedWeek(Number(event.target.value))}
-            className="ml-2 min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2 dark:border-night-line-strong dark:bg-night-card"
-          >
-            {weeks?.map((week) => (
-              <option key={week.id} value={week.weekNumber}>
-                Week {week.weekNumber}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
-      {isLoading ? (
-        <p className="text-sm text-slate-500 dark:text-night-muted">Loading submission status...</p>
-      ) : (
-        <ul className="divide-y divide-slate-200 overflow-hidden rounded-2xl border border-slate-200 bg-surface shadow-sm dark:divide-night-line dark:border-night-line dark:bg-night-card">
-          {submissionStatuses?.members.map((member) => (
-            <li
-              key={member.userId}
-              className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
-            >
-              <div>
-                <p className="font-medium">{member.displayName}</p>
-                <p className="text-sm text-slate-500 dark:text-night-muted">{member.email}</p>
-              </div>
-              {member.submittedAt ? (
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-accent/10 px-3 py-1.5 text-xs font-black uppercase tracking-[0.12em] text-accent">
-                  Submitted {formatSubmittedAt(member.submittedAt)}
-                </span>
-              ) : member.isComplete ? (
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-accent/10 px-3 py-1.5 text-xs font-black uppercase tracking-[0.12em] text-accent">
-                  Complete (autosaved)
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-danger/10 px-3 py-1.5 text-xs font-black uppercase tracking-[0.12em] text-danger">
-                  Not submitted{member.pickCount > 0 ? ` (${member.pickCount} saved)` : ''}
-                </span>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
     </section>
   )
 }
@@ -486,6 +530,14 @@ export function LeagueSettingsPage() {
         </div>
       </div>
 
+      <AdminSection
+        id="member-weekly-status"
+        title="Weekly status"
+        summary="Who has submitted picks and who has paid"
+      >
+        <WeeklyStatus />
+      </AdminSection>
+
       {isCommissioner && (
         <AdminSection
           id="member-invites"
@@ -621,20 +673,6 @@ export function LeagueSettingsPage() {
         </ul>
       </AdminSection>
 
-      <AdminSection
-        id="member-submissions"
-        title="Pick submissions"
-        summary="Check who has completed or submitted a weekly card"
-      >
-        <SubmissionStatus />
-      </AdminSection>
-      <AdminSection
-        id="member-payments"
-        title="Weekly payments"
-        summary="Track payments and manage unpaid picks"
-      >
-        <PaymentAdmin />
-      </AdminSection>
       <ConfirmDialog
         open={confirmingRemoveMember !== null}
         title="Remove member?"

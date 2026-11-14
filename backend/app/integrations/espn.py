@@ -190,3 +190,28 @@ def fetch_schedule(
     finally:
         if owns_client:
             request_client.close()
+
+
+def fetch_total_offense(espn_game_id: str, *, client: httpx.Client | None = None) -> int | None:
+    """Both teams' total yards for a game, from ESPN's game summary; None if not reported."""
+    settings = get_settings()
+    owns_client = client is None
+    request_client = client or httpx.Client(
+        base_url=settings.nfl_api_base_url, timeout=settings.nfl_api_timeout_seconds
+    )
+    try:
+        response = request_client.get("/summary", params={"event": espn_game_id})
+        response.raise_for_status()
+        teams = response.json().get("boxscore", {}).get("teams", [])
+        yards = [
+            stat.get("displayValue")
+            for team in teams
+            for stat in team.get("statistics", [])
+            if stat.get("name") == "totalYards"
+        ]
+        if len(yards) != 2 or not all(str(y).isdigit() for y in yards):
+            return None
+        return sum(int(y) for y in yards)
+    finally:
+        if owns_client:
+            request_client.close()

@@ -1,12 +1,18 @@
 """Import normalized ESPN schedule data into NFL game records."""
 
+import logging
+import uuid
 from datetime import datetime, timedelta, timezone
 
+import httpx
 from sqlalchemy.orm import Session
 
-from app.integrations.espn import EspnGame
+from app.integrations.espn import EspnGame, fetch_total_offense
 from app.models.enums import GameStatus, WeekStatus
 from app.repositories import nfl_game_repository, nfl_week_repository
+from app.services import scoring_service
+
+logger = logging.getLogger(__name__)
 
 _STATUS_MAP = {status.value: status for status in GameStatus}
 
@@ -94,3 +100,18 @@ def import_schedule(
         game for game in games if game.season == season and game.week_number == week_number
     ]
     return import_games(db, selected_games)
+
+
+def sync_monday_night_offense(db: Session, *, week_id: uuid.UUID) -> None:
+    """Store total yards for a final Monday Night game that lacks them. Failures are non-fatal:
+    the yards tie-break just stays inactive until the next sync."""
+    games = nfl_game_repository.get_by_week_id(db, week_id)
+    game = scoring_service.monday_night_game(games)
+    if game is None or game.game_status != GameStatus.FINAL or game.total_offense_yards:
+        return
+    try:
+        game.total_offense_yards = fetch_total_offense(game.espn_game_id)
+    except (httpx.HTTPError, ValueError):
+        logger.warning("Could not fetch total offense for game %s", game.espn_game_id)
+        return
+    db.commit()
