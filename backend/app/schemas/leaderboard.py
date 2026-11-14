@@ -19,6 +19,8 @@ class LeaderboardMemberRead(CamelModel):
     correct_picks: int = 0
     incorrect_picks: int = 0
     weekly_wins: int = 0
+    # Season only: completed weeks this member has a result for.
+    weeks_played: int = 0
     first_place_finishes: int = 0
     second_place_finishes: int = 0
     third_place_finishes: int = 0
@@ -51,6 +53,9 @@ class WeeklyLeaderboardRead(CamelModel):
     # True only for the live week after the Sunday afternoon slate, when exactly the
     # Sunday-night and Monday-night games remain to be decided.
     outcome_scenarios_available: bool = False
+    # Unfinished games whose winner can change who holds 1st, 2nd or 3rd. None while picks are
+    # hidden, or while too many games are unfinished to evaluate.
+    impactful_games: list[GameLabelRead] | None = None
 
 
 class OutcomeScenarioRead(CamelModel):

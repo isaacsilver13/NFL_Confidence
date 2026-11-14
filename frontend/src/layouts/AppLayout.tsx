@@ -15,7 +15,7 @@ const NAV_LINKS = [
 
 function navLinkClassName({ isActive }: { isActive: boolean }): string {
   return [
-    'rounded-xl px-3 py-2 text-sm font-bold transition-colors duration-150',
+    'rounded-xl px-2 py-2 text-sm font-bold sm:px-3 transition-colors duration-150',
     isActive
       ? 'bg-primary text-white shadow-sm dark:bg-night-accent orange-trim dev-dark:text-white'
       : 'text-ink-muted hover:bg-surface-muted hover:text-primary dark:text-night-text dark:hover:bg-night-hover dark:hover:text-night-ink',
@@ -48,16 +48,16 @@ export function AppLayout() {
   return (
     <div className="flex min-h-screen flex-col">
       <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/95 backdrop-blur dark:border-night-line dark:bg-night-page/95">
-        <nav className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-1 gap-y-2 px-4 py-3">
+        <nav className="mx-auto flex max-w-5xl flex-nowrap items-center gap-x-1 px-4 py-3">
           <NavLink to="/" end className="mr-2 shrink-0 sm:mr-4" aria-label="NFL Confidence home">
-            <NflMark />
+            <NflMark hideWordmarkOnPhone />
           </NavLink>
           {navLinks.map((link) => (
             <NavLink key={link.to} to={link.to} end={link.to === '/'} className={navLinkClassName}>
               {link.label}
             </NavLink>
           ))}
-          <span className="ml-auto flex shrink-0 items-center gap-3">
+          <span className="ml-auto flex shrink-0 items-center gap-1 sm:gap-3">
             {user && (
               <span className="hidden max-w-32 truncate text-sm font-semibold text-ink-muted sm:inline dark:text-night-text">
                 {user.displayName}
@@ -65,6 +65,7 @@ export function AppLayout() {
             )}
             <Button
               variant="quiet"
+              className="max-sm:px-2"
               onClick={toggleTheme}
               aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
             >
@@ -75,7 +76,12 @@ export function AppLayout() {
               )}
             </Button>
             {/* Icon-only on phones so the nav never clips; the label stays for screen readers. */}
-            <Button variant="quiet" aria-label="Sign out" onClick={() => void handleSignOut()}>
+            <Button
+              variant="quiet"
+              className="max-sm:px-2"
+              aria-label="Sign out"
+              onClick={() => void handleSignOut()}
+            >
               <LogOut size={16} aria-hidden="true" />
               <span className="hidden sm:inline">Sign out</span>
             </Button>

@@ -169,6 +169,8 @@ def test_picks_card_and_save_use_the_pick_week_on_monday(client, db_session: Ses
     assert saved.status_code == 200
 
     submitted = client.post(
-        "/api/v1/picks/submit", json={"week": week_2.week_number}, headers=headers
+        "/api/v1/picks/submit",
+        json={"week": week_2.week_number, "mnfGuessPoints": 40, "mnfGuessYards": 700},
+        headers=headers,
     )
     assert submitted.status_code == 200

@@ -23,7 +23,7 @@ from app.repositories import (
 )
 from app.services import report_service, scoring_service, weeks_service
 from app.services.email_service import send_email, send_weekly_reminder
-from app.services.nfl_schedule_service import import_games
+from app.services.nfl_schedule_service import import_games, sync_monday_night_offense
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +53,7 @@ def run_current_week_sync() -> int:
         total_imported_games = 0
         for week in weeks:
             imported_games = import_games(db, fetch_schedule(league.season, week.week_number))
+            sync_monday_night_offense(db, week_id=week.id)
             finalized_games = scoring_service.score_week(db, league=league, week_id=week.id)
             total_imported_games += imported_games
             logger.info(

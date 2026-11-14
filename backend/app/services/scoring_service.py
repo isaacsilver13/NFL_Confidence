@@ -1,15 +1,18 @@
 """Recompute confidence-pool scores from the imported NFL game outcomes."""
 
 import uuid
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session, joinedload
 
+from app.core.config import get_settings
 from app.core.exceptions import NotFoundError
 from app.models.enums import GameStatus, WeekStatus
 from app.models.league import League
 from app.models.league_member import LeagueMember
+from app.models.mnf_guess import MnfGuess
 from app.models.nfl_game import NflGame
 from app.models.nfl_week import NflWeek
 from app.models.pick import Pick
@@ -24,6 +27,46 @@ def _pick_points(pick: Pick) -> int:
     return pick.confidence_value if pick.picked_team == game.winning_team else 0
 
 
+# Sorts after every real guess distance, so members without a guess rank last in the tie-break.
+NO_GUESS_DISTANCE = (10**9, 10**9)
+
+
+def monday_night_game(games: list[NflGame]) -> NflGame | None:
+    """The week's last Monday game (the late one in a doubleheader), if there is one."""
+    tz = ZoneInfo(get_settings().scheduler_timezone)
+    mondays = [g for g in games if g.kickoff_time.astimezone(tz).weekday() == 0]
+    return max(mondays, key=lambda g: g.kickoff_time) if mondays else None
+
+
+def mnf_distances(
+    db: Session, *, week_id: uuid.UUID, games: list[NflGame] | None = None
+) -> dict[uuid.UUID, tuple[int, int]]:
+    """Each member's (points, yards) distance from their Monday Night guesses to the real totals.
+
+    Empty until that game is final. Until total offense is fetched, yards distance is 0 for
+    everyone who guessed, so only the points distance separates them.
+    """
+    if games is None:
+        games = list(db.execute(select(NflGame).where(NflGame.week_id == week_id)).scalars())
+    game = monday_night_game(games)
+    if (
+        game is None
+        or game.game_status != GameStatus.FINAL
+        or game.home_score is None
+        or game.away_score is None
+    ):
+        return {}
+    actual_points = game.home_score + game.away_score
+    guesses = db.execute(select(MnfGuess).where(MnfGuess.week_id == week_id)).scalars()
+    return {
+        guess.user_id: (
+            abs(guess.points - actual_points),
+            abs(guess.yards - game.total_offense_yards) if game.total_offense_yards else 0,
+        )
+        for guess in guesses
+    }
+
+
 def _rank_key(result: WeeklyResult) -> tuple[int, int, int, str]:
     return (
         -result.total_points,
@@ -33,19 +76,33 @@ def _rank_key(result: WeeklyResult) -> tuple[int, int, int, str]:
     )
 
 
-def _assign_weekly_ranks(results: list[WeeklyResult]) -> None:
-    ordered = sorted(results, key=_rank_key)
-    previous_key: tuple[int, int, int] | None = None
+def _assign_weekly_ranks(
+    results: list[WeeklyResult], distances: dict[uuid.UUID, tuple[int, int]] | None = None
+) -> None:
+    """Rank by points, correct picks, lowest missed confidence, then Monday Night guess distance
+    (points, then yards)."""
+    distances = distances or {}
+
+    def key(result: WeeklyResult) -> tuple[int, int, int, tuple[int, int]]:
+        points, correct, loss, _ = _rank_key(result)
+        return (
+            points,
+            correct,
+            loss,
+            (
+                distances.get(result.user_id, NO_GUESS_DISTANCE)
+                if result.user_id
+                else NO_GUESS_DISTANCE
+            ),
+        )
+
+    ordered = sorted(results, key=lambda r: (key(r), str(r.user_id)))
+    previous_key: tuple[int, int, int, tuple[int, int]] | None = None
     previous_rank = 0
     for position, result in enumerate(ordered, start=1):
-        current_key = (
-            result.total_points,
-            result.correct_picks,
-            result.highest_confidence_loss,
-        )
-        if current_key != previous_key:
+        if key(result) != previous_key:
             previous_rank = position
-            previous_key = current_key
+            previous_key = key(result)
         result.weekly_rank = previous_rank
 
 
@@ -178,7 +235,7 @@ def score_week(db: Session, *, league: League, week_id: uuid.UUID) -> int:
         weekly_results.append(result)
 
     db.flush()
-    _assign_weekly_ranks(weekly_results)
+    _assign_weekly_ranks(weekly_results, mnf_distances(db, week_id=week.id, games=games))
 
     terminal_statuses = {GameStatus.FINAL, GameStatus.CANCELLED}
     if games and all(game.game_status in terminal_statuses for game in games):

@@ -11,6 +11,7 @@ from app.models.job_run import JobRun
 from app.models.league import League
 from app.models.league_member import LeagueMember
 from app.models.member_weekly_payment import MemberWeeklyPayment
+from app.models.mnf_guess import MnfGuess
 from app.models.nfl_game import NflGame
 from app.models.nfl_week import NflWeek
 from app.models.notification_delivery import NotificationDelivery
@@ -42,6 +43,7 @@ __all__ = [
     "SeedRun",
     "UsageEvent",
     "User",
+    "MnfGuess",
     "WeekSubmission",
     "WeeklyResult",
 ]

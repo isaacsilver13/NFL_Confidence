@@ -146,6 +146,50 @@ describe('PicksPage', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
+  it('requires Monday Night guesses before Submit picks and sends them', async () => {
+    const user = userEvent.setup()
+    mockedFetchCurrentPicksCard.mockResolvedValue({
+      week,
+      games,
+      picks: [],
+      submission: { submittedAt: null, requiresMnfGuess: true },
+    })
+    renderPage()
+
+    const submitButton = await screen.findByRole('button', { name: 'Submit picks' })
+    await user.click(screen.getByRole('button', { name: 'KC' }))
+    await user.click(screen.getByRole('button', { name: 'GB' }))
+    await user.click(screen.getAllByRole('button', { name: '2' })[0])
+    await user.click(screen.getAllByRole('button', { name: '1' })[1])
+    await waitFor(() => expect(mockedSavePicks).toHaveBeenCalled())
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(submitButton).toBeDisabled()
+
+    await user.type(screen.getByLabelText('Monday Night total points'), '44')
+    await user.type(screen.getByLabelText('Monday Night total offense (yards)'), '710')
+    await waitFor(() => expect(submitButton).not.toBeDisabled())
+    await user.click(submitButton)
+
+    expect(mockedSavePicks.mock.lastCall?.[0]).toMatchObject({
+      mnfGuessPoints: 44,
+      mnfGuessYards: 710,
+    })
+    expect(mockedSubmitPicks).toHaveBeenCalledWith(1, { mnfGuessPoints: 44, mnfGuessYards: 710 })
+  })
+
+  it('keeps Submit picks pinned in a sticky bar so it is always reachable', async () => {
+    mockedFetchCurrentPicksCard.mockResolvedValue({
+      week,
+      games,
+      picks: [],
+      submission: { submittedAt: null },
+    })
+    renderPage()
+
+    const submitButton = await screen.findByRole('button', { name: 'Submit picks' })
+    expect(submitButton.closest('[data-testid="submit-bar"]')).toHaveClass('sticky')
+  })
+
   it('enables Submit picks once every game is picked, and submits', async () => {
     const user = userEvent.setup()
     mockedFetchCurrentPicksCard
@@ -216,7 +260,7 @@ describe('PicksPage', () => {
     resolveSave([])
     await waitFor(() => expect(submit).toBeEnabled())
     await user.click(submit)
-    await waitFor(() => expect(mockedSubmitPicks).toHaveBeenCalledWith(1, expect.anything()))
+    await waitFor(() => expect(mockedSubmitPicks).toHaveBeenCalledWith(1, undefined))
   })
 
   it('lets a failed autosave be retried before submitting the latest card', async () => {
@@ -273,9 +317,12 @@ describe('PicksPage', () => {
       picks: [{ gameId: 'game-1', team: 'BUF', confidence: 1 }],
       voidedGameIds: ['game-2'],
     })
+    // The save has settled once the card is refetched; the notice must not appear after it.
+    await waitFor(() => expect(mockedFetchCurrentPicksCard.mock.calls.length).toBeGreaterThan(1))
+    await new Promise((resolve) => setTimeout(resolve, 0))
     expect(
-      await screen.findByText(/incomplete or conflicting picks were voided/i),
-    ).toBeInTheDocument()
+      screen.queryByText(/incomplete or conflicting picks were voided/i),
+    ).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'GB' }))
     const secondConfidenceGroup = screen.getByRole('group', {

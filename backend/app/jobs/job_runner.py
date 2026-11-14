@@ -220,6 +220,7 @@ async def sync_scores(db: Session) -> None:
     from app.integrations.espn import fetch_schedule
     from app.services import league_service, scoring_service, weeks_service
     from app.services.nfl_schedule_service import import_games as import_games_service
+    from app.services.nfl_schedule_service import sync_monday_night_offense
 
     logger.info("Starting sync_scores job")
 
@@ -244,6 +245,8 @@ async def sync_scores(db: Session) -> None:
             # Update database with latest scores
             updated = import_games_service(db, espn_games)
             logger.info(f"Updated {updated} games with latest scores")
+
+            sync_monday_night_offense(db, week_id=week.id)
 
             # Recompute standings for this week
             final_count = scoring_service.score_week(db, league=league, week_id=week.id)

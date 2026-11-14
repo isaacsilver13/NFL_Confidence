@@ -12,6 +12,8 @@ export interface LeaderboardMember {
   correctPicks: number
   incorrectPicks: number
   weeklyWins: number
+  // Season standings only.
+  weeksPlayed?: number
   firstPlaceFinishes: number
   secondPlaceFinishes: number
   thirdPlaceFinishes: number
@@ -42,6 +44,8 @@ export interface WeeklyLeaderboard {
   nightGames: GameLabel[]
   picksRevealed: boolean
   outcomeScenariosAvailable?: boolean
+  // Unfinished games that can still change 1st-3rd; null while picks are hidden.
+  impactfulGames?: GameLabel[] | null
 }
 
 export interface OutcomeScenario {

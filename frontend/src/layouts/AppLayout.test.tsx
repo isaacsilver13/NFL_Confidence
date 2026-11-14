@@ -83,4 +83,13 @@ describe('AppLayout commissioner navigation', () => {
 
     expect(await screen.findByRole('button', { name: 'Sign out' })).toBeInTheDocument()
   })
+
+  it('keeps the tabs on one row at phone width: no wrapping, wordmark hidden below sm', async () => {
+    renderLayout({ status: 'member', role: 'owner' })
+
+    const nav = (await screen.findByRole('link', { name: 'Members' })).closest('nav')
+    expect(nav).toHaveClass('flex-nowrap')
+    expect(nav).not.toHaveClass('flex-wrap')
+    expect(screen.getByText('Confidence').parentElement).toHaveClass('hidden', 'sm:block')
+  })
 })

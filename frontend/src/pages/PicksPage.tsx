@@ -8,7 +8,7 @@ import { LastRefreshed } from '@/components/nfl/LastRefreshed'
 import { TeamLogo } from '@/components/nfl/TeamLogo'
 import { getTeamSelectionStyle } from '@/components/nfl/teamPalette'
 import { getPicksCardRefetchInterval } from '@/features/nfl/picksPolling'
-import type { NflGame, NflPick, NflWeek, PickInput, WeekSubmission } from '@/types/nfl'
+import type { MnfGuesses, NflGame, NflPick, NflWeek, PickInput, WeekSubmission } from '@/types/nfl'
 
 const AUTO_SAVE_DEBOUNCE_MS = 400
 
@@ -114,6 +114,12 @@ function draftSavePayload(games: NflGame[], drafts: PickDrafts): DraftSavePayloa
   return { submissions, voidedGameIds }
 }
 
+// Sent with every autosave so the guesses count as part of a complete card.
+function mnfGuessPayload(guesses: { points: string; yards: string }) {
+  if (guesses.points.trim() === '' || guesses.yards.trim() === '') return {}
+  return { mnfGuessPoints: Number(guesses.points), mnfGuessYards: Number(guesses.yards) }
+}
+
 function formatSubmittedAt(submittedAt: string): string {
   return new Intl.DateTimeFormat(undefined, {
     month: 'short',
@@ -139,8 +145,9 @@ function GamesForm({
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
   const [isDraftSaved, setIsDraftSaved] = useState(true)
-  const [voided, setVoided] = useState(false)
   const [submitPicksError, setSubmitPicksError] = useState<string | null>(null)
+  const [mnfPoints, setMnfPoints] = useState(String(submission.mnfGuessPoints ?? ''))
+  const [mnfYards, setMnfYards] = useState(String(submission.mnfGuessYards ?? ''))
   const [now, setNow] = useState(() => Date.now())
   const gameKickoffs = games
     .map((game) => Date.parse(game.kickoff))
@@ -149,6 +156,7 @@ function GamesForm({
   const locksAt = week.locksAt ? Date.parse(week.locksAt) : earliestKickoff
   const isLocked = Boolean(week.isLocked || (locksAt !== null && locksAt <= now))
   const draftsRef = useRef(drafts)
+  const guessesRef = useRef({ points: mnfPoints, yards: mnfYards })
   const draftVersionRef = useRef(0)
   const isLockedRef = useRef(isLocked)
   const saveTimerRef = useRef<number | null>(null)
@@ -200,7 +208,8 @@ function GamesForm({
     mutationFn: savePicks,
   })
   const submitMutation = useMutation({
-    mutationFn: submitPicks,
+    mutationFn: (variables: { week: number; guesses?: MnfGuesses }) =>
+      submitPicks(variables.week, variables.guesses),
     onSuccess: async () => {
       setSubmitPicksError(null)
       await queryClient.invalidateQueries({ queryKey: ['picks', 'card', 'current'] })
@@ -212,11 +221,23 @@ function GamesForm({
     },
   })
   const isComplete = pickedCount === games.length && games.length > 0
+  const requiresGuess = submission.requiresMnfGuess === true
+  const hasGuesses = mnfPoints.trim() !== '' && mnfYards.trim() !== ''
   const canSubmit =
-    isComplete && !hasConflicts && !isLocked && !submitMutation.isPending && isDraftSaved
+    isComplete &&
+    !hasConflicts &&
+    !isLocked &&
+    !submitMutation.isPending &&
+    isDraftSaved &&
+    (!requiresGuess || hasGuesses)
 
   function handleSubmitPicks() {
-    submitMutation.mutate(week.weekNumber)
+    submitMutation.mutate({
+      week: week.weekNumber,
+      guesses: requiresGuess
+        ? { mnfGuessPoints: Number(mnfPoints), mnfGuessYards: Number(mnfYards) }
+        : undefined,
+    })
   }
 
   async function saveDraft(pendingSave: PendingSave) {
@@ -228,7 +249,6 @@ function GamesForm({
     if (isLockedRef.current) {
       if (pendingSave.version === draftVersionRef.current) {
         setSaved(false)
-        setVoided(false)
         setSubmitError('Picks are locked after the earliest game kickoff.')
       }
       return
@@ -242,13 +262,13 @@ function GamesForm({
         week: week.weekNumber,
         picks: submissions,
         voidedGameIds,
+        ...mnfGuessPayload(guessesRef.current),
       })
       if (pendingSave.version === draftVersionRef.current) {
         await queryClient.invalidateQueries({ queryKey: ['picks', 'card', 'current'] })
         if (pendingSave.version === draftVersionRef.current) {
           setIsDraftSaved(true)
           setSaved(true)
-          setVoided(voidedGameIds.length > 0)
           setSubmitError(null)
         }
       }
@@ -259,7 +279,6 @@ function GamesForm({
           error instanceof ApiError ? error.message : "Could not save this week's picks.",
         )
       }
-      setVoided(false)
     } finally {
       savingRef.current = false
       const queuedSave = pendingSaveRef.current
@@ -306,6 +325,18 @@ function GamesForm({
     scheduleSave({ drafts: nextDrafts, version: nextVersion })
   }
 
+  function updateGuess(kind: 'points' | 'yards', value: string) {
+    guessesRef.current = { ...guessesRef.current, [kind]: value }
+    if (kind === 'points') setMnfPoints(value)
+    else setMnfYards(value)
+    const nextVersion = draftVersionRef.current + 1
+    draftVersionRef.current = nextVersion
+    setIsDraftSaved(false)
+    setSaved(false)
+    setSubmitError(null)
+    scheduleSave({ drafts: draftsRef.current, version: nextVersion })
+  }
+
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     scheduleSave({ drafts: draftsRef.current, version: draftVersionRef.current }, 0)
@@ -328,20 +359,6 @@ function GamesForm({
                 <Check size={14} aria-hidden="true" /> Complete
               </span>
             ) : null}
-            {!isLocked && (
-              <button
-                type="button"
-                onClick={handleSubmitPicks}
-                disabled={!canSubmit}
-                className="rounded-xl bg-primary px-3 py-1.5 text-xs font-black text-white transition-colors disabled:cursor-not-allowed disabled:opacity-40 dark:bg-night-accent dark:text-white sm:px-4 sm:py-2 sm:text-sm"
-              >
-                {submitMutation.isPending
-                  ? 'Submitting…'
-                  : submission.submittedAt
-                    ? 'Resubmit picks'
-                    : 'Submit picks'}
-              </button>
-            )}
           </div>
         </div>
         <div
@@ -365,6 +382,37 @@ function GamesForm({
             ? `Submitted ${formatSubmittedAt(submission.submittedAt)}`
             : 'Not yet submitted'}
         </p>
+        {requiresGuess && !isLocked && (
+          <div className="grid grid-cols-2 gap-2 text-xs font-semibold sm:text-sm">
+            <label className="block">
+              Monday Night total points
+              <input
+                type="number"
+                inputMode="numeric"
+                min={0}
+                max={300}
+                value={mnfPoints}
+                onChange={(event) => updateGuess('points', event.target.value)}
+                className="mt-1 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 dark:border-night-line-strong dark:bg-night-page"
+              />
+            </label>
+            <label className="block">
+              Monday Night total offense (yards)
+              <input
+                type="number"
+                inputMode="numeric"
+                min={0}
+                max={2000}
+                value={mnfYards}
+                onChange={(event) => updateGuess('yards', event.target.value)}
+                className="mt-1 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 dark:border-night-line-strong dark:bg-night-page"
+              />
+            </label>
+            <p className="col-span-2 text-xs text-ink-muted dark:text-night-muted">
+              Tie-breaker only. Required to submit.
+            </p>
+          </div>
+        )}
         <div
           className="-mx-4 flex gap-1.5 overflow-x-auto px-4 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0"
           role="list"
@@ -625,8 +673,11 @@ function GamesForm({
         )
       })}
 
-      {(saveMutation.isPending || (saved && (hasConflicts || voided)) || submitError) && (
-        <div className="sticky bottom-3 z-10 -mx-1 flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-surface/95 p-3 shadow-lg shadow-primary/10 backdrop-blur sm:static sm:mx-0 sm:border-0 sm:bg-transparent sm:p-0 sm:shadow-none sm:backdrop-blur-none dark:border-night-line dark:bg-night-card/95 sm:dark:bg-transparent">
+      {(!isLocked || saveMutation.isPending || (saved && hasConflicts) || submitError) && (
+        <div
+          data-testid="submit-bar"
+          className="sticky bottom-3 z-10 -mx-1 flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-surface/95 p-3 shadow-lg shadow-primary/10 backdrop-blur sm:static sm:mx-0 sm:border-0 sm:bg-transparent sm:p-0 sm:shadow-none sm:backdrop-blur-none dark:border-night-line dark:bg-night-card/95 sm:dark:bg-transparent"
+        >
           {saveMutation.isPending && (
             <p role="status" className="text-sm font-semibold text-ink-muted dark:text-night-muted">
               Saving…
@@ -635,11 +686,6 @@ function GamesForm({
           {saved && hasConflicts && (
             <p role="status" className="text-sm font-semibold text-accent">
               Picks saved, but conflicts must be resolved before this week is complete.
-            </p>
-          )}
-          {saved && !hasConflicts && voided && (
-            <p role="status" className="text-sm font-semibold text-accent">
-              Picks saved. Incomplete or conflicting picks were voided.
             </p>
           )}
           {submitError && (
@@ -660,6 +706,20 @@ function GamesForm({
                 </button>
               )}
             </>
+          )}
+          {!isLocked && (
+            <button
+              type="button"
+              onClick={handleSubmitPicks}
+              disabled={!canSubmit}
+              className="rounded-xl bg-primary px-3 py-1.5 text-xs font-black text-white transition-colors disabled:cursor-not-allowed disabled:opacity-40 dark:bg-night-accent dark:text-white sm:px-4 sm:py-2 sm:text-sm"
+            >
+              {submitMutation.isPending
+                ? 'Submitting…'
+                : submission.submittedAt
+                  ? 'Resubmit picks'
+                  : 'Submit picks'}
+            </button>
           )}
         </div>
       )}
