@@ -287,8 +287,53 @@ describe('LeagueSettingsPage', () => {
     renderPage()
 
     await userEvent.setup().click(await screen.findByRole('button', { name: /^Weekly status/ }))
-    expect((await screen.findAllByText('Complete (autosaved)')).length).toBeGreaterThan(0)
-    expect(screen.queryByText('Not submitted')).not.toBeInTheDocument()
+    const table = await screen.findByRole('table', { name: /weekly status/i })
+    expect(within(table).getAllByText('Complete (autosaved)').length).toBeGreaterThan(0)
+    expect(within(table).queryByText('Not submitted')).not.toBeInTheDocument()
+  })
+
+  it('puts Weekly status first among the Members sections', async () => {
+    renderPage()
+
+    const roster = await screen.findByRole('button', { name: /^Member roster/ })
+    const invites = screen.getByRole('button', { name: /^Invitations & passcode/ })
+    const status = screen.getByRole('button', { name: /^Weekly status/ })
+    expect(status.compareDocumentPosition(invites) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(status.compareDocumentPosition(roster) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('filters the weekly status table by paid and by pick status', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(await screen.findByRole('button', { name: /^Weekly status/ }))
+    const table = await screen.findByRole('table', { name: /weekly status/i })
+    const names = () =>
+      within(table)
+        .getAllByRole('row')
+        .slice(1)
+        .map((row) => within(row).getAllByRole('rowheader')[0].textContent)
+
+    expect(names()).toHaveLength(2)
+    await user.selectOptions(screen.getByLabelText('Filter by paid'), 'unpaid')
+    expect(names()).toEqual([expect.stringContaining('Member')])
+    expect(names()[0]).not.toContain('Commissioner')
+
+    await user.selectOptions(screen.getByLabelText('Filter by paid'), 'all')
+    await user.selectOptions(screen.getByLabelText('Filter by picks'), 'submitted')
+    expect(names()).toEqual([expect.stringContaining('Commissioner')])
+  })
+
+  it('sorts the weekly status table by paid when its header is clicked', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(await screen.findByRole('button', { name: /^Weekly status/ }))
+    const table = await screen.findByRole('table', { name: /weekly status/i })
+    const first = () => within(table).getAllByRole('row')[1].textContent
+
+    await user.click(screen.getByRole('button', { name: 'Sort by Paid' }))
+    expect(first()).toContain('Commissioner')
+    await user.click(screen.getByRole('button', { name: 'Sort by Paid' }))
+    expect(first()).toContain('member@example.com')
   })
 
   it('defaults the weekly status table to the current week, not Week 1', async () => {
