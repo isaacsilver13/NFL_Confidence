@@ -69,3 +69,39 @@ def test_complete_autosaved_card_needs_monday_night_guesses(client, db_session: 
         headers=_auth_header(user),
     )
     assert user.id in picks_service.list_complete_card_user_ids(db_session, week_id=week.id)
+
+
+def test_locked_week_without_any_guesses_keeps_counting_complete_cards(
+    client, db_session: Session
+) -> None:
+    user = _make_user(db_session)
+    week, games = _ensure_current_fixture(db_session, user)
+    _make_last_game_monday_night(db_session, games)
+    picks = [
+        {"gameId": str(g.id), "team": g.home_team, "confidence": i}
+        for i, g in enumerate(games, start=1)
+    ]
+    client.post(
+        "/api/v1/picks", json={"week": week.week_number, "picks": picks}, headers=_auth_header(user)
+    )
+    for game in games:  # the week locked before guesses existed
+        game.kickoff_time = game.kickoff_time.replace(year=2020)
+    db_session.commit()
+
+    assert user.id in picks_service.list_complete_card_user_ids(db_session, week_id=week.id)
+
+
+def test_sync_survives_a_malformed_espn_body(db_session: Session, monkeypatch) -> None:
+    user = _make_user(db_session)
+    week, games = _ensure_current_fixture(db_session, user)
+    _make_last_game_monday_night(db_session, games)
+    games[-1].game_status = GameStatus.FINAL
+    db_session.commit()
+
+    def boom(_id):
+        raise ValueError("not json")
+
+    monkeypatch.setattr(nfl_schedule_service, "fetch_total_offense", boom)
+    nfl_schedule_service.sync_monday_night_offense(db_session, week_id=week.id)
+
+    assert games[-1].total_offense_yards is None

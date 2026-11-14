@@ -314,6 +314,10 @@ def list_complete_card_user_ids(db: Session, *, week_id: uuid.UUID) -> set[uuid.
         return complete
     # The Monday Night guesses count as one more pick: no guesses, no complete card.
     guessed = {guess.user_id for guess in mnf_guess_repository.list_by_week(db, week_id=week_id)}
+    locked = min(game.kickoff_time for game in games) <= datetime.now(timezone.utc)
+    if locked and not guessed:
+        # A week that locked before guesses existed: keep counting its complete cards.
+        return complete
     return complete & guessed
 
 

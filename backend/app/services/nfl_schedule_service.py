@@ -111,7 +111,7 @@ def sync_monday_night_offense(db: Session, *, week_id: uuid.UUID) -> None:
         return
     try:
         game.total_offense_yards = fetch_total_offense(game.espn_game_id)
-    except httpx.HTTPError:
+    except (httpx.HTTPError, ValueError):
         logger.warning("Could not fetch total offense for game %s", game.espn_game_id)
         return
     db.commit()
