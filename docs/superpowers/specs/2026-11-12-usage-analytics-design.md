@@ -124,7 +124,7 @@ instead of JSONB metadata: `user_id` (FK users, ON DELETE CASCADE), `action` Str
   function and about 600/hour per user (one visible tab is 120/hour, so several tabs and
   devices fit); over-limit returns 429 and the client swallows it.
 - Retention: job `prune_usage_events` (`backend/app/jobs/usage_retention.py`,
-  `USAGE_RETENTION_DAYS = 180`) deletes `usage_events` rows older than 180 days. It runs
+  `USAGE_RETENTION_DAYS = 720`) deletes `usage_events` rows older than 720 days. It runs
   through the normal tick/slot machinery as a daily job due from `overnight_sync_hour`,
   slot key `prune_usage_events:YYYY-MM-DD`; no new setting.
 - "Active" (DAU, WAU and "never returned") = any tracked activity that day: `login`,
@@ -162,7 +162,7 @@ Both `fly.toml` and `fly.dev.toml` use `auto_stop_machines = "stop"` and
 - The report reaches production through the Neon MCP `run_sql` (SELECT only) inside a
   Claude session. No credential stored. The skill is therefore not a standalone script:
   it holds the SQL and the HTML rendering step, and Claude runs the queries.
-- League is about 20 people: plain rows (superseded: client events are batch-inserted and pruned at 180 days, see My calls).
+- League is about 20 people: plain rows (superseded: client events are batch-inserted and pruned at 720 days, see My calls).
 - Exclude test accounts from the report; keep the league admin. The builder lists users
   on the first run and confirms with the user which are test accounts, then stores that
   exclusion list in the skill.
@@ -175,4 +175,6 @@ None blocking.
 
 Heartbeats are a fair proxy for time on the app. If people mostly glance at the app on
 a phone and background it, reported time will be low. A secondary risk is event volume:
-30 s heartbeats across a league are small, and `usage_events` is pruned at 180 days.
+30 s heartbeats across a league are small, and `usage_events` is pruned at 720 days. At 720
+days the table keeps about two years of heartbeats, so check its size now and then (the prod
+database was 20 MB at launch; Neon's per-branch limit here is 1 GiB).

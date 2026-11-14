@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from app.db.session import SessionLocal
 from app.repositories import usage_event_repository
 
-USAGE_RETENTION_DAYS = 180
+USAGE_RETENTION_DAYS = 720
 
 
 def prune_usage_events() -> int:
