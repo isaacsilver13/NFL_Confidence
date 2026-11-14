@@ -82,10 +82,20 @@ export interface SavePicksInput {
   week: number
   picks: PickInput[]
   voidedGameIds: string[]
+  mnfGuessPoints?: number
+  mnfGuessYards?: number
 }
 
 export interface WeekSubmission {
   submittedAt: string | null
+  requiresMnfGuess?: boolean
+  mnfGuessPoints?: number | null
+  mnfGuessYards?: number | null
+}
+
+export interface MnfGuesses {
+  mnfGuessPoints: number
+  mnfGuessYards: number
 }
 
 export interface MemberPicks {

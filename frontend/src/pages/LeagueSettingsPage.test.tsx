@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -149,10 +149,12 @@ describe('LeagueSettingsPage', () => {
     expect(screen.queryByText('League passcode')).not.toBeInTheDocument()
     await userEvent.setup().click(invites)
     expect(screen.getByText('League passcode')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /^Weekly payments/ })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: /^Weekly status/ })).toHaveAttribute(
       'aria-expanded',
       'false',
     )
+    expect(screen.queryByRole('button', { name: /^Pick submissions/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Weekly payments/ })).not.toBeInTheDocument()
   })
   beforeEach(() => {
     vi.clearAllMocks()
@@ -250,7 +252,7 @@ describe('LeagueSettingsPage', () => {
     const user = userEvent.setup()
     renderPage()
 
-    await user.click(await screen.findByRole('button', { name: /^Weekly payments/ }))
+    await user.click(await screen.findByRole('button', { name: /^Weekly status/ }))
     const paymentCheckboxes = await screen.findAllByRole('checkbox', { name: 'Paid' })
     await user.click(paymentCheckboxes[1])
 
@@ -261,14 +263,18 @@ describe('LeagueSettingsPage', () => {
     await waitFor(() => expect(mockedVoidUnpaidPicks).toHaveBeenCalledWith(1))
   })
 
-  it("shows who has and hasn't submitted picks for the selected week", async () => {
+  it('shows paid and submitted state for every member in one table', async () => {
     renderPage()
 
-    await userEvent.setup().click(await screen.findByRole('button', { name: /^Pick submissions/ }))
-    expect(await screen.findByText('Who has submitted picks')).toBeInTheDocument()
-    await waitFor(() => expect(mockedFetchMemberSubmissionStatuses).toHaveBeenCalledWith(1))
-    expect(await screen.findByText(/Submitted Sep 5/)).toBeInTheDocument()
-    expect(screen.getByText('Not submitted')).toBeInTheDocument()
+    await userEvent.setup().click(await screen.findByRole('button', { name: /^Weekly status/ }))
+    const table = await screen.findByRole('table', { name: /weekly status/i })
+    expect(screen.getAllByRole('table')).toHaveLength(1)
+    const ownerRow = within(table).getByRole('row', { name: /Commissioner/ })
+    expect(within(ownerRow).getByText(/Submitted Sep 5/)).toBeInTheDocument()
+    expect(within(ownerRow).getByRole('checkbox', { name: 'Paid' })).toBeChecked()
+    const memberRow = within(table).getByRole('row', { name: /member@example.com/ })
+    expect(within(memberRow).getByText('Not submitted')).toBeInTheDocument()
+    expect(within(memberRow).getByRole('checkbox', { name: 'Paid' })).not.toBeChecked()
   })
 
   it('marks a complete autosaved card that was never formally submitted', async () => {
@@ -280,12 +286,12 @@ describe('LeagueSettingsPage', () => {
     })
     renderPage()
 
-    await userEvent.setup().click(await screen.findByRole('button', { name: /^Pick submissions/ }))
+    await userEvent.setup().click(await screen.findByRole('button', { name: /^Weekly status/ }))
     expect((await screen.findAllByText('Complete (autosaved)')).length).toBeGreaterThan(0)
     expect(screen.queryByText('Not submitted')).not.toBeInTheDocument()
   })
 
-  it('defaults the payment and submission tables to the current week, not Week 1', async () => {
+  it('defaults the weekly status table to the current week, not Week 1', async () => {
     const week = (weekNumber: number) => ({
       id: `week-${weekNumber}`,
       season: 2026,
@@ -298,12 +304,10 @@ describe('LeagueSettingsPage', () => {
     mockedFetchCurrentWeek.mockResolvedValue(week(3))
     renderPage()
 
-    await userEvent.setup().click(await screen.findByRole('button', { name: /^Weekly payments/ }))
-    await userEvent.setup().click(await screen.findByRole('button', { name: /^Pick submissions/ }))
+    await userEvent.setup().click(await screen.findByRole('button', { name: /^Weekly status/ }))
     await waitFor(() => expect(mockedFetchMemberPaymentStatuses).toHaveBeenCalledWith(3))
     await waitFor(() => expect(mockedFetchMemberSubmissionStatuses).toHaveBeenCalledWith(3))
-    expect(screen.getByLabelText('Payment week')).toHaveValue('3')
-    expect(screen.getByLabelText('Submissions week')).toHaveValue('3')
+    expect(screen.getByLabelText('Status week')).toHaveValue('3')
     expect(mockedFetchMemberPaymentStatuses).not.toHaveBeenCalledWith(1)
     expect(mockedFetchMemberSubmissionStatuses).not.toHaveBeenCalledWith(1)
   })
