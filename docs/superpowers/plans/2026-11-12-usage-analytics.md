@@ -10,6 +10,8 @@
 
 **Spec:** `docs/superpowers/specs/2026-11-12-usage-analytics-design.md`
 
+> **Update:** `docs/superpowers/plans/2026-11-14-usage-events-table.md` supersedes parts of this plan. It moved client events (`session_start`, `page_view`, `section_open`, `heartbeat`) from `audit_log` to a new `usage_events` table and added 180-day retention. `login` stays in `audit_log`. Where this plan says "no new table" or "entity `usage`", follow that plan.
+
 ## Global Constraints
 
 - No new table and no Alembic migration; reuse `audit_log` (`action` String(128), `entity` String(128), JSONB `metadata`, nullable `user_id`).

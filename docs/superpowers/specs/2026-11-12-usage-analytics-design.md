@@ -19,7 +19,7 @@ tracking and a read-only report, run on demand as a skill.
 
 ## Non-goals
 
-- No third-party analytics service. No new database table. No real-time dashboard.
+- No third-party analytics service. No real-time dashboard.
 - No backfill: there is no usage history before tracking ships. First reports will be thin.
 - No tracking of anonymous (logged-out) visitors.
 
@@ -33,8 +33,9 @@ tracking and a read-only report, run on demand as a skill.
 ## Findings that shape the design (from reading the code)
 
 - `audit_log` (user_id, action, entity, JSONB `metadata`, created_at; indexed on
-  user_id and action) exists in the schema but nothing writes to it. It is the home for
-  events, so no migration is needed.
+  user_id and action) existed in the schema but nothing wrote to it. It stays the home
+  for `login` events. Client events (heartbeats especially) would dominate it, so they
+  go to a dedicated `usage_events` table instead (see Design).
 - `refresh_tokens.created_at` is written at login AND on every `/auth/refresh`, so it
   cannot separate real logins. Real logins happen in `auth.py` `google_callback`
   (and `dev_login` locally) after `issue_tokens`.
@@ -49,7 +50,7 @@ tracking and a read-only report, run on demand as a skill.
 
 ## Design
 
-### Events (stored in `audit_log`)
+### Events (`login` in `audit_log`, client events in `usage_events`)
 
 | action | written by | metadata |
 |---|---|---|
@@ -59,15 +60,20 @@ tracking and a read-only report, run on demand as a skill.
 | `section_open` | frontend, when a dashboard section is opened by the user | `{section}` |
 | `heartbeat` | frontend, every 30 s while the tab is visible and the user interacted in the last 2 min | `{path}` |
 
-`entity` is set to `"usage"` for client events and `"auth"` for `login`.
+`login` is stored in `audit_log` with `entity = "auth"`. Client events (`session_start`,
+`page_view`, `section_open`, `heartbeat`) are stored in `usage_events`, with typed columns
+instead of JSONB metadata: `user_id` (FK users, ON DELETE CASCADE), `action` String(16),
+`path` String(200) nullable, `section` String(32) nullable, `device` String(16) nullable,
+`created_at`; indexed on `created_at` and on `(user_id, created_at)`.
 
 ### Backend
 
-- `POST /api/v1/events`: authenticated, accepts one event or a small batch, validates
+- `POST /api/v1/events`: authenticated, accepts one event or a small batch (at most 5 events per request), validates
   `action` against a fixed allow-list and `metadata` keys/length, rate-limited like other
   routes. Follows routes -> services -> repositories. Failure returns quietly; it must
   never break the page.
-- Event writes use the existing `audit_log` model through a small repository function.
+- Client events are written to `usage_events` in one batched insert through
+  `usage_event_repository.create_many`; `login` rows keep using the `audit_log` model.
 - Tests for the allow-list, auth requirement, and the login event being written.
 
 ### Frontend
@@ -93,7 +99,7 @@ tracking and a read-only report, run on demand as a skill.
 ## Constraints
 
 - Backend changes under `backend/`, frontend under `frontend/`; the skill is separate.
-- No migration. No deploy, no production writes by this work. Report queries are SELECT only.
+- One Alembic migration creates `usage_events`. No deploy, no production writes by this work. Report queries are SELECT only.
 - Follow the repo's lint, type, and coverage gates (`pytest --cov-fail-under=77`, ruff,
   black, isort, mypy; eslint, prettier, vitest, `tsc`).
 
@@ -105,19 +111,22 @@ tracking and a read-only report, run on demand as a skill.
 
 ## My calls (the user has not confirmed these)
 
-- Reuse `audit_log` instead of a new table.
+- Keep `login` in `audit_log`; store client events in a new `usage_events` table (changed from the original call to reuse `audit_log` for everything).
 - 30 s heartbeat as the time-on-app measure.
 - Skill lives in the repo (`.claude/skills/usage-report/`) rather than user-global.
 - HTML report file as output.
 - Device split and never-returned users are included as extras.
-- `audit_log` verified to fit: `user_id` nullable FK (ON DELETE SET NULL), `action`
-  String(128) with no check constraint, JSONB metadata, nothing else reads or writes it.
-  No migration needed.
+- `audit_log` fits `login` as is: `user_id` nullable FK (ON DELETE SET NULL), `action`
+  String(128) with no check constraint, JSONB metadata. The `usage_events` table needs a
+  migration.
 - `/events` rate limit: the existing `30/hour` auth pattern and IP keying would reject
   heartbeats (120/hour/user) and merge users behind shared IPs. Use a user-id key
   function and about 600/hour per user (one visible tab is 120/hour, so several tabs and
   devices fit); over-limit returns 429 and the client swallows it.
-- No retention or pruning in this change; revisit if the table grows (see open questions).
+- Retention: job `prune_usage_events` (`backend/app/jobs/usage_retention.py`,
+  `USAGE_RETENTION_DAYS = 180`) deletes `usage_events` rows older than 180 days. It runs
+  through the normal tick/slot machinery as a daily job due from `overnight_sync_hour`,
+  slot key `prune_usage_events:YYYY-MM-DD`; no new setting.
 - "Never returned" = user whose tracked activity (`login`, `session_start` or `page_view`)
   falls on a single day only. Login rows alone are not enough: members who stay signed in
   through the refresh cookie have none. Users with no tracked activity at all (signed up
@@ -148,7 +157,7 @@ Both `fly.toml` and `fly.dev.toml` use `auto_stop_machines = "stop"` and
 - The report reaches production through the Neon MCP `run_sql` (SELECT only) inside a
   Claude session. No credential stored. The skill is therefore not a standalone script:
   it holds the SQL and the HTML rendering step, and Claude runs the queries.
-- League is about 20 people: plain rows, no batching, no pruning.
+- League is about 20 people: plain rows (superseded: client events are batch-inserted and pruned at 180 days, see My calls).
 - Exclude test accounts from the report; keep the league admin. The builder lists users
   on the first run and confirms with the user which are test accounts, then stores that
   exclusion list in the skill.
@@ -161,4 +170,4 @@ None blocking.
 
 Heartbeats are a fair proxy for time on the app. If people mostly glance at the app on
 a phone and background it, reported time will be low. A secondary risk is event volume:
-30 s heartbeats across a league are small, but retention is not designed here.
+30 s heartbeats across a league are small, and `usage_events` is pruned at 180 days.
