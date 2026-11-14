@@ -29,6 +29,8 @@ import { fetchSessionBootstrap } from '@/api/session'
 import { Button } from '@/components/ui/Button'
 import { AccordionSection } from '@/components/ui/AccordionSection'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
+import { SortableTh } from '@/components/ui/SortableTable'
+import { useTableSort } from '@/components/ui/useTableSort'
 import type { LeagueMember, MemberSubmissionStatus } from '@/types/league'
 
 function SectionLoader() {
@@ -121,6 +123,15 @@ function formatSubmittedAt(submittedAt: string): string {
   }).format(new Date(submittedAt))
 }
 
+type PicksStatus = 'submitted' | 'complete' | 'not-submitted'
+
+function picksStatus(submission: MemberSubmissionStatus | undefined): PicksStatus {
+  if (submission?.submittedAt) return 'submitted'
+  return submission?.isComplete ? 'complete' : 'not-submitted'
+}
+
+const PICKS_ORDER: Record<PicksStatus, number> = { submitted: 0, complete: 1, 'not-submitted': 2 }
+
 function SubmissionBadge({ submission }: { submission: MemberSubmissionStatus | undefined }) {
   const pill =
     'inline-flex rounded-full px-2 py-1 text-[10px] font-black uppercase leading-tight tracking-[0.06em] sm:px-2.5 sm:text-xs sm:tracking-[0.1em]'
@@ -157,6 +168,21 @@ function WeeklyStatus() {
     enabled: weekNumber > 0,
   })
   const submissionsByUser = new Map(submissionStatuses?.members.map((m) => [m.userId, m]))
+  const [picksFilter, setPicksFilter] = useState<'all' | PicksStatus>('all')
+  const [paidFilter, setPaidFilter] = useState<'all' | 'paid' | 'unpaid'>('all')
+  const visibleMembers = (paymentStatuses?.members ?? []).filter(
+    (payment) =>
+      (picksFilter === 'all' ||
+        picksStatus(submissionsByUser.get(payment.userId)) === picksFilter) &&
+      (paidFilter === 'all' || payment.isPaid === (paidFilter === 'paid')),
+  )
+  const sort = useTableSort(visibleMembers, {
+    member: { value: (payment) => payment.displayName },
+    picks: {
+      value: (payment) => PICKS_ORDER[picksStatus(submissionsByUser.get(payment.userId))],
+    },
+    paid: { value: (payment) => (payment.isPaid ? 1 : 0), numeric: true },
+  })
 
   async function handlePaymentChange(userId: string, isPaid: boolean) {
     if (weekNumber === 0) return
@@ -221,6 +247,35 @@ function WeeklyStatus() {
           </select>
         </label>
       </div>
+      <div className="grid grid-cols-2 gap-3 text-sm font-medium">
+        <label>
+          Picks
+          <select
+            aria-label="Filter by picks"
+            value={picksFilter}
+            onChange={(event) => setPicksFilter(event.target.value as 'all' | PicksStatus)}
+            className="mt-1 block min-h-11 w-full rounded-md border border-slate-300 bg-white px-2 py-2 dark:border-night-line-strong dark:bg-night-card"
+          >
+            <option value="all">All</option>
+            <option value="submitted">Submitted</option>
+            <option value="complete">Complete (autosaved)</option>
+            <option value="not-submitted">Not submitted</option>
+          </select>
+        </label>
+        <label>
+          Paid
+          <select
+            aria-label="Filter by paid"
+            value={paidFilter}
+            onChange={(event) => setPaidFilter(event.target.value as 'all' | 'paid' | 'unpaid')}
+            className="mt-1 block min-h-11 w-full rounded-md border border-slate-300 bg-white px-2 py-2 dark:border-night-line-strong dark:bg-night-card"
+          >
+            <option value="all">All</option>
+            <option value="paid">Paid</option>
+            <option value="unpaid">Unpaid</option>
+          </select>
+        </label>
+      </div>
       {error && <p className="text-sm text-red-600 dark:text-night-error">{error}</p>}
       {isLoading || isLoadingSubmissions ? (
         <p className="text-sm text-slate-500 dark:text-night-muted">Loading weekly status...</p>
@@ -231,19 +286,28 @@ function WeeklyStatus() {
               <caption className="sr-only">Weekly status</caption>
               <thead className="bg-surface-muted text-xs uppercase tracking-[0.14em] text-ink-muted dark:bg-night-page dark:text-night-muted">
                 <tr>
-                  <th scope="col" className="px-2 py-3 sm:px-3">
-                    Member
-                  </th>
-                  <th scope="col" className="px-2 py-3 sm:px-3">
-                    Picks
-                  </th>
-                  <th scope="col" className="px-2 py-3 sm:px-3">
-                    Paid
-                  </th>
+                  <SortableTh
+                    label="Member"
+                    columnKey="member"
+                    sort={sort}
+                    className="px-2 py-3 sm:px-3"
+                  />
+                  <SortableTh
+                    label="Picks"
+                    columnKey="picks"
+                    sort={sort}
+                    className="px-2 py-3 sm:px-3"
+                  />
+                  <SortableTh
+                    label="Paid"
+                    columnKey="paid"
+                    sort={sort}
+                    className="px-2 py-3 sm:px-3"
+                  />
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 dark:divide-night-line">
-                {paymentStatuses?.members.map((payment) => {
+                {sort.sortedRows.map((payment) => {
                   const submission = submissionsByUser.get(payment.userId)
                   return (
                     <tr key={payment.userId}>
@@ -466,6 +530,14 @@ export function LeagueSettingsPage() {
         </div>
       </div>
 
+      <AdminSection
+        id="member-weekly-status"
+        title="Weekly status"
+        summary="Who has submitted picks and who has paid"
+      >
+        <WeeklyStatus />
+      </AdminSection>
+
       {isCommissioner && (
         <AdminSection
           id="member-invites"
@@ -601,13 +673,6 @@ export function LeagueSettingsPage() {
         </ul>
       </AdminSection>
 
-      <AdminSection
-        id="member-weekly-status"
-        title="Weekly status"
-        summary="Who has submitted picks and who has paid"
-      >
-        <WeeklyStatus />
-      </AdminSection>
       <ConfirmDialog
         open={confirmingRemoveMember !== null}
         title="Remove member?"
