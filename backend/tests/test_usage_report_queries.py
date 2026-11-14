@@ -114,3 +114,25 @@ def test_never_returned_and_no_data_yet(db_session: Session, seeded: dict[str, U
         str(seeded["bob"].id): "never returned",
         str(seeded["cara"].id): "no data yet",
     }
+
+
+def test_never_returned_uses_activity_when_there_is_no_login_row(
+    db_session: Session, seeded: dict[str, User]
+) -> None:
+    """Members who stay signed in via the refresh cookie have no login row."""
+    dan = User(google_id="g-dan", email="dan@example.com", display_name="Dan")
+    erin = User(google_id="g-erin", email="erin@example.com", display_name="Erin")
+    db_session.add_all([dan, erin])
+    db_session.flush()
+    db_session.add_all(
+        [
+            _event(dan, "session_start", _at(10), device="phone"),
+            _event(erin, "session_start", _at(10), device="desktop"),
+            _event(erin, "page_view", _at(11), path="/picks"),
+        ]
+    )
+    db_session.flush()
+
+    status = {r["user_id"]: r["status"] for r in _run(db_session, "never_returned")}
+    assert status[str(dan.id)] == "never returned"  # active one day only, not 'no data yet'
+    assert str(erin.id) not in status  # came back on a later day

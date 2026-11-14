@@ -14,7 +14,8 @@ router = APIRouter(tags=["events"])
 
 
 @router.post("/events", status_code=204)
-@limiter.limit("300/hour", key_func=user_rate_key)
+# One visible tab heartbeats 120 times an hour; 600 leaves room for several tabs and devices.
+@limiter.limit("600/hour", key_func=user_rate_key)
 def post_events(
     request: Request,
     payload: EventsIn,

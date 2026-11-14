@@ -86,6 +86,13 @@ function DashboardSections({
     }
   }, [openSections, userId])
 
+  // A deep link (the /leaderboard-style redirects, a bookmark) opens its section from the initial
+  // hash without firing `hashchange`, so count that open once on mount.
+  useEffect(() => {
+    const section = sectionFromHash()
+    if (section) trackSectionOpen(section)
+  }, [])
+
   useEffect(() => {
     function handleHashChange() {
       const section = sectionFromHash()

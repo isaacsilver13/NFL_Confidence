@@ -90,8 +90,8 @@ def test_rejects_bad_metadata(client, db_session: Session, member: User, event: 
     assert _rows(db_session) == []
 
 
-def test_rejects_more_than_20_events(client, db_session: Session, member: User) -> None:
-    events = [{"action": "heartbeat", "metadata": {"path": "/"}}] * 21
+def test_rejects_more_than_5_events(client, db_session: Session, member: User) -> None:
+    events = [{"action": "heartbeat", "metadata": {"path": "/"}}] * 6
     assert _post(client, member, events).status_code == 422
     assert _rows(db_session) == []
 

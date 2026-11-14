@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '@/api/client'
+import { trackSectionOpen } from '@/api/events'
 import { fetchLeaguePot, joinLeagueWithCode, refreshLeagueData } from '@/api/league'
 import { fetchCurrentPicksCard, fetchSessionBootstrap, type SessionBootstrap } from '@/api/session'
 import { fetchStartedWeeks } from '@/api/nfl'
@@ -28,6 +29,10 @@ vi.mock('./StandingsPage', () => ({
 
 vi.mock('./ProfilePage', () => ({
   ProfilePage: () => <div>Profile section body</div>,
+}))
+
+vi.mock('@/api/events', () => ({
+  trackSectionOpen: vi.fn(),
 }))
 
 vi.mock('@/api/league', () => ({
@@ -414,6 +419,24 @@ describe('DashboardPage league access', () => {
     await userEvent.setup().click(screen.getByRole('button', { name: 'Review week 1' }))
     await screen.findByText('Leaderboard section body')
     expect(mockedFetchWeeklyLeaderboard).toHaveBeenCalledWith(1)
+  })
+
+  it('tracks a section opened by a deep-link hash, once', async () => {
+    mockedFetchSessionBootstrap.mockResolvedValueOnce(memberSession)
+    window.history.replaceState(null, '', '/#standings')
+    renderPage()
+
+    await screen.findByRole('button', { name: /^Season Standings/ })
+    expect(vi.mocked(trackSectionOpen)).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(trackSectionOpen)).toHaveBeenCalledWith('standings')
+  })
+
+  it('does not track a section open when the page loads without a hash', async () => {
+    mockedFetchSessionBootstrap.mockResolvedValueOnce(memberSession)
+    renderPage()
+
+    await screen.findByRole('button', { name: /^Weekly Leaderboard/ })
+    expect(vi.mocked(trackSectionOpen)).not.toHaveBeenCalled()
   })
 
   it('opens a section named by the URL hash and keeps the persisted default open too', async () => {

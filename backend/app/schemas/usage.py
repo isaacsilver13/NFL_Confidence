@@ -47,4 +47,6 @@ class EventIn(BaseModel):
 class EventsIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    events: list[EventIn] = Field(min_length=1, max_length=20)
+    # The SPA sends one event per request; 5 leaves room for batching without letting one
+    # request write dozens of audit_log rows.
+    events: list[EventIn] = Field(min_length=1, max_length=5)

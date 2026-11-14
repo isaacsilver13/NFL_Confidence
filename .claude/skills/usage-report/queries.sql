@@ -91,18 +91,20 @@ WITH ev AS (
 SELECT feature, users, events FROM feats;
 
 -- name: never_returned
--- 'never returned' = has a login but no session_start on any later day (Chicago time).
--- 'no data yet' = no tracked events at all (signed up before tracking shipped).
+-- Activity = login, session_start or page_view (the same events DAU counts). Members who stay
+-- signed in through the refresh cookie have no login row, so a login row must not be required.
+-- 'never returned' = tracked activity on a single day only (Chicago time).
+-- 'no data yet' = no tracked activity at all (signed up before tracking shipped).
+WITH activity AS (
+  SELECT user_id, (created_at AT TIME ZONE 'America/Chicago')::date AS day
+  FROM audit_log
+  WHERE action IN ('login', 'session_start', 'page_view') AND user_id IS NOT NULL
+), span AS (
+  SELECT user_id, min(day) AS first_day, max(day) AS last_day FROM activity GROUP BY user_id
+)
 SELECT u.id::text AS user_id,
-       CASE WHEN first_login.d IS NULL THEN 'no data yet' ELSE 'never returned' END AS status
+       CASE WHEN s.user_id IS NULL THEN 'no data yet' ELSE 'never returned' END AS status
 FROM users u
-LEFT JOIN (
-  SELECT user_id, min((created_at AT TIME ZONE 'America/Chicago')::date) AS d
-  FROM audit_log WHERE action = 'login' GROUP BY user_id
-) first_login ON first_login.d IS NOT NULL AND first_login.user_id = u.id
+LEFT JOIN span s ON s.user_id = u.id
 WHERE lower(u.email) NOT IN ({{EXCLUDE}})
-  AND NOT EXISTS (
-    SELECT 1 FROM audit_log s
-    WHERE s.user_id = u.id AND s.action = 'session_start'
-      AND (s.created_at AT TIME ZONE 'America/Chicago')::date > COALESCE(first_login.d, DATE '9999-01-01')
-  );
+  AND (s.user_id IS NULL OR s.last_day = s.first_day);

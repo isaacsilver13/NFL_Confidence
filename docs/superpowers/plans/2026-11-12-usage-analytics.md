@@ -16,9 +16,9 @@
 - Event actions are exactly: `login`, `session_start`, `page_view`, `section_open`, `heartbeat`. `entity` is `"auth"` for `login`, `"usage"` for the rest.
 - Metadata: `page_view`/`heartbeat` `{path}` (path only, no query string or hash); `section_open` `{section}`; `session_start` `{device: "phone"|"desktop"}`; `login` none.
 - Heartbeat every 30 s only while the tab is visible AND the user interacted in the last 2 minutes. No polling, cron, or keep-alive anywhere (Fly machines scale to zero).
-- `/events` rate limit about 300/hour per user (keyed by user id, falling back to IP); over-limit is 429 and the client swallows it. Event failures must never break a page or a login.
+- `/events` rate limit about 600/hour per user (keyed by user id, falling back to IP); over-limit is 429 and the client swallows it. Event failures must never break a page or a login.
 - Report is SELECT-only, uses the Neon MCP, stores no credential, excludes test accounts, keeps the league admin.
-- Active time = distinct 30 s heartbeat buckets x 30 s (a floor). "Never returned" = a `login` but no `session_start` on a later day; users with no events are "no data yet".
+- Active time = distinct 30 s heartbeat buckets x 30 s (a floor). "Never returned" = tracked activity (`login`, `session_start` or `page_view`) on a single day only; users with no tracked activity are "no data yet".
 - Backend changes under `backend/`, frontend under `frontend/`. Gates: `ruff check .`, `black --check .`, `isort --check-only .`, `mypy app`, `pytest --cov=app --cov-fail-under=77`; `npm run lint`, `npm run format:check`, `npm run test`, `npm run build`.
 - Never commit secrets or database URLs. Do not push, merge, or deploy.
 
@@ -26,7 +26,7 @@
 
 - Invite codes in the URL: `/join?code=...` must never be stored; client strips query/hash and the server rejects any `path` containing `?` or `#`.
 - Tracking must not trigger auth side effects: an event sent with an expired token must not kick off a token refresh (use `skipAuthRetry`) and a 401 is swallowed.
-- Oversized or unknown input: unknown `action`, extra metadata keys, bad `section`/`device` values, or more than 20 events in a batch return 422 and write nothing.
+- Oversized or unknown input: unknown `action`, extra metadata keys, bad `section`/`device` values, or more than 5 events in a batch return 422 and write nothing.
 - Cleanup: after sign-out or unmount no timers or listeners remain and no events are sent.
 - Users with `user_id` NULL (deleted accounts) and test accounts must not appear in the report; an empty database must still render a valid report.
 
@@ -54,7 +54,7 @@
 
 - [ ] **Step 1: Write failing tests** in `backend/tests/test_events.py` (auth header helper as in `test_league.py:18`): `test_requires_auth` (401 without token), `test_records_events` (batch of `session_start{device:"phone"}`, `page_view{path:"/picks"}`, `heartbeat{path:"/"}`, `section_open{section:"standings"}` returns 204 and four `audit_log` rows with that user id, entity `"usage"`), `test_rejects_unknown_action` (422, zero rows), `test_rejects_query_string_in_path` (`/join?code=ABC` and `/#x` both 422), `test_rejects_bad_section_device_and_extra_keys` (422), `test_rejects_more_than_20_events` (422), `test_login_action_not_accepted_from_client` (422, since `login` is server-only).
 - [ ] **Step 2:** `pytest backend/tests/test_events.py -v` (from `backend/`). Expected: FAIL (404/import errors).
-- [ ] **Step 3:** Implement schemas, repository, service and route per Interfaces. Route is thin: validate, call service, return 204. Decorate with `@limiter.limit("300/hour", key_func=user_rate_key)`. The valid `section` set is `leaderboard|breakdown|standings|profile`.
+- [ ] **Step 3:** Implement schemas, repository, service and route per Interfaces. Route is thin: validate, call service, return 204. Decorate with `@limiter.limit("600/hour", key_func=user_rate_key)`. The valid `section` set is `leaderboard|breakdown|standings|profile`.
 - [ ] **Step 4:** Run the file again. Expected: all PASS. Then `ruff check .`, `black --check .`, `isort --check-only .`, `mypy app`.
 - [ ] **Step 5:** Commit `feat(api): add usage events endpoint`.
 

@@ -115,11 +115,13 @@ tracking and a read-only report, run on demand as a skill.
   No migration needed.
 - `/events` rate limit: the existing `30/hour` auth pattern and IP keying would reject
   heartbeats (120/hour/user) and merge users behind shared IPs. Use a user-id key
-  function and about 300/hour per user; over-limit returns 429 and the client swallows it.
+  function and about 600/hour per user (one visible tab is 120/hour, so several tabs and
+  devices fit); over-limit returns 429 and the client swallows it.
 - No retention or pruning in this change; revisit if the table grows (see open questions).
-- "Never returned" = user with a `login` event but no `session_start` on any later day.
-  Users with no events at all (signed up before tracking) are labelled "no data yet",
-  not "never returned".
+- "Never returned" = user whose tracked activity (`login`, `session_start` or `page_view`)
+  falls on a single day only. Login rows alone are not enough: members who stay signed in
+  through the refresh cookie have none. Users with no tracked activity at all (signed up
+  before tracking) are labelled "no data yet", not "never returned".
 
 ## Left to the builder
 
