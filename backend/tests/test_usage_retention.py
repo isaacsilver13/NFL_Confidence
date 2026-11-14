@@ -21,13 +21,13 @@ def test_prune_deletes_only_rows_past_retention(
     )
     now = datetime.now(timezone.utc)
     old_usage = UsageEvent(
-        user_id=owner_user.id, action="page_view", created_at=now - timedelta(days=181)
+        user_id=owner_user.id, action="page_view", created_at=now - timedelta(days=721)
     )
     fresh_usage = UsageEvent(
-        user_id=owner_user.id, action="page_view", created_at=now - timedelta(days=179)
+        user_id=owner_user.id, action="page_view", created_at=now - timedelta(days=719)
     )
     old_audit = AuditLog(
-        user_id=owner_user.id, action="x", entity="y", created_at=now - timedelta(days=400)
+        user_id=owner_user.id, action="x", entity="y", created_at=now - timedelta(days=900)
     )
     db_session.add_all([old_usage, fresh_usage, old_audit])
     db_session.flush()
