@@ -89,7 +89,7 @@ def _extract_google_userinfo(token: object) -> tuple[str, str, str, str | None]:
 async def _run_google_request(operation: Awaitable[_GoogleResult]) -> _GoogleResult:
     try:
         return await asyncio.wait_for(operation, timeout=settings.google_oauth_timeout_seconds)
-    except (asyncio.TimeoutError, httpx.HTTPError, OAuthError) as exc:
+    except (TimeoutError, httpx.HTTPError, OAuthError) as exc:
         raise UnauthorizedError(
             "Google sign-in is temporarily unavailable. Please try again."
         ) from exc

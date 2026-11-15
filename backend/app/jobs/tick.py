@@ -97,6 +97,37 @@ def _finish(execution_id: Any, *, status: str, result: Any, error: str | None) -
         db.commit()
 
 
+def run_slot(job_name: str, slot_key: str) -> dict[str, Any]:
+    """Claim one slot and, if it was free, run its job. The tick and the admin trigger both run
+    jobs only through here, so every run is claimed and logged to `job_executions` the same way."""
+    entry: dict[str, Any] = {"job": job_name, "slot": slot_key}
+    execution_id = _claim_slot(job_name, slot_key, datetime.now(timezone.utc))
+    if execution_id is None:
+        entry["status"] = "skipped"
+        logger.info("Job slot already claimed", extra={"job_name": job_name})
+        return entry
+
+    job_started = time.monotonic()
+    try:
+        result = JOB_FUNCTIONS[job_name]()
+    except Exception as exc:  # a failed job must not fail the whole tick
+        logger.exception("Job failed", extra={"job_name": job_name})
+        _finish(execution_id, status="failed", result=None, error=str(exc))
+        entry.update(status="failed", error=str(exc)[:200])
+    else:
+        _finish(execution_id, status="success", result=result, error=None)
+        entry.update(status="success", result_count=result if isinstance(result, int) else None)
+        logger.info(
+            "Job completed",
+            extra={
+                "job_name": job_name,
+                "result_count": entry["result_count"],
+                "elapsed_seconds": round(time.monotonic() - job_started, 2),
+            },
+        )
+    return entry
+
+
 def run_tick(now: datetime | None = None) -> dict[str, Any]:
     """Claim and run every due slot; return a JSON-serializable summary."""
     started = time.monotonic()
@@ -111,35 +142,7 @@ def run_tick(now: datetime | None = None) -> dict[str, Any]:
         extra={"cold_start": cold_start, "uptime_seconds": round(uptime, 1), "due": len(slots)},
     )
 
-    results: list[dict[str, Any]] = []
-    for slot in slots:
-        entry: dict[str, Any] = {"job": slot.job_name, "slot": slot.key}
-        execution_id = _claim_slot(slot.job_name, slot.key, datetime.now(timezone.utc))
-        if execution_id is None:
-            entry["status"] = "skipped"
-            logger.info("Job slot already claimed", extra={"job_name": slot.job_name})
-            results.append(entry)
-            continue
-
-        job_started = time.monotonic()
-        try:
-            result = JOB_FUNCTIONS[slot.job_name]()
-        except Exception as exc:  # a failed job must not fail the whole tick
-            logger.exception("Job failed", extra={"job_name": slot.job_name})
-            _finish(execution_id, status="failed", result=None, error=str(exc))
-            entry.update(status="failed", error=str(exc)[:200])
-        else:
-            _finish(execution_id, status="success", result=result, error=None)
-            entry.update(status="success", result_count=result if isinstance(result, int) else None)
-            logger.info(
-                "Job completed",
-                extra={
-                    "job_name": slot.job_name,
-                    "result_count": entry["result_count"],
-                    "elapsed_seconds": round(time.monotonic() - job_started, 2),
-                },
-            )
-        results.append(entry)
+    results = [run_slot(slot.job_name, slot.key) for slot in slots]
 
     summary = {
         "ran_at": now.isoformat(),

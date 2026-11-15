@@ -7,7 +7,6 @@ before running Alembic autogenerate or creating tables directly.
 from app.models.audit_log import AuditLog
 from app.models.invite import Invite
 from app.models.job_execution import JobExecution
-from app.models.job_run import JobRun
 from app.models.league import League
 from app.models.league_member import LeagueMember
 from app.models.member_weekly_payment import MemberWeeklyPayment
@@ -29,7 +28,6 @@ __all__ = [
     "AuditLog",
     "Invite",
     "JobExecution",
-    "JobRun",
     "League",
     "LeagueMember",
     "MemberWeeklyPayment",

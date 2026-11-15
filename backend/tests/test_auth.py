@@ -30,7 +30,7 @@ async def _provider_error_operation() -> None:
 
 
 async def _timeout_operation() -> None:
-    raise asyncio.TimeoutError
+    raise TimeoutError
 
 
 async def test_google_request_timeout_is_mapped_to_unauthorized(

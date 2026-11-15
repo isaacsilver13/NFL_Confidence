@@ -7,7 +7,7 @@ from uuid import uuid4
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event, text
-from sqlalchemy.engine import Engine
+from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.orm import Session
 
 from app import main as app_main
@@ -41,9 +41,25 @@ def local_auth_settings():
     oauth.settings.google_client_secret = ""
 
 
+# The suite creates and drops a schema on DATABASE_URL. Only a database on this machine (or the
+# compose `db` service) may take that: on 2026-11-13 a developer .env pointed it at Neon.
+LOCAL_TEST_DB_HOSTS = {"localhost", "127.0.0.1", "::1", "db", "postgres"}
+
+
+def require_local_database(url: str) -> None:
+    host = make_url(url).host
+    if host not in LOCAL_TEST_DB_HOSTS:
+        pytest.exit(
+            f"Refusing to run database tests against host {host!r}: set DATABASE_URL to a local "
+            "Postgres (backend/scripts/prepare_local.ps1 starts one).",
+            returncode=2,
+        )
+
+
 @pytest.fixture(scope="session")
 def db_engine() -> Generator[Engine, None, None]:
     settings = get_settings()
+    require_local_database(settings.database_url)
     schema = f"test_{uuid4().hex}"
     admin_engine = create_engine(settings.database_url)
     with admin_engine.begin() as connection:

@@ -22,10 +22,3 @@ class GameStatus(str, enum.Enum):
     FINAL = "final"
     POSTPONED = "postponed"
     CANCELLED = "cancelled"
-
-
-class JobStatus(str, enum.Enum):
-    PENDING = "pending"
-    RUNNING = "running"
-    COMPLETED = "completed"
-    FAILED = "failed"
