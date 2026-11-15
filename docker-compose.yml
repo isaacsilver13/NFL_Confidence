@@ -16,10 +16,12 @@ services:
       timeout: 5s
       retries: 5
 
-  backend:
+  # The same single container as production (docker/Dockerfile): API and built SPA on :8000.
+  # For frontend work with hot reload, run `npm run dev` in frontend/ (Vite proxies /api to :8000).
+  app:
     build:
-      context: ./backend
-      dockerfile: ../docker/Dockerfile.backend
+      context: .
+      dockerfile: docker/Dockerfile
     restart: unless-stopped
     env_file:
       - ./backend/.env
@@ -30,18 +32,6 @@ services:
         condition: service_healthy
     ports:
       - "8000:8000"
-    volumes:
-      - ./backend:/app
-
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: ../docker/Dockerfile.frontend
-    restart: unless-stopped
-    ports:
-      - "5173:80"
-    depends_on:
-      - backend
 
 volumes:
   db_data:

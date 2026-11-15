@@ -37,6 +37,9 @@ from app.db.schema_validator import validate_schema
 from app.db.session import SessionLocal
 
 settings = get_settings()
+# Without a root handler, every app.* INFO line (tick summaries, job results, reminder counts) was
+# dropped; uvicorn configures only its own loggers. Its loggers don't propagate, so nothing doubles.
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
 
 

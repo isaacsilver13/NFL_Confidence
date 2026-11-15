@@ -16,7 +16,7 @@ RUN grep -q '/api/v1' dist/assets/*.js \
 	&& grep -q 'Authorization' dist/assets/*.js \
 	&& grep -q 'Bearer' dist/assets/*.js
 
-FROM python:3.10-slim
+FROM python:3.12-slim
 
 WORKDIR /app
 
@@ -33,6 +33,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY backend .
 
 COPY --from=frontend-build /app/dist ./frontend_dist
+
+# Non-root at runtime (no volume, so nothing to chown); fly.toml's release_command runs as this user too.
+RUN useradd --create-home --shell /usr/sbin/nologin appuser
+USER appuser
 
 EXPOSE 8000
 

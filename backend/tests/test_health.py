@@ -91,6 +91,7 @@ def test_readiness_check_verifies_database_and_reports_external_scheduler(client
 
 
 def test_readiness_check_reports_schema_drift(client, monkeypatch) -> None:
+    monkeypatch.setattr(health, "_schema_valid_until", 0.0)  # no clean result cached
     monkeypatch.setattr(
         health,
         "validate_schema",

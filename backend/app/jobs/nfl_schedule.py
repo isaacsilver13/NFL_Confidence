@@ -180,8 +180,10 @@ def _send_weekly_reminders(db: Session) -> int:
                 notification_type="weekly_picks_reminder",
             )
         )
+        # Commit per recipient: if a later send fails, the slot is reclaimed and retried, and the
+        # members already emailed must stay marked delivered rather than be emailed again.
+        db.commit()
         sent += 1
-    db.commit()
     logger.info(
         "Weekly reminder run season=%s week=%s sent=%s",
         league.season,
@@ -235,7 +237,7 @@ def _send_weekly_report(db: Session) -> int:
                 notification_type="weekly_report",
             )
         )
-    db.commit()
+        db.commit()  # per recipient, so a retry after a failed send never re-emails earlier ones
     logger.info(
         "Weekly report run season=%s week=%s recipients=%s",
         league.season,

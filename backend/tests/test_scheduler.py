@@ -141,3 +141,67 @@ def test_weekly_report_emails_commissioners_once_per_completed_week(
     assert [message["to"] for message in sent] == [owner.email]
     assert "Week 1" in str(sent[0]["subject"])
     assert "BUF" in str(sent[0]["html"])
+
+
+def test_a_failed_reminder_send_never_re_emails_members_already_sent(
+    db_session: Session, monkeypatch
+) -> None:
+    owner = _make_user(db_session, "owner")
+    first = _make_user(db_session, "first")
+    second = _make_user(db_session, "second")
+    league = league_service.create_league(
+        db_session, owner=owner, name="Partial Failure League", season=2026
+    )
+    db_session.add_all(
+        [
+            LeagueMember(league_id=league.id, user_id=user.id, role=LeagueRole.MEMBER)
+            for user in (first, second)
+        ]
+    )
+    now = datetime.now(timezone.utc)
+    week = NflWeek(
+        season=league.season,
+        week_number=1,
+        start_date=now - timedelta(days=1),
+        end_date=now + timedelta(days=7),
+        status=WeekStatus.REGULAR,
+    )
+    db_session.add(week)
+    db_session.flush()
+    db_session.add(
+        NflGame(
+            week_id=week.id,
+            espn_game_id=f"partial-{uuid.uuid4().hex}",
+            kickoff_time=now + timedelta(days=1),
+            away_team="AW",
+            home_team="HM",
+            game_status=GameStatus.SCHEDULED,
+        )
+    )
+    db_session.flush()
+    sent: list[str] = []
+
+    def fail_on_second(**kwargs: object) -> None:
+        if len(sent) == 2:  # owner and one member went out; the third send fails
+            raise RuntimeError("provider down")
+        sent.append(str(kwargs["to"]))
+
+    def run() -> int:
+        # A fresh session per run, as in production (the tick's SessionLocal): a failed run's
+        # uncommitted rows are discarded with its session.
+        with Session(bind=db_session.get_bind(), join_transaction_mode="create_savepoint") as s:
+            return nfl_schedule.send_weekly_reminders(s)
+
+    monkeypatch.setattr(nfl_schedule, "send_weekly_reminder", fail_on_second)
+    try:
+        run()
+    except RuntimeError:
+        pass
+    already = list(sent)
+    retried: list[str] = []
+    monkeypatch.setattr(
+        nfl_schedule, "send_weekly_reminder", lambda **kw: retried.append(str(kw["to"]))
+    )
+
+    assert run() == 1
+    assert len(retried) == 1 and retried[0] not in already

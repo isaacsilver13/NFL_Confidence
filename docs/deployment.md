@@ -130,11 +130,10 @@ recurring database work on its own; scheduled jobs only run when something calls
 
 # Docker
 
-Frontend Dockerfile
-
-Backend Dockerfile
-
-docker-compose.yml for local development
+One image, `docker/Dockerfile` (Python 3.12, non-root): it builds the SPA and serves it with the API.
+Fly builds it, and `docker-compose.yml` runs the same image (service `app`, port 8000) beside a
+local Postgres. The separate frontend (nginx) and backend Dockerfiles were removed on 2026-11-14:
+the nginx one proxied local `/api` calls to the production API host.
 
 ## Fly.io first deployment
 

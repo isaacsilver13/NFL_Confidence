@@ -8,7 +8,7 @@ FastAPI backend (`backend/`), React/TypeScript frontend (`frontend/`), PostgreSQ
 
 ## Commands
 
-Backend (run from `backend/`, Python 3.10 — 3.14 is not a supported substitute):
+Backend (run from `backend/`, Python 3.12, as in CI and the Docker image — 3.14 is not a supported substitute):
 ```
 pip install -r requirements.txt
 ruff check .                                  # lint

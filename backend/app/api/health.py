@@ -1,6 +1,7 @@
 """Unauthenticated liveness and readiness probes."""
 
 import logging
+import time
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends
@@ -11,12 +12,18 @@ from sqlalchemy.orm import Session
 from app.core.responses import error, success
 from app.db.schema_validator import validate_schema
 from app.db.session import get_db
+from app.jobs import tick
 from app.models.job_execution import JobExecution
 from app.models.nfl_game import NflGame
 from app.models.pick import Pick
 
 router = APIRouter(tags=["health"])
 logger = logging.getLogger(__name__)
+
+# A clean schema check is reused this long: reflecting the whole schema on every readiness probe
+# kept Neon's compute awake. Drift is never cached, so it keeps reporting until it is fixed.
+SCHEMA_RECHECK_SECONDS = 600
+_schema_valid_until = 0.0
 
 
 @router.get("/health")
@@ -59,8 +66,9 @@ def readiness_check(db: Session = Depends(get_db)) -> dict | JSONResponse:
             content=error("SERVICE_UNAVAILABLE", "The application is not ready."),
         )
 
+    global _schema_valid_until
     try:
-        schema_issues = validate_schema(db)
+        schema_issues = [] if time.monotonic() < _schema_valid_until else validate_schema(db)
     except Exception:
         logger.exception("Readiness check failed because schema validation could not run")
         return JSONResponse(
@@ -78,6 +86,8 @@ def readiness_check(db: Session = Depends(get_db)) -> dict | JSONResponse:
             ),
         )
 
+    if _schema_valid_until <= time.monotonic():
+        _schema_valid_until = time.monotonic() + SCHEMA_RECHECK_SECONDS
     return success(
         {
             "status": "ready",
@@ -90,44 +100,24 @@ def readiness_check(db: Session = Depends(get_db)) -> dict | JSONResponse:
 
 @router.get("/health/jobs")
 def job_status(db: Session = Depends(get_db)) -> dict:
-    """Return the status of all scheduled jobs: last run, result, and any errors."""
-
-    job_names = [
-        "schedule_import",
-        "lock_expired_picks",
-        "sunday_score_sync",
-        "monday_thursday_score_sync",
-        "weekly_picks_reminder",
-    ]
-    status = {}
-
-    for job_name in job_names:
-        # Get most recent execution for this job
-        latest_execution = db.execute(
+    """Last run and status of every scheduled job. Unauthenticated, so no error text: commissioners
+    see errors at /api/v1/admin/jobs/status."""
+    status: dict[str, dict[str, object]] = {}
+    for job_name in tick.JOB_FUNCTIONS:
+        latest = db.execute(
             select(JobExecution)
             .where(JobExecution.job_name == job_name)
             .order_by(desc(JobExecution.started_at))
             .limit(1)
         ).scalar_one_or_none()
-
-        if latest_execution:
-            age_minutes = (
-                datetime.now(timezone.utc) - latest_execution.started_at
-            ).total_seconds() / 60
-
-            job_status_data = {
-                "last_run": latest_execution.started_at.isoformat(),
-                "status": latest_execution.status,
-                "result_count": latest_execution.result_count,
-                "age_minutes": round(age_minutes, 1),
-            }
-
-            if latest_execution.error_message:
-                job_status_data["error"] = latest_execution.error_message
-
-        else:
-            job_status_data = {"status": "never_run"}
-
-        status[job_name] = job_status_data
-
+        if latest is None:
+            status[job_name] = {"status": "never_run"}
+            continue
+        age_minutes = (datetime.now(timezone.utc) - latest.started_at).total_seconds() / 60
+        status[job_name] = {
+            "last_run": latest.started_at.isoformat(),
+            "status": latest.status,
+            "result_count": latest.result_count,
+            "age_minutes": round(age_minutes, 1),
+        }
     return success(status)
