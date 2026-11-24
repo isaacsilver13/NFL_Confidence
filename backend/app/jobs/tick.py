@@ -27,6 +27,7 @@ from app.jobs.nfl_schedule import (
     send_weekly_report,
 )
 from app.jobs.schedule import ScheduleConfig, due_slots
+from app.jobs.usage_report import send_weekly_usage_report
 from app.jobs.usage_retention import prune_usage_events
 from app.models.job_execution import JobExecution
 
@@ -48,6 +49,7 @@ JOB_FUNCTIONS: dict[str, Callable[[], Any]] = {
     "prune_usage_events": prune_usage_events,
     "weekly_picks_reminder": send_weekly_reminders,
     "weekly_report": send_weekly_report,
+    "weekly_usage_report": send_weekly_usage_report,
     "lock_expired_picks": lock_expired_picks,
 }
 
