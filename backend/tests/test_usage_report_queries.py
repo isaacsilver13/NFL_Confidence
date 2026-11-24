@@ -17,8 +17,9 @@ QUERIES_FILE = (
 )
 
 
-def _queries(exclude: str) -> dict[str, str]:
-    sql = QUERIES_FILE.read_text(encoding="utf-8").replace("{{EXCLUDE}}", exclude)
+def _queries(exclude: str, since: str = "1970-01-01") -> dict[str, str]:
+    sql = QUERIES_FILE.read_text(encoding="utf-8")
+    sql = sql.replace("{{EXCLUDE}}", exclude).replace("{{SINCE}}", since)
     parts = re.split(r"^-- name: (\w+)\s*$", sql, flags=re.MULTILINE)
     return {parts[i]: parts[i + 1].strip() for i in range(1, len(parts), 2)}
 
@@ -164,13 +165,9 @@ def test_activity_without_login_rows_still_counts_in_dau(
     by_day = {r["day"]: r["users"] for r in _run(db_session, "dau")}
     assert by_day["2026-11-12"] == 1
     assert by_day["2026-11-11"] == 0  # zero-filled gap
-    wau = {r["week_start"]: r["users"] for r in _run(db_session, "wau")}
-    assert wau["2026-11-09"] == 3  # Alice, Bob (logins) and Dan (page_view only)
 
 
-def test_heartbeat_only_day_counts_in_dau_and_wau(
-    db_session: Session, seeded: dict[str, User]
-) -> None:
+def test_heartbeat_only_day_counts_in_dau(db_session: Session, seeded: dict[str, User]) -> None:
     """A long-lived tab sends only heartbeats, which already require recent interaction."""
     dan = User(google_id="g-dan", email="dan@example.com", display_name="Dan")
     db_session.add(dan)
@@ -180,8 +177,22 @@ def test_heartbeat_only_day_counts_in_dau_and_wau(
 
     by_day = {r["day"]: r["users"] for r in _run(db_session, "dau")}
     assert by_day["2026-11-12"] == 1
-    wau = {r["week_start"]: r["users"] for r in _run(db_session, "wau")}
-    assert wau["2026-11-09"] == 3  # Alice, Bob and Dan (heartbeat only)
+
+
+def test_since_limits_the_event_queries_to_the_window(
+    db_session: Session, seeded: dict[str, User]
+) -> None:
+    def run(name: str) -> list[dict]:
+        sql = _queries("''", since="2026-11-10")[name]
+        return [dict(r) for r in db_session.execute(text(sql)).mappings().all()]
+
+    alice = str(seeded["alice"].id)
+    # Alice logged in on the 8th and 10th; only the 10th is inside the window. Bob (9th) is out.
+    assert {r["user_id"]: r["login_count"] for r in run("logins_per_user")} == {alice: 1}
+    assert [r["day"] for r in run("dau")] == ["2026-11-10"]
+    assert [(r["user_id"], r["buckets"]) for r in run("active_buckets_per_user")] == [(alice, 2)]
+    assert {r["feature"]: r["users"] for r in run("feature_adoption")}["Picks page"] == 1
+    assert {r["feature"]: r["users"] for r in run("feature_adoption")}["Profile section"] == 0
 
 
 def test_never_returned_reports_the_single_active_day(

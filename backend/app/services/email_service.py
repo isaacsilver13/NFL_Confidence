@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 
-def send_email(*, to: str, subject: str, html: str) -> None:
+def send_email(*, to: str | list[str], subject: str, html: str) -> None:
     if not settings.resend_api_key:
         logger.info(
             "Email suppressed (no RESEND_API_KEY configured): to=%s subject=%s", to, subject
@@ -28,7 +28,7 @@ def send_email(*, to: str, subject: str, html: str) -> None:
     resend.Emails.send(
         {
             "from": settings.email_from,
-            "to": [to],
+            "to": [to] if isinstance(to, str) else to,
             "subject": subject,
             "html": html,
         }

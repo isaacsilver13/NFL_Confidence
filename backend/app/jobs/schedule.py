@@ -103,6 +103,7 @@ def due_slots(now: datetime, cfg: ScheduleConfig) -> list[Slot]:
         daily.append("weekly_picks_reminder")
     if weekday == _weekday(cfg.report_day) and hour >= cfg.report_hour:
         daily.append("weekly_report")
+        daily.append("weekly_usage_report")
 
     slots = [Slot(name, f"{name}:{day}") for name in daily]
     slots += [Slot(name, f"{name}:{bucket}") for name in hourly]
@@ -115,6 +116,7 @@ def due_slots(now: datetime, cfg: ScheduleConfig) -> list[Slot]:
         "prune_usage_events",
         "weekly_picks_reminder",
         "weekly_report",
+        "weekly_usage_report",
     ]
     slots.sort(key=lambda slot: order.index(slot.job_name))
     # Stamps locked_at once a kickoff has passed; cheap and idempotent. Bookkeeping only:

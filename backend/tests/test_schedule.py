@@ -139,6 +139,16 @@ def test_default_weekly_report_is_tuesday_8am() -> None:
     assert "weekly_report" not in names(at(2026, 10, 7, 8, 0))
 
 
+def test_weekly_usage_report_is_due_with_the_commissioner_report() -> None:
+    assert "weekly_usage_report" not in names(at(2026, 10, 6, 7, 59))
+    assert "weekly_usage_report" in names(at(2026, 10, 6, 8, 0))
+    assert "weekly_usage_report" in names(at(2026, 10, 6, 12, 0))  # late tick catches up
+    assert "weekly_usage_report" not in names(at(2026, 10, 7, 8, 0))
+    assert [
+        s.key for s in due_slots(at(2026, 10, 6, 9), CFG) if s.job_name == "weekly_usage_report"
+    ] == ["weekly_usage_report:2026-10-06"]
+
+
 def test_lock_slot_is_due_every_hour() -> None:
     assert all("lock_expired_picks" in names(at(2026, 10, 6, h, 5)) for h in range(24))
 
