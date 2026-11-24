@@ -234,6 +234,12 @@ verified, create an API key with sending permission, and set that key as
 sender must never be used in production. Send one invite email during smoke
 testing and confirm both delivery and the Resend event log.
 
+Without a domain, send through Gmail instead: turn on 2-step verification for the
+sending Google account, create an app password, and set `SMTP_USER` (the Gmail
+address) and `SMTP_PASSWORD` (the app password) as secrets. When `SMTP_PASSWORD`
+is set, all mail goes through `smtp.gmail.com:587` and Resend is not used. Resend
+cannot send from a `gmail.com` address.
+
 ### Deploy in order
 
 Deploy the API first. Its release command runs Alembic before the new machine
