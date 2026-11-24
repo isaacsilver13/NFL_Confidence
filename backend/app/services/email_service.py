@@ -7,6 +7,7 @@ fallback pattern used for auth).
 
 import logging
 import smtplib
+import ssl
 from email.message import EmailMessage
 from email.utils import formataddr
 from html import escape
@@ -28,7 +29,7 @@ def _send_smtp(recipients: list[str], subject: str, html: str) -> None:
     msg.set_content("This email needs an HTML-capable mail client.")
     msg.add_alternative(html, subtype="html")
     with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=20) as smtp:
-        smtp.starttls()
+        smtp.starttls(context=ssl.create_default_context())
         smtp.login(settings.smtp_user, settings.smtp_password)
         smtp.send_message(msg)
 
