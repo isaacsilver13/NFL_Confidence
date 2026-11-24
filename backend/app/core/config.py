@@ -48,6 +48,12 @@ class Settings(BaseSettings):
 
     resend_api_key: str = ""
     email_from: str = "noreply@nfl-confidence-pool.local"
+    # Gmail SMTP (a Gmail address plus an app password). When SMTP_PASSWORD is set, mail goes
+    # through it and Resend is not used; Resend cannot send from a gmail.com address.
+    smtp_host: str = "smtp.gmail.com"
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
 
     nfl_api_key: str = ""
     nfl_api_base_url: str = "https://site.api.espn.com/apis/site/v2/sports/football/nfl"

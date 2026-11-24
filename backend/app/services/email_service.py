@@ -6,6 +6,10 @@ fallback pattern used for auth).
 """
 
 import logging
+import smtplib
+import ssl
+from email.message import EmailMessage
+from email.utils import formataddr
 from html import escape
 
 import resend
@@ -17,10 +21,29 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 
+def _send_smtp(recipients: list[str], subject: str, html: str) -> None:
+    msg = EmailMessage()
+    msg["From"] = formataddr(("NFL Confidence Pool", settings.smtp_user))
+    msg["To"] = ", ".join(recipients)
+    msg["Subject"] = subject
+    msg.set_content("This email needs an HTML-capable mail client.")
+    msg.add_alternative(html, subtype="html")
+    with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=20) as smtp:
+        smtp.starttls(context=ssl.create_default_context())
+        smtp.login(settings.smtp_user, settings.smtp_password)
+        smtp.send_message(msg)
+
+
 def send_email(*, to: str | list[str], subject: str, html: str) -> None:
+    recipients = [to] if isinstance(to, str) else to
+    if settings.smtp_password:
+        _send_smtp(recipients, subject, html)
+        return
     if not settings.resend_api_key:
         logger.info(
-            "Email suppressed (no RESEND_API_KEY configured): to=%s subject=%s", to, subject
+            "Email suppressed (no SMTP_PASSWORD or RESEND_API_KEY configured): to=%s subject=%s",
+            to,
+            subject,
         )
         return
 
@@ -28,7 +51,7 @@ def send_email(*, to: str | list[str], subject: str, html: str) -> None:
     resend.Emails.send(
         {
             "from": settings.email_from,
-            "to": [to] if isinstance(to, str) else to,
+            "to": recipients,
             "subject": subject,
             "html": html,
         }
