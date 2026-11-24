@@ -48,8 +48,6 @@ class Settings(BaseSettings):
 
     resend_api_key: str = ""
     email_from: str = "noreply@nfl-confidence-pool.local"
-    # Comma-separated addresses for the Tuesday usage report. Empty (the default) sends nothing.
-    usage_report_to: str = ""
 
     nfl_api_key: str = ""
     nfl_api_base_url: str = "https://site.api.espn.com/apis/site/v2/sports/football/nfl"

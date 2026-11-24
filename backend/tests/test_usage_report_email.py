@@ -5,9 +5,10 @@ from datetime import date, datetime, timezone
 import pytest
 from sqlalchemy.orm import Session
 
-from app.core.config import get_settings
 from app.jobs import usage_report
 from app.models.audit_log import AuditLog
+from app.models.enums import LeagueRole
+from app.models.league_member import LeagueMember
 from app.models.usage_event import UsageEvent
 from app.models.user import User
 from app.services import usage_report_service
@@ -65,14 +66,13 @@ def test_email_html_renders_with_no_activity() -> None:
 
 
 @pytest.fixture()
-def sent(monkeypatch: pytest.MonkeyPatch) -> list[dict]:
+def sent(monkeypatch: pytest.MonkeyPatch, db_session: Session) -> list[dict]:
     calls: list[dict] = []
     monkeypatch.setattr(usage_report, "send_email", lambda **kw: calls.append(kw))
-    monkeypatch.setattr(usage_report.usage_report_service, "collect", lambda *a, **k: DATA)
 
-    class _Session:
+    class _Session:  # hand the job the test transaction instead of a new connection
         def __enter__(self):
-            return None
+            return db_session
 
         def __exit__(self, *exc):
             return False
@@ -81,16 +81,31 @@ def sent(monkeypatch: pytest.MonkeyPatch) -> list[dict]:
     return calls
 
 
-def test_job_does_nothing_without_a_recipient(sent: list[dict], monkeypatch) -> None:
-    monkeypatch.setattr(get_settings(), "usage_report_to", "")
+def test_job_does_nothing_without_a_league(sent: list[dict]) -> None:
     assert usage_report.send_weekly_usage_report() == 0
     assert sent == []
 
 
-def test_job_sends_one_email_to_every_configured_address(sent: list[dict], monkeypatch) -> None:
-    monkeypatch.setattr(get_settings(), "usage_report_to", " a@example.com, b@example.com ,")
+def test_job_sends_one_email_to_every_commissioner(
+    sent: list[dict], db_session: Session, league_with_owner, owner_user, another_user
+) -> None:
+    co = User(google_id="g-co", email="co@example.com", display_name="Co")
+    db_session.add(co)
+    db_session.flush()
+    db_session.add(
+        LeagueMember(league_id=league_with_owner.id, user_id=co.id, role=LeagueRole.OWNER)
+    )
+    db_session.add(
+        LeagueMember(
+            league_id=league_with_owner.id, user_id=another_user.id, role=LeagueRole.MEMBER
+        )
+    )
+    db_session.flush()
+
     assert usage_report.send_weekly_usage_report() == 2
-    assert [c["to"] for c in sent] == [["a@example.com", "b@example.com"]]  # one email, both
+    assert len(sent) == 1  # one email, not one per commissioner
+    assert sorted(sent[0]["to"]) == sorted([owner_user.email, "co@example.com"])
+    assert another_user.email not in sent[0]["to"]  # plain members never get it
     assert sent[0]["subject"].startswith("NFL Confidence usage: ")
     assert "NFL Confidence member usage" in sent[0]["html"]
 
